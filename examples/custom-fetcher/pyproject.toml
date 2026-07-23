@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "allfeeds-example-fetcher"
+version = "0.1.0"
+description = "Minimal third-party Fetcher plugin example for AllFeeds"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = ["allfeeds-contracts>=0.1.0", "allfeeds-sdk>=0.1.0", "pydantic>=2.8"]
+
+[project.entry-points."allfeeds.fetchers"]
+example = "example_fetcher:ExampleFetcher"
+
+[tool.setuptools.packages.find]
+where = ["src"]

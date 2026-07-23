@@ -1,0 +1,13 @@
+version: 1
+waves:
+  pilot: [bang-dream, girls-band-cry, love-live, idolmaster]
+  wave-1: [project-sekai, d4dj, revue-starlight, from-argonavis, uma-musume]
+  wave-2: [idoly-pride, tokyo-7th-sisters, 22-7, denonbu, world-dai-star]
+  wave-3: [aikatsu, pretty-series, macross, symphogear, bocchi-the-rock]
+  wave-4: [zombie-land-saga, ensemble-stars, idolish7, hypnosis-mic, uta-no-prince-sama]
+
+policy:
+  enable_next_wave: manual
+  website_backfill_days: 365
+  x_backfill: false
+  youtube: false

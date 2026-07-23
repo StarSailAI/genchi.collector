@@ -1,0 +1,281 @@
+version: 1
+
+# V1 intentionally covers official websites and official X accounts only.
+# Additional projects are present in config/catalog.yaml and are enabled in
+# manually approved waves.
+sources:
+  - id: bang-dream-news
+    enabled: true
+    fetcher: genchi.official_site
+    sink: postgres
+    schedule: {type: interval, seconds: 900, timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://bang-dream.com/news/]
+      link_pattern: '^https://bang-dream\.com/(news/[0-9]+/|events/[^/]+/)$'
+      list_item_selector: .p-news-list__item
+      detail_link_selector: a.p-news-list__item-link
+      title_selector: h1, .p-article__title, .p-news-detail__title
+      content_selector: article, main, .p-news-detail
+      published_selector: time, .p-news-detail__date
+      max_pages: 2
+      backfill_max_pages: 20
+      max_items: 80
+    retry: {max_attempts: 4, backoff: exponential, base_seconds: 30, max_seconds: 1800}
+    routing:
+      queue: web
+      resources: {domain:bang-dream.com: 2}
+    tags: [project:bang-dream, country:JP, timezone:Asia/Tokyo, source:official-site]
+    backfill_enabled: true
+    backfill_window_seconds: 2678400
+
+  - id: girls-band-cry-news
+    enabled: true
+    fetcher: genchi.official_site
+    sink: postgres
+    schedule: {type: interval, seconds: 900, timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://girls-band-cry.com/news/]
+      link_pattern: '^https://girls-band-cry\.com/news/post-[0-9]+\.html$'
+      list_item_selector: .news-List .item
+      detail_link_selector: a[href]
+      next_selector: a.next, .wp-pagenavi a.nextpostslink
+      title_selector: h1, .sw-Ttl, .news-Detail_Ttl
+      content_selector: article, main, .news-Detail, .sw-Frame
+      published_selector: time, .time
+      max_pages: 2
+      backfill_max_pages: 30
+      max_items: 100
+    retry: {max_attempts: 4, backoff: exponential, base_seconds: 30, max_seconds: 1800}
+    routing:
+      queue: web
+      resources: {domain:girls-band-cry.com: 2}
+    tags: [project:girls-band-cry, country:JP, timezone:Asia/Tokyo, source:official-site]
+    backfill_enabled: true
+    backfill_window_seconds: 2678400
+
+  - id: love-live-news
+    enabled: true
+    fetcher: genchi.official_site
+    sink: postgres
+    schedule: {type: interval, seconds: 900, timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://www.lovelive-anime.jp/news/]
+      link_pattern: '^https://www\.lovelive-anime\.jp/news/[^?#]+$'
+      detail_link_selector: a[href*="/news/"]
+      title_selector: h1, .p-article__title
+      content_selector: article, .p-article__content, main
+      published_selector: time, .p-article__date
+      browser: true
+      wait_selector: body
+      max_pages: 1
+      backfill_max_pages: 20
+      max_items: 80
+    timeout_seconds: 1200
+    retry: {max_attempts: 4, backoff: exponential, base_seconds: 60, max_seconds: 3600}
+    routing:
+      queue: browser
+      capabilities: [browser_api]
+      resources: {browser_api: 2, domain:lovelive-anime.jp: 1}
+    tags: [project:love-live, country:JP, timezone:Asia/Tokyo, source:official-site]
+    backfill_enabled: true
+    backfill_window_seconds: 2678400
+
+  - id: idolmaster-news
+    enabled: true
+    fetcher: genchi.official_site
+    sink: postgres
+    schedule: {type: interval, seconds: 900, timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://idolmaster-official.jp/news/]
+      link_pattern: '^https://idolmaster-official\.jp/news/[^?#]+$'
+      detail_link_selector: a[href*="/news/"]
+      title_selector: h1, [class*="article_title__"], [class*="inner_title__"]
+      content_selector: article, [class*="inner_content__"], [class*="style_article__"]
+      published_selector: time, [class*="article_head_dsdate__"], [class*="inner_date__"]
+      browser: true
+      wait_selector: a[href*="/news/"]
+      max_pages: 1
+      backfill_max_pages: 20
+      max_items: 80
+    timeout_seconds: 1200
+    retry: {max_attempts: 4, backoff: exponential, base_seconds: 60, max_seconds: 3600}
+    routing:
+      queue: browser
+      capabilities: [browser_api]
+      resources: {browser_api: 2, domain:idolmaster-official.jp: 1}
+    tags: [project:idolmaster, country:JP, timezone:Asia/Tokyo, source:official-site]
+    backfill_enabled: true
+    backfill_window_seconds: 2678400
+
+  - id: asobi-ticket-booths
+    enabled: true
+    fetcher: genchi.asobi_ticket
+    sink: postgres
+    schedule: {type: interval, seconds: 900, timezone: Asia/Tokyo}
+    config:
+      api_base_url: https://asobi-ticket.api.app.t-riple.com/api/v1/public
+      site_base_url: https://asobiticket2.asobistore.jp
+      per_page: 50
+      max_pages: 20
+      max_booths: 500
+      max_content_chars: 120000
+    timeout_seconds: 1200
+    retry: {max_attempts: 4, backoff: exponential, base_seconds: 60, max_seconds: 3600}
+    routing:
+      queue: web
+      resources: {domain:asobi-ticket.api.app.t-riple.com: 1}
+    tags: [project:idolmaster, country:JP, timezone:Asia/Tokyo, source:official-ticket]
+
+  - id: eplus-anime-tickets
+    enabled: true
+    fetcher: genchi.eplus_ticket
+    sink: postgres
+    schedule: {type: interval, seconds: 21600, timezone: Asia/Tokyo}
+    config:
+      seed_urls:
+        - https://eplus.jp/sf/word/0000031068
+        - https://eplus.jp/sf/word/0000126198
+      category_urls:
+        - https://eplus.jp/sf/anime/hokkaido-tohoku
+        - https://eplus.jp/sf/anime/kanto
+        - https://eplus.jp/sf/anime/hokushinetsu
+        - https://eplus.jp/sf/anime/tokai
+        - https://eplus.jp/sf/anime/kansai
+        - https://eplus.jp/sf/anime/chugoku-shikoku
+        - https://eplus.jp/sf/anime/kyushu-okinawa
+      roots_per_run: 2
+      pages_per_root: 2
+      refresh_details_per_run: 20
+      max_detail_pages: 80
+      max_tracked_details: 2000
+      rate_limit_seconds: 2.5
+      browser_fallback: true
+    timeout_seconds: 3600
+    retry: {max_attempts: 4, backoff: exponential, base_seconds: 300, max_seconds: 7200}
+    routing:
+      queue: browser
+      capabilities: [browser_api]
+      resources: {browser_api: 2, domain:eplus.jp: 1}
+    tags: [country:JP, timezone:Asia/Tokyo, source:ticket-aggregator]
+
+  - id: pia-anime-tickets
+    enabled: true
+    fetcher: genchi.pia_ticket
+    sink: postgres
+    schedule: {type: interval, seconds: 21600, timezone: Asia/Tokyo}
+    config:
+      discovery_urls:
+        - https://t.pia.jp/anime/
+        - https://t.pia.jp/pia/tag/tag.do?tagCd=0000037
+      search_keywords:
+        - アニメ
+        - 声優
+        - ゲーム
+        - アイドルマスター
+        - ラブライブ
+        - BanG Dream
+        - プロジェクトセカイ
+        - ウマ娘
+        - あんさんぶるスターズ
+        - アイドリッシュセブン
+        - ヒプノシスマイク
+        - うたの☆プリンスさまっ♪
+      keywords_per_run: 4
+      refresh_details_per_run: 10
+      max_detail_pages: 24
+      max_sales_per_detail: 8
+      max_tracked_details: 1500
+      rate_limit_seconds: 2
+      browser_fallback: true
+    timeout_seconds: 3600
+    retry: {max_attempts: 4, backoff: exponential, base_seconds: 300, max_seconds: 7200}
+    routing:
+      queue: browser
+      capabilities: [browser_api]
+      resources: {browser_api: 1, domain:t.pia.jp: 1}
+    tags: [country:JP, timezone:Asia/Tokyo, source:ticket-aggregator]
+
+  - id: lawson-anime-tickets
+    enabled: true
+    fetcher: genchi.lawson_ticket
+    sink: postgres
+    schedule: {type: interval, seconds: 21600, timezone: Asia/Tokyo}
+    config:
+      search_keywords:
+        - アニメ
+        - 声優
+        - ゲーム
+        - アイドルマスター
+        - ラブライブ
+        - BanG Dream
+        - プロジェクトセカイ
+        - ウマ娘
+        - あんさんぶるスターズ
+        - アイドリッシュセブン
+        - ヒプノシスマイク
+        - うたの☆プリンスさまっ♪
+      queries_per_run: 6
+      max_results_per_run: 200
+    timeout_seconds: 3600
+    retry: {max_attempts: 4, backoff: exponential, base_seconds: 300, max_seconds: 7200}
+    routing:
+      queue: browser
+      capabilities: [browser_api]
+      resources: {browser_api: 1, domain:l-tike.com: 1}
+    tags: [country:JP, timezone:Asia/Tokyo, source:ticket-aggregator]
+
+  - id: bang-dream-x
+    enabled: true
+    fetcher: genchi.x_profile
+    sink: postgres
+    schedule: {type: interval, seconds: 300, timezone: Asia/Tokyo}
+    config: {handle: bang_dream_info, max_posts: 50, max_scrolls: 8}
+    timeout_seconds: 240
+    retry: {max_attempts: 5, backoff: exponential, base_seconds: 60, max_seconds: 3600}
+    routing:
+      queue: browser
+      capabilities: [browser_api]
+      resources: {browser_api: 2, x-account:bang_dream_info: 1}
+    tags: [project:bang-dream, country:JP, timezone:Asia/Tokyo, source:official-x]
+
+  - id: girls-band-cry-x
+    enabled: true
+    fetcher: genchi.x_profile
+    sink: postgres
+    schedule: {type: interval, seconds: 300, timezone: Asia/Tokyo}
+    config: {handle: girlsbandcry, max_posts: 50, max_scrolls: 8}
+    timeout_seconds: 240
+    retry: {max_attempts: 5, backoff: exponential, base_seconds: 60, max_seconds: 3600}
+    routing:
+      queue: browser
+      capabilities: [browser_api]
+      resources: {browser_api: 2, x-account:girlsbandcry: 1}
+    tags: [project:girls-band-cry, country:JP, timezone:Asia/Tokyo, source:official-x]
+
+  - id: love-live-x
+    enabled: true
+    fetcher: genchi.x_profile
+    sink: postgres
+    schedule: {type: interval, seconds: 300, timezone: Asia/Tokyo}
+    config: {handle: LoveLive_staff, max_posts: 50, max_scrolls: 8}
+    timeout_seconds: 240
+    retry: {max_attempts: 5, backoff: exponential, base_seconds: 60, max_seconds: 3600}
+    routing:
+      queue: browser
+      capabilities: [browser_api]
+      resources: {browser_api: 2, x-account:LoveLive_staff: 1}
+    tags: [project:love-live, country:JP, timezone:Asia/Tokyo, source:official-x]
+
+  - id: idolmaster-x
+    enabled: true
+    fetcher: genchi.x_profile
+    sink: postgres
+    schedule: {type: interval, seconds: 300, timezone: Asia/Tokyo}
+    config: {handle: imas_official, max_posts: 50, max_scrolls: 8}
+    timeout_seconds: 240
+    retry: {max_attempts: 5, backoff: exponential, base_seconds: 60, max_seconds: 3600}
+    routing:
+      queue: browser
+      capabilities: [browser_api]
+      resources: {browser_api: 2, x-account:imas_official: 1}
+    tags: [project:idolmaster, country:JP, timezone:Asia/Tokyo, source:official-x]

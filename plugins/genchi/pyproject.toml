@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "genchi-fetchers"
+version = "0.1.0"
+description = "Official-site and X fetchers for Genchi"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+  "allfeeds-contracts>=0.1.0",
+  "allfeeds-sdk>=0.1.0",
+  "allfeeds-builtin-fetchers>=0.1.0",
+  "beautifulsoup4>=4.12",
+  "lxml>=5.0",
+  "pydantic>=2.8",
+  "requests>=2.32",
+]
+
+[project.entry-points."allfeeds.fetchers"]
+x_profile = "genchi_fetchers:XProfileFetcher"
+official_site = "genchi_fetchers:OfficialSiteFetcher"
+asobi_ticket = "genchi_fetchers:AsobiTicketFetcher"
+eplus_ticket = "genchi_fetchers:EplusTicketFetcher"
+pia_ticket = "genchi_fetchers:PiaTicketFetcher"
+lawson_ticket = "genchi_fetchers:LawsonTicketFetcher"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "genchi-normalizer"
+version = "0.1.0"
+description = "Genchi raw-to-curated normalization service"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+  "alembic>=1.13",
+  "psycopg[binary]>=3.2",
+  "requests>=2.32",
+]
+
+[project.scripts]
+genchi-normalizer = "genchi_normalizer.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.data-files]
+"genchi_normalizer_migrations" = ["alembic.ini"]
+"genchi_normalizer_migrations/alembic" = ["alembic/env.py"]
+"genchi_normalizer_migrations/alembic/versions" = ["alembic/versions/*.py"]

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "allfeeds-builtin-fetchers"
+version = "0.1.0"
+description = "Safe, configurable RSS, HTML and JSON fetchers for AllFeeds"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+  "allfeeds-contracts>=0.1.0",
+  "allfeeds-sdk>=0.1.0",
+  "beautifulsoup4>=4.12",
+  "feedparser>=6.0",
+  "jmespath>=1.0",
+  "lxml>=5.0",
+  "pydantic>=2.8",
+  "requests>=2.32",
+]
+
+[project.entry-points."allfeeds.fetchers"]
+rss = "allfeeds_builtin.fetchers:RssFetcher"
+web_page = "allfeeds_builtin.fetchers:WebPageFetcher"
+web_list = "allfeeds_builtin.fetchers:WebListFetcher"
+json_api = "allfeeds_builtin.fetchers:JsonApiFetcher"
+sitemap = "allfeeds_builtin.fetchers:SitemapFetcher"
+
+[tool.setuptools.packages.find]
+where = ["src"]

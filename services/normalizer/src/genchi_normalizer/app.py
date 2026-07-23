@@ -1,0 +1,1444 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import os
+import re
+import signal
+import threading
+import unicodedata
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from html import unescape
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
+from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
+
+import psycopg
+import requests
+from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
+
+LOGGER = logging.getLogger("genchi.normalizer")
+PROJECT_PREFIX = "project:"
+COUNTRY_PREFIX = "country:"
+TIMEZONE_PREFIX = "timezone:"
+EVENT_TYPES = {"LIVE", "FES", "ANNIV", "RELEASE_EVENT", "RADIO", "OTHER"}
+RELEASE_KINDS = {"CD", "BD", "DIGITAL", "GOODS"}
+TICKET_PHASES = {
+    "FC_PRE",
+    "LOTTERY_1",
+    "LOTTERY_2",
+    "LOTTERY_3",
+    "ADVANCE",
+    "GENERAL",
+    "DAY_OF",
+    "RESALE",
+    "OTHER",
+}
+TICKET_PLATFORMS = {"eplus", "lawson", "pia", "cnplayguide", "official", "other"}
+ASOBI_SOURCE_TYPE = "asobi_ticket"
+EPLUS_SOURCE_TYPE = "eplus_ticket"
+TICKET_SOURCE_PLATFORMS = {
+    EPLUS_SOURCE_TYPE: "eplus",
+    "pia_ticket": "pia",
+    "lawson_ticket": "lawson",
+}
+JST = ZoneInfo("Asia/Tokyo")
+
+
+@dataclass(frozen=True)
+class Settings:
+    database_url: str
+    schema: str
+    poll_seconds: float
+    llm_base_url: str | None
+    llm_api_key: str | None
+    llm_model: str | None
+    llm_response_format: str
+
+    @classmethod
+    def from_env(cls) -> Settings:
+        database_url = os.environ.get("DATABASE_URL", "").strip()
+        if not database_url:
+            raise RuntimeError("DATABASE_URL is required")
+        schema = os.environ.get("GENCHI_DB_SCHEMA", "genchi")
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", schema):
+            raise RuntimeError("GENCHI_DB_SCHEMA is invalid")
+        llm_response_format = (
+            os.environ.get("LLM_RESPONSE_FORMAT", "auto").strip().lower() or "auto"
+        )
+        if llm_response_format not in {"auto", "json_schema", "json_object"}:
+            raise RuntimeError("LLM_RESPONSE_FORMAT must be auto, json_schema, or json_object")
+        return cls(
+            database_url=database_url,
+            schema=schema,
+            poll_seconds=max(0.2, float(os.environ.get("NORMALIZER_POLL_SECONDS", "2"))),
+            llm_base_url=os.environ.get("LLM_BASE_URL", "").strip() or None,
+            llm_api_key=os.environ.get("LLM_API_KEY", "").strip() or None,
+            llm_model=os.environ.get("LLM_MODEL", "").strip() or None,
+            llm_response_format=llm_response_format,
+        )
+
+    @property
+    def llm_enabled(self) -> bool:
+        return bool(self.llm_base_url and self.llm_api_key and self.llm_model)
+
+
+def _stable_id(namespace: str, value: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"genchi:{namespace}:{value}"))
+
+
+def _tag(tags: list[str], prefix: str, default: str | None = None) -> str | None:
+    return next((value.removeprefix(prefix) for value in tags if value.startswith(prefix)), default)
+
+
+def _category(text: str) -> str:
+    lowered = text.lower()
+    if any(value in lowered for value in ("チケット", "先行", "抽選", "一般発売", "受付")):
+        return "EVENT"
+    if any(value in lowered for value in ("live", "ライブ", "公演", "festival", "フェス")):
+        return "EVENT"
+    if any(
+        value in lowered
+        for value in ("release", "リリース", "発売", "配信", "album", "single", "blu-ray")
+    ):
+        return "RELEASE"
+    if any(value in lowered for value in ("動画", "放送", "radio", "ラジオ", "配信番組")):
+        return "MEDIA"
+    return "OTHER"
+
+
+def _news_kind(category: str) -> str:
+    return {"EVENT": "EVENT", "RELEASE": "RELEASE", "MEDIA": "MEDIA"}.get(category, "OTHER")
+
+
+def _slug(title: str | None, suffix: str) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", (title or "news").lower()).strip("-")[:48] or "news"
+    return f"{base}-{suffix[:10]}"
+
+
+def _parse_time(value: Any) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    try:
+        result = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return result if result.tzinfo else result.replace(tzinfo=UTC)
+    except ValueError:
+        return None
+
+
+def _event_match_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", unescape(value)).casefold()
+    normalized = re.sub(
+        r"^(?:一般発売|先行|抽選|プレリザーブ|プレリク)\s*[＜<【\[].*?[＞>】\]]\s*[／/]\s*",
+        "",
+        normalized,
+    )
+    return re.sub(r"[\W_]+", "", normalized)
+
+
+def _same_event_title(left: str, right: str) -> bool:
+    left_key = _event_match_text(left)
+    right_key = _event_match_text(right)
+    if not left_key or not right_key:
+        return False
+    if left_key == right_key:
+        return True
+    shorter, longer = sorted((left_key, right_key), key=len)
+    return len(shorter) >= 8 and shorter in longer and len(shorter) / len(longer) >= 0.72
+
+
+def _asobi_real_acts(resource: dict[str, Any]) -> list[dict[str, Any]]:
+    payload = (resource.get("attributes") or {}).get("asobi_ticket") or {}
+    related_acts = [item for item in payload.get("acts") or [] if isinstance(item, dict)]
+    included_acts = [
+        item
+        for item in payload.get("included") or []
+        if isinstance(item, dict) and item.get("type") == "act"
+    ]
+
+    def real_acts(acts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            act
+            for act in acts
+            if "通し券" not in str((act.get("attributes") or {}).get("name") or "")
+            and "通しチケット" not in str((act.get("attributes") or {}).get("name") or "")
+        ]
+
+    # A resale reception carries its exact act in `acts`. Prefer that relationship
+    # over the booth-wide JSON:API `included` collection. Multi-day pass pseudo acts
+    # are not curated Events, so those deliberately fall back to the real booth acts
+    # and are narrowed from the dates and venue in the reception name below.
+    return real_acts(related_acts) or real_acts(included_acts)
+
+
+def _asobi_reception_dates(value: str) -> set[tuple[int, int]]:
+    dates: set[tuple[int, int]] = set()
+    current_month: int | None = None
+    for match in re.finditer(r"(?:(?P<month>\d{1,2})月)?(?P<day>\d{1,2})日(?!間)", value):
+        if match.group("month"):
+            current_month = int(match.group("month"))
+        if current_month is None:
+            continue
+        day = int(match.group("day"))
+        if 1 <= current_month <= 12 and 1 <= day <= 31:
+            dates.add((current_month, day))
+    for match in re.finditer(r"(?<!\d)(?P<month>\d{1,2})/(?P<day>\d{1,2})(?!\d)", value):
+        month = int(match.group("month"))
+        day = int(match.group("day"))
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            dates.add((month, day))
+    return dates
+
+
+def _asobi_act_date(act: dict[str, Any]) -> tuple[int, int] | None:
+    raw_date = str((act.get("attributes") or {}).get("performance_date") or "")
+    try:
+        performance_date = datetime.fromisoformat(raw_date).date()
+    except ValueError:
+        return None
+    return performance_date.month, performance_date.day
+
+
+def _asobi_location_score(
+    reception_name: str, act: dict[str, Any], location_tokens: tuple[str, ...]
+) -> int:
+    lowered = reception_name.lower()
+    attributes = act.get("attributes") or {}
+    location_text = " ".join(
+        str(value or "") for value in (attributes.get("name"), attributes.get("venue"))
+    ).lower()
+    return sum(1 for token in location_tokens if token in lowered and token in location_text)
+
+
+def _asobi_match_acts(reception_name: str, acts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if len(acts) <= 1:
+        return acts
+    location_tokens = (
+        "namba",
+        "osaka",
+        "nagoya",
+        "haneda",
+        "tokyo",
+        "yokohama",
+        "fukuoka",
+        "大阪",
+        "愛知",
+        "東京",
+        "神奈川",
+        "福岡",
+        "北海道",
+        "宮城",
+        "千葉",
+        "埼玉",
+        "兵庫",
+        "広島",
+    )
+    requested_dates = _asobi_reception_dates(reception_name)
+    if requested_dates:
+        date_matches = [act for act in acts if _asobi_act_date(act) in requested_dates]
+        if date_matches:
+            date_and_location_matches = [
+                act
+                for act in date_matches
+                if _asobi_location_score(reception_name, act, location_tokens) > 0
+            ]
+            return date_and_location_matches or date_matches
+
+    location_matches = [
+        act for act in acts if _asobi_location_score(reception_name, act, location_tokens) > 0
+    ]
+    return location_matches or acts
+
+
+def _asobi_ticket_phase(entry_type: str, name: str) -> str:
+    if entry_type == "resale_lottery":
+        return "RESALE"
+    if entry_type == "fcfs":
+        return "GENERAL"
+    if "プレミアム" in name:
+        return "FC_PRE"
+    if "3次" in name:
+        return "LOTTERY_3"
+    if "2次" in name:
+        return "LOTTERY_2"
+    if entry_type == "lottery":
+        return "LOTTERY_1"
+    return "OTHER"
+
+
+def _asobi_ticket_status(value: str | None) -> str | None:
+    return {
+        "before_entry_period": "UPCOMING",
+        "within_entry_period": "OPEN",
+        "after_entry_period": "CLOSED",
+    }.get(value or "")
+
+
+def _eplus_event_type(title: str) -> str:
+    lowered = title.lower()
+    if "フェス" in lowered or "festival" in lowered:
+        return "FES"
+    if any(
+        value in lowered
+        for value in (
+            "展",
+            "展覧会",
+            "原画展",
+            "企画展",
+            "ミュージアム",
+            "博物館",
+            "美術館",
+            "上映",
+            "舞台",
+            "ミュージカル",
+            "朗読劇",
+            "トークショー",
+            "ファンミーティング",
+            " cafe",
+            "カフェ",
+        )
+    ):
+        return "OTHER"
+    return "LIVE"
+
+
+class Normalizer:
+    def __init__(self, settings: Settings):
+        self.settings = settings
+
+    def connect(self):
+        return psycopg.connect(
+            self.settings.database_url,
+            row_factory=dict_row,
+            options=f"-c search_path={self.settings.schema},allfeeds,public",
+        )
+
+    def claim(self) -> dict[str, Any] | None:
+        with self.connect() as conn, conn.transaction():
+            conn.execute(
+                """
+                UPDATE "NormalizationJob" SET "status"='RETRY',"lockedAt"=NULL,
+                    "notBefore"=NOW(),"updatedAt"=NOW(),"lastError"='stale processing lease'
+                WHERE "status"='PROCESSING' AND "lockedAt"<NOW()-INTERVAL '15 minutes'
+                """
+            )
+            return conn.execute(
+                """
+                WITH candidate AS (
+                    SELECT "id" FROM "NormalizationJob"
+                    WHERE "status" IN ('PENDING','RETRY') AND "notBefore"<=NOW()
+                    ORDER BY "notBefore","id" FOR UPDATE SKIP LOCKED LIMIT 1
+                )
+                UPDATE "NormalizationJob" job SET "status"='PROCESSING',"lockedAt"=NOW(),
+                    "attempts"=job."attempts"+1,"updatedAt"=NOW()
+                FROM candidate WHERE job."id"=candidate."id" RETURNING job.*
+                """
+            ).fetchone()
+
+    def finish(self, job_id: int) -> None:
+        with self.connect() as conn, conn.transaction():
+            conn.execute(
+                """
+                UPDATE "NormalizationJob" SET "status"='DONE',"lockedAt"=NULL,
+                    "finishedAt"=NOW(),"updatedAt"=NOW(),"lastError"=NULL WHERE "id"=%s
+                """,
+                (job_id,),
+            )
+
+    def fail(self, job: dict[str, Any], exc: Exception) -> None:
+        attempts = int(job["attempts"])
+        terminal = attempts >= 8
+        delay = min(3600, 30 * 2 ** max(0, attempts - 1))
+        with self.connect() as conn, conn.transaction():
+            conn.execute(
+                """
+                UPDATE "NormalizationJob" SET "status"=%s,"lockedAt"=NULL,
+                    "notBefore"=NOW()+(%s*INTERVAL '1 second'),"lastError"=%s,
+                    "updatedAt"=NOW(),"finishedAt"=CASE WHEN %s THEN NOW() ELSE NULL END
+                WHERE "id"=%s
+                """,
+                (
+                    "DEAD" if terminal else "RETRY",
+                    delay,
+                    f"{type(exc).__name__}: {exc}"[:4000],
+                    terminal,
+                    job["id"],
+                ),
+            )
+
+    def resource(self, resource_id: int) -> dict[str, Any]:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT r.*,s.spec AS source_spec FROM allfeeds.resources r
+                LEFT JOIN allfeeds.sources s ON s.source_id=r.source_id WHERE r.id=%s
+                """,
+                (resource_id,),
+            ).fetchone()
+        if not row:
+            raise RuntimeError(f"raw resource {resource_id} no longer exists")
+        return row
+
+    def call_llm(self, resource: dict[str, Any], category: str) -> dict[str, Any] | None:
+        if not self.settings.llm_enabled:
+            return None
+        endpoint = self.settings.llm_base_url.rstrip("/")
+        if not endpoint.endswith("/chat/completions"):
+            endpoint += "/chat/completions" if endpoint.endswith("/v1") else "/v1/chat/completions"
+        schema = {
+            "name": "genchi_content",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["titleZh", "summaryZh", "category", "facts"],
+                "properties": {
+                    "titleZh": {"type": ["string", "null"]},
+                    "summaryZh": {"type": ["string", "null"]},
+                    "category": {"type": "string", "enum": ["EVENT", "RELEASE", "MEDIA", "OTHER"]},
+                    "facts": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["kind", "confidence", "data"],
+                            "properties": {
+                                "kind": {"type": "string", "enum": ["EVENT", "TICKET", "RELEASE"]},
+                                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                                "data": {"type": "object"},
+                            },
+                        },
+                    },
+                },
+            },
+        }
+        response_format = self.settings.llm_response_format
+        if response_format == "auto":
+            hostname = (urlparse(endpoint).hostname or "").lower()
+            model = (self.settings.llm_model or "").lower()
+            response_format = (
+                "json_object"
+                if hostname == "deepseek.com"
+                or hostname.endswith(".deepseek.com")
+                or model.startswith("deepseek")
+                else "json_schema"
+            )
+        format_payload = (
+            {"type": "json_object"}
+            if response_format == "json_object"
+            else {"type": "json_schema", "json_schema": schema}
+        )
+        prompt = (
+            "Return one JSON object and no Markdown. Extract only explicit facts from this Japanese official "
+            "announcement. Keep uncertain dates or event references out of facts. Translate only the title and "
+            "a short summary. All timestamps must be ISO 8601 with an explicit UTC offset.\n"
+            "The JSON shape is: "
+            '{"titleZh":string|null,"summaryZh":string|null,'
+            '"category":"EVENT|RELEASE|MEDIA|OTHER","facts":['
+            '{"kind":"EVENT|TICKET|RELEASE","confidence":number,"data":object}]}.\n'
+            "EVENT data fields: titleJa, titleZh, startsAt, endsAt, doorsAt, eventType "
+            "(LIVE|FES|ANNIV|RELEASE_EVENT|RADIO|OTHER), officialUrl.\n"
+            "TICKET data fields: eventOfficialUrl, phase "
+            "(FC_PRE|LOTTERY_1|LOTTERY_2|LOTTERY_3|ADVANCE|GENERAL|DAY_OF|RESALE|OTHER), "
+            "phaseLabelJa, opensAt, closesAt, resultAt, platform "
+            "(eplus|lawson|pia|cnplayguide|official|other), url. If EVENT and TICKET describe the same event, "
+            "their officialUrl and eventOfficialUrl must be exactly identical.\n"
+            "RELEASE data fields: titleJa, titleZh, releaseOn, kind (CD|BD|DIGITAL|GOODS), officialUrl.\n"
+            f"Rule category: {category}\nURL: {resource.get('url')}\n"
+            f"Title: {resource.get('title')}\nBody:\n{(resource.get('content') or '')[:16000]}"
+        )
+        response = requests.post(
+            endpoint,
+            headers={"Authorization": f"Bearer {self.settings.llm_api_key}"},
+            json={
+                "model": self.settings.llm_model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You normalize official Japanese music and live-event information.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "response_format": format_payload,
+                "temperature": 0,
+                "max_tokens": 4096,
+            },
+            timeout=90,
+        )
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            detail = response.text[:1000]
+            if self.settings.llm_api_key:
+                detail = detail.replace(self.settings.llm_api_key, "[REDACTED]")
+            raise RuntimeError(f"LLM HTTP {response.status_code}: {detail}") from exc
+        payload = response.json()
+        choice = payload["choices"][0]
+        content = choice["message"]["content"]
+        if not content:
+            raise RuntimeError("LLM returned empty content")
+        if choice.get("finish_reason") == "length":
+            raise RuntimeError("LLM JSON output was truncated")
+        enrichment = json.loads(content)
+        if not isinstance(enrichment, dict) or not isinstance(enrichment.get("facts"), list):
+            raise RuntimeError("LLM output does not match the expected object shape")
+        return enrichment
+
+    def upsert_content(
+        self,
+        resource: dict[str, Any],
+        *,
+        enrichment: dict[str, Any] | None,
+        category: str,
+    ) -> tuple[str, str]:
+        tags = [str(value) for value in resource.get("tags") or []]
+        project = _tag(tags, PROJECT_PREFIX)
+        country = _tag(tags, COUNTRY_PREFIX, "JP") or "JP"
+        timezone = _tag(tags, TIMEZONE_PREFIX, "Asia/Tokyo") or "Asia/Tokyo"
+        source_type = (resource.get("attributes") or {}).get("source_type")
+        source_kind = (
+            "TWITTER"
+            if resource["kind"] == "x_post"
+            else "AGGREGATOR"
+            if source_type in TICKET_SOURCE_PLATFORMS
+            else "OFFICIAL"
+        )
+        source_id = _stable_id("source", resource["source_id"])
+        content_id = _stable_id("content", f"{resource['source_id']}:{resource['external_id']}")
+        title_zh = enrichment.get("titleZh") if enrichment else None
+        summary_zh = enrichment.get("summaryZh") if enrichment else None
+        final_category = str(enrichment.get("category") or category) if enrichment else category
+        attributes = dict(resource.get("attributes") or {})
+        media = attributes.get("media") or []
+        published_at = (
+            resource.get("published_at") or resource.get("observed_at") or datetime.now(UTC)
+        )
+        suffix = hashlib.sha256(content_id.encode()).hexdigest()
+        news_id = _stable_id("news", content_id)
+        news_slug = _slug(resource.get("title"), suffix)
+        cover_url = next(
+            (
+                item.get("url")
+                for item in media
+                if isinstance(item, dict) and item.get("type") == "image"
+            ),
+            None,
+        )
+        search_text = "\n".join(
+            value
+            for value in (
+                resource.get("title"),
+                title_zh,
+                resource.get("content"),
+                summary_zh,
+                project,
+            )
+            if value
+        )
+        with self.connect() as conn, conn.transaction():
+            conn.execute(
+                """
+                INSERT INTO "Source" ("id","key","name","url","kind","projectKey","country","timezone")
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT ("key") DO UPDATE SET "url"=EXCLUDED."url","kind"=EXCLUDED."kind",
+                    "projectKey"=EXCLUDED."projectKey","country"=EXCLUDED."country",
+                    "timezone"=EXCLUDED."timezone","isActive"=TRUE
+                """,
+                (
+                    source_id,
+                    resource["source_id"],
+                    resource["source_id"],
+                    resource.get("url"),
+                    source_kind,
+                    project,
+                    country,
+                    timezone,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO "ContentItem" (
+                    "id","sourceId","externalId","rawResourceId","rawContentHash","kind",
+                    "canonicalUrl","titleOriginal","bodyOriginal","language","titleZh","summaryZh",
+                    "category","projectKey","country","timezone","publishedAt","observedAt",
+                    "media","metadata","processingStatus"
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT ("sourceId","externalId") DO UPDATE SET
+                    "rawResourceId"=EXCLUDED."rawResourceId","rawContentHash"=EXCLUDED."rawContentHash",
+                    "kind"=EXCLUDED."kind","canonicalUrl"=EXCLUDED."canonicalUrl",
+                    "titleOriginal"=EXCLUDED."titleOriginal","bodyOriginal"=EXCLUDED."bodyOriginal",
+                    "language"=EXCLUDED."language","titleZh"=COALESCE(EXCLUDED."titleZh","ContentItem"."titleZh"),
+                    "summaryZh"=COALESCE(EXCLUDED."summaryZh","ContentItem"."summaryZh"),
+                    "category"=EXCLUDED."category","projectKey"=EXCLUDED."projectKey",
+                    "publishedAt"=EXCLUDED."publishedAt","observedAt"=EXCLUDED."observedAt",
+                    "media"=EXCLUDED."media","metadata"=EXCLUDED."metadata",
+                    "processingStatus"=EXCLUDED."processingStatus","updatedAt"=NOW()
+                """,
+                (
+                    content_id,
+                    source_id,
+                    resource["external_id"],
+                    resource["id"],
+                    resource["content_hash"],
+                    resource["kind"],
+                    resource.get("url"),
+                    resource.get("title"),
+                    resource.get("content"),
+                    resource.get("language"),
+                    title_zh,
+                    summary_zh,
+                    final_category,
+                    project,
+                    country,
+                    timezone,
+                    published_at,
+                    resource.get("observed_at") or datetime.now(UTC),
+                    Jsonb(media),
+                    Jsonb({"attributes": attributes, "tags": tags}),
+                    "ENRICHED" if enrichment else "READY",
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO "NewsPost" (
+                    "id","slug","contentItemId","titleZh","titleJa","summary","contentMd",
+                    "publishedAt","kind","sourceId","coverUrl"
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT ("contentItemId") DO UPDATE SET
+                    "titleZh"=EXCLUDED."titleZh","titleJa"=EXCLUDED."titleJa",
+                    "summary"=EXCLUDED."summary","contentMd"=EXCLUDED."contentMd",
+                    "publishedAt"=EXCLUDED."publishedAt","kind"=EXCLUDED."kind",
+                    "sourceId"=EXCLUDED."sourceId","coverUrl"=EXCLUDED."coverUrl"
+                """,
+                (
+                    news_id,
+                    news_slug,
+                    content_id,
+                    title_zh,
+                    resource.get("title"),
+                    summary_zh,
+                    resource.get("content"),
+                    published_at,
+                    _news_kind(final_category),
+                    source_id,
+                    cover_url,
+                ),
+            )
+            search_id = _stable_id("search", f"CONTENT:{content_id}")
+            conn.execute(
+                """
+                INSERT INTO "SearchDocument" (
+                    "id","entityType","entityId","titleOriginal","titleZh","bodyOriginal",
+                    "summaryZh","projectKey","kind","country","publishedAt","canonicalUrl","searchText"
+                ) VALUES (%s,'CONTENT',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT ("entityType","entityId") DO UPDATE SET
+                    "titleOriginal"=EXCLUDED."titleOriginal","titleZh"=EXCLUDED."titleZh",
+                    "bodyOriginal"=EXCLUDED."bodyOriginal","summaryZh"=EXCLUDED."summaryZh",
+                    "projectKey"=EXCLUDED."projectKey","kind"=EXCLUDED."kind",
+                    "country"=EXCLUDED."country","publishedAt"=EXCLUDED."publishedAt",
+                    "canonicalUrl"=EXCLUDED."canonicalUrl","searchText"=EXCLUDED."searchText","updatedAt"=NOW()
+                """,
+                (
+                    search_id,
+                    content_id,
+                    resource.get("title"),
+                    title_zh,
+                    resource.get("content"),
+                    summary_zh,
+                    project,
+                    resource["kind"],
+                    country,
+                    published_at,
+                    resource.get("url"),
+                    search_text,
+                ),
+            )
+            if project:
+                ip = conn.execute('SELECT "id" FROM "Ip" WHERE "slug"=%s', (project,)).fetchone()
+                if ip:
+                    conn.execute(
+                        'INSERT INTO "ContentIp" ("contentItemId","ipId") VALUES (%s,%s) ON CONFLICT DO NOTHING',
+                        (content_id, ip["id"]),
+                    )
+                    conn.execute(
+                        'INSERT INTO "NewsIp" ("newsId","ipId") VALUES (%s,%s) ON CONFLICT DO NOTHING',
+                        (news_id, ip["id"]),
+                    )
+        return content_id, source_id
+
+    def candidate(self, content_id: str, fact: dict[str, Any], *, automatic: bool = True) -> None:
+        kind = str(fact.get("kind") or "")
+        payload = fact.get("data") if isinstance(fact.get("data"), dict) else {}
+        confidence = float(fact.get("confidence") or 0)
+        digest = hashlib.sha256(
+            json.dumps(
+                {"kind": kind, "payload": payload}, ensure_ascii=False, sort_keys=True
+            ).encode()
+        ).hexdigest()
+        candidate_id = _stable_id("candidate", f"{content_id}:{digest}")
+        with self.connect() as conn, conn.transaction():
+            conn.execute(
+                """
+                INSERT INTO "ExtractionCandidate" ("id","contentItemId","kind","payload","confidence")
+                VALUES (%s,%s,%s,%s,%s) ON CONFLICT ("id") DO UPDATE SET
+                    "payload"=EXCLUDED."payload","confidence"=EXCLUDED."confidence","updatedAt"=NOW()
+                """,
+                (candidate_id, content_id, kind, Jsonb(payload), confidence),
+            )
+        if automatic:
+            self.apply_candidate(candidate_id, force=False, reviewer=None)
+
+    def upsert_asobi_event(
+        self,
+        resource: dict[str, Any],
+        *,
+        source_id: str,
+    ) -> str | None:
+        payload = (resource.get("attributes") or {}).get("asobi_ticket") or {}
+        act = payload.get("act") or {}
+        act_id = str(act.get("id") or "")
+        attributes = act.get("attributes") or {}
+        title = str(attributes.get("name") or resource.get("title") or "")
+        starts_at = _parse_time(attributes.get("performance_starts_at"))
+        if not act_id or not title or not starts_at or "通し券" in title or "通しチケット" in title:
+            return None
+        source_key = f"asobi:act:{act_id}"
+        entity_id = _stable_id("event", source_key)
+        official_url = f"{resource.get('url')}#act-{act_id}"
+        project = _tag([str(value) for value in resource.get("tags") or []], PROJECT_PREFIX)
+        media = (resource.get("attributes") or {}).get("media") or []
+        key_visual_url = next(
+            (
+                item.get("url")
+                for item in media
+                if isinstance(item, dict) and item.get("type") == "image" and item.get("url")
+            ),
+            None,
+        )
+        with self.connect() as conn, conn.transaction():
+            ip = conn.execute('SELECT "id" FROM "Ip" WHERE "slug"=%s', (project,)).fetchone()
+            ip_id = ip["id"] if ip else None
+            slug = _slug(title, hashlib.sha256(source_key.encode()).hexdigest())
+            conn.execute(
+                """
+                INSERT INTO "Event" (
+                    "id","slug","sourceKey","titleJa","startsAt","endsAt","doorsAt",
+                    "ipId","eventType","officialUrl","keyVisualUrl","sourceId"
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'LIVE',%s,%s,%s)
+                ON CONFLICT ("sourceKey") DO UPDATE SET
+                    "titleJa"=EXCLUDED."titleJa","startsAt"=EXCLUDED."startsAt",
+                    "endsAt"=EXCLUDED."endsAt","doorsAt"=EXCLUDED."doorsAt",
+                    "ipId"=EXCLUDED."ipId","officialUrl"=EXCLUDED."officialUrl",
+                    "keyVisualUrl"=EXCLUDED."keyVisualUrl","sourceId"=EXCLUDED."sourceId",
+                    "updatedAt"=NOW()
+                """,
+                (
+                    entity_id,
+                    slug,
+                    source_key,
+                    title,
+                    starts_at,
+                    _parse_time(attributes.get("performance_ends_at")),
+                    _parse_time(attributes.get("opens_at")),
+                    ip_id,
+                    official_url,
+                    key_visual_url,
+                    source_id,
+                ),
+            )
+            search_text = "\n".join(value for value in (title, project) if value)
+            conn.execute(
+                """
+                INSERT INTO "SearchDocument" (
+                    "id","entityType","entityId","titleOriginal","projectKey","kind",
+                    "country","publishedAt","canonicalUrl","searchText"
+                ) VALUES (%s,'EVENT',%s,%s,%s,'EVENT','JP',%s,%s,%s)
+                ON CONFLICT ("entityType","entityId") DO UPDATE SET
+                    "titleOriginal"=EXCLUDED."titleOriginal","projectKey"=EXCLUDED."projectKey",
+                    "publishedAt"=EXCLUDED."publishedAt","canonicalUrl"=EXCLUDED."canonicalUrl",
+                    "searchText"=EXCLUDED."searchText","updatedAt"=NOW()
+                """,
+                (
+                    _stable_id("search", f"EVENT:{entity_id}"),
+                    entity_id,
+                    title,
+                    project,
+                    starts_at,
+                    official_url,
+                    search_text,
+                ),
+            )
+        return entity_id
+
+    def upsert_asobi_tickets(self, resource: dict[str, Any]) -> int:
+        payload = (resource.get("attributes") or {}).get("asobi_ticket") or {}
+        reception = payload.get("reception") or {}
+        reception_id = str(reception.get("id") or "")
+        attributes = reception.get("attributes") or {}
+        name = str(attributes.get("name") or resource.get("title") or "")
+        opens_at = _parse_time(attributes.get("entry_period_starts_at"))
+        if not reception_id or not name or not opens_at:
+            return 0
+        acts = _asobi_match_acts(name, _asobi_real_acts(resource))
+        if not acts:
+            return 0
+        phase = _asobi_ticket_phase(str(attributes.get("entry_type") or ""), name)
+        status = _asobi_ticket_status(attributes.get("entry_period_status"))
+        closes_at = _parse_time(attributes.get("entry_period_ends_at"))
+        result_at = _parse_time(attributes.get("result_announcement_scheduled_at"))
+        applied = 0
+        source_keys: list[str] = []
+        with self.connect() as conn, conn.transaction():
+            for act in acts:
+                act_id = str(act.get("id") or "")
+                if not act_id:
+                    continue
+                event_source_key = f"asobi:act:{act_id}"
+                event = conn.execute(
+                    'SELECT "id" FROM "Event" WHERE "sourceKey"=%s', (event_source_key,)
+                ).fetchone()
+                if not event:
+                    continue
+                source_key = f"asobi:reception:{reception_id}:act:{act_id}"
+                source_keys.append(source_key)
+                entity_id = _stable_id("ticket", source_key)
+                conn.execute(
+                    """
+                    INSERT INTO "TicketWindow" (
+                        "id","sourceKey","eventId","phase","phaseLabelJa","opensAt",
+                        "closesAt","resultAt","platform","url","status"
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'official',%s,%s)
+                    ON CONFLICT ("sourceKey") DO UPDATE SET
+                        "eventId"=EXCLUDED."eventId","phase"=EXCLUDED."phase",
+                        "phaseLabelJa"=EXCLUDED."phaseLabelJa","opensAt"=EXCLUDED."opensAt",
+                        "closesAt"=EXCLUDED."closesAt","resultAt"=EXCLUDED."resultAt",
+                        "platform"=EXCLUDED."platform","url"=EXCLUDED."url",
+                        "status"=EXCLUDED."status"
+                    """,
+                    (
+                        entity_id,
+                        source_key,
+                        event["id"],
+                        phase,
+                        name,
+                        opens_at,
+                        closes_at,
+                        result_at,
+                        resource.get("url"),
+                        status,
+                    ),
+                )
+                applied += 1
+            if source_keys:
+                source_prefix = f"asobi:reception:{reception_id}:act:"
+                conn.execute(
+                    """
+                    DELETE FROM "TicketWindow"
+                    WHERE LEFT("sourceKey", %s)=%s
+                      AND NOT ("sourceKey" = ANY(%s))
+                    """,
+                    (len(source_prefix), source_prefix, source_keys),
+                )
+        return applied
+
+    @staticmethod
+    def _matching_ticket_event(
+        conn: psycopg.Connection,
+        *,
+        event_source_key: str,
+        title: str,
+        starts_at: datetime,
+        venue_name: str,
+    ) -> tuple[str, bool]:
+        exact = conn.execute(
+            'SELECT "id" FROM "Event" WHERE "sourceKey"=%s',
+            (event_source_key,),
+        ).fetchone()
+        if exact:
+            return exact["id"], False
+        local_day = starts_at.astimezone(JST).date()
+        lower = datetime.combine(local_day, datetime.min.time(), tzinfo=JST)
+        upper = lower + timedelta(days=1)
+        rows = conn.execute(
+            """
+            SELECT e."id",e."titleJa",v."nameJa" AS "venueName"
+            FROM "Event" e
+            LEFT JOIN "Venue" v ON v."id"=e."venueId"
+            WHERE e."startsAt">=%s AND e."startsAt"<%s
+            """,
+            (lower, upper),
+        ).fetchall()
+        venue_key = _event_match_text(venue_name)
+        matches = [
+            row
+            for row in rows
+            if _same_event_title(title, str(row.get("titleJa") or ""))
+            and (not venue_key or venue_key == _event_match_text(str(row.get("venueName") or "")))
+        ]
+        if len(matches) == 1:
+            return matches[0]["id"], True
+        return _stable_id("event", event_source_key), False
+
+    def upsert_ticket_page(
+        self,
+        resource: dict[str, Any],
+        *,
+        source_id: str,
+        platform: str,
+    ) -> tuple[int, int]:
+        attributes = resource.get("attributes") or {}
+        payload = attributes.get("ticket_page") or attributes.get("eplus_ticket") or {}
+        if platform not in TICKET_PLATFORMS:
+            return 0, 0
+        page_id = str(payload.get("pageId") or "")
+        events = [item for item in payload.get("events") or [] if isinstance(item, dict)]
+        if not page_id or not events:
+            return 0, 0
+        project = _tag(
+            [str(value) for value in resource.get("tags") or []],
+            PROJECT_PREFIX,
+            "anime-general",
+        )
+        media = attributes.get("media") or []
+        key_visual_url = next(
+            (
+                item.get("url")
+                for item in media
+                if isinstance(item, dict) and item.get("type") == "image" and item.get("url")
+            ),
+            None,
+        )
+        event_count = 0
+        ticket_count = 0
+        ticket_source_keys: list[str] = []
+        ticket_source_prefix = f"{platform}:reception:{page_id}:"
+        with self.connect() as conn, conn.transaction():
+            ip = (
+                conn.execute('SELECT "id" FROM "Ip" WHERE "slug"=%s', (project,)).fetchone()
+                if project
+                else None
+            )
+            ip_id = ip["id"] if ip else None
+            for item in events:
+                performance_id = str(item.get("id") or "")
+                title = unescape(str(item.get("name") or resource.get("title") or "")).strip()
+                starts_at = _parse_time(item.get("startsAt"))
+                if not performance_id or not title or not starts_at:
+                    continue
+                event_source_key = f"{platform}:event:{performance_id}"
+                event_url = str(item.get("url") or resource.get("url") or "")
+                venue = item.get("venue") if isinstance(item.get("venue"), dict) else {}
+                venue_name = unescape(str(venue.get("name") or "")).strip()
+                venue_url = str(venue.get("url") or "").strip() or None
+                event_id, reused_event = self._matching_ticket_event(
+                    conn,
+                    event_source_key=event_source_key,
+                    title=title,
+                    starts_at=starts_at,
+                    venue_name=venue_name,
+                )
+                venue_id = None
+                if venue_name:
+                    venue_match = re.search(r"/sf/venue/(\d+)", venue_url or "")
+                    venue_key = (
+                        f"{platform}:{venue_match.group(1)}"
+                        if venue_match
+                        else f"{platform}:{venue_name}:{venue.get('prefecture') or ''}"
+                    )
+                    venue_id = _stable_id("venue", venue_key)
+                    venue_slug_suffix = (
+                        venue_match.group(1)
+                        if venue_match
+                        else hashlib.sha256(venue_key.encode()).hexdigest()[:12]
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO "Venue" (
+                            "id","slug","nameJa","prefecture","officialUrl"
+                        ) VALUES (%s,%s,%s,%s,%s)
+                        ON CONFLICT ("id") DO UPDATE SET
+                            "nameJa"=EXCLUDED."nameJa",
+                            "prefecture"=EXCLUDED."prefecture",
+                            "officialUrl"=EXCLUDED."officialUrl"
+                        """,
+                        (
+                            venue_id,
+                            f"{platform}-venue-{venue_slug_suffix}",
+                            venue_name,
+                            venue.get("prefecture"),
+                            venue_url,
+                        ),
+                    )
+                if reused_event:
+                    conn.execute(
+                        """
+                        UPDATE "Event"
+                        SET "ipId"=COALESCE("ipId",%s),"updatedAt"=NOW()
+                        WHERE "id"=%s
+                        """,
+                        (ip_id, event_id),
+                    )
+                else:
+                    slug = _slug(
+                        title,
+                        hashlib.sha256(event_source_key.encode()).hexdigest(),
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO "Event" (
+                            "id","slug","sourceKey","titleJa","startsAt","endsAt","doorsAt",
+                            "venueId","ipId","eventType","officialUrl","keyVisualUrl","sourceId"
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT ("sourceKey") DO UPDATE SET
+                            "titleJa"=EXCLUDED."titleJa","startsAt"=EXCLUDED."startsAt",
+                            "endsAt"=EXCLUDED."endsAt","doorsAt"=EXCLUDED."doorsAt",
+                            "venueId"=EXCLUDED."venueId","ipId"=EXCLUDED."ipId",
+                            "eventType"=EXCLUDED."eventType","officialUrl"=EXCLUDED."officialUrl",
+                            "keyVisualUrl"=EXCLUDED."keyVisualUrl","sourceId"=EXCLUDED."sourceId",
+                            "updatedAt"=NOW()
+                        """,
+                        (
+                            event_id,
+                            slug,
+                            event_source_key,
+                            title,
+                            starts_at,
+                            _parse_time(item.get("endsAt")),
+                            _parse_time(item.get("doorsAt")),
+                            venue_id,
+                            ip_id,
+                            _eplus_event_type(title),
+                            event_url,
+                            key_visual_url,
+                            source_id,
+                        ),
+                    )
+                    search_text = "\n".join(
+                        value for value in (title, venue_name, project) if value
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO "SearchDocument" (
+                            "id","entityType","entityId","titleOriginal","projectKey","kind",
+                            "country","publishedAt","canonicalUrl","searchText"
+                        ) VALUES (%s,'EVENT',%s,%s,%s,'EVENT','JP',%s,%s,%s)
+                        ON CONFLICT ("entityType","entityId") DO UPDATE SET
+                            "titleOriginal"=EXCLUDED."titleOriginal",
+                            "projectKey"=EXCLUDED."projectKey",
+                            "publishedAt"=EXCLUDED."publishedAt",
+                            "canonicalUrl"=EXCLUDED."canonicalUrl",
+                            "searchText"=EXCLUDED."searchText","updatedAt"=NOW()
+                        """,
+                        (
+                            _stable_id("search", f"EVENT:{event_id}"),
+                            event_id,
+                            title,
+                            project,
+                            starts_at,
+                            event_url,
+                            search_text,
+                        ),
+                    )
+                event_count += 1
+                for window in item.get("ticketWindows") or []:
+                    if not isinstance(window, dict):
+                        continue
+                    window_id = str(window.get("id") or "")
+                    opens_at = _parse_time(window.get("opensAt"))
+                    if not window_id or not opens_at:
+                        continue
+                    # Multiple upstream performance rows can normalize to the same
+                    # Event (for example, duplicated timed-entry rows on Pia).
+                    # Key the association by the resolved Event so one reception
+                    # produces only one TicketWindow for that canonical Event.
+                    source_key = f"{ticket_source_prefix}{window_id}:event:{event_id}"
+                    ticket_source_keys.append(source_key)
+                    ticket_id = _stable_id("ticket", source_key)
+                    phase = window.get("phase") if window.get("phase") in TICKET_PHASES else "OTHER"
+                    status = (
+                        window.get("status")
+                        if window.get("status")
+                        in {"UPCOMING", "OPEN", "CLOSED", "RESULT_ANNOUNCED", "CANCELED"}
+                        else None
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO "TicketWindow" (
+                            "id","sourceKey","eventId","phase","phaseLabelJa","opensAt",
+                            "closesAt","resultAt","platform","url","status"
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT ("sourceKey") DO UPDATE SET
+                            "eventId"=EXCLUDED."eventId","phase"=EXCLUDED."phase",
+                            "phaseLabelJa"=EXCLUDED."phaseLabelJa",
+                            "opensAt"=EXCLUDED."opensAt","closesAt"=EXCLUDED."closesAt",
+                            "resultAt"=EXCLUDED."resultAt",
+                            "platform"=EXCLUDED."platform","url"=EXCLUDED."url",
+                            "status"=EXCLUDED."status"
+                        """,
+                        (
+                            ticket_id,
+                            source_key,
+                            event_id,
+                            phase,
+                            window.get("label"),
+                            opens_at,
+                            _parse_time(window.get("closesAt")),
+                            _parse_time(window.get("resultAt")),
+                            platform,
+                            str(window.get("url") or event_url),
+                            status,
+                        ),
+                    )
+                    ticket_count += 1
+            if ticket_source_keys:
+                conn.execute(
+                    """
+                    DELETE FROM "TicketWindow"
+                    WHERE LEFT("sourceKey", %s)=%s
+                      AND NOT ("sourceKey" = ANY(%s))
+                    """,
+                    (
+                        len(ticket_source_prefix),
+                        ticket_source_prefix,
+                        ticket_source_keys,
+                    ),
+                )
+            else:
+                conn.execute(
+                    'DELETE FROM "TicketWindow" WHERE LEFT("sourceKey", %s)=%s',
+                    (len(ticket_source_prefix), ticket_source_prefix),
+                )
+        return event_count, ticket_count
+
+    def remove_news_projection(self, content_id: str) -> None:
+        with self.connect() as conn, conn.transaction():
+            conn.execute('DELETE FROM "NewsPost" WHERE "contentItemId"=%s', (content_id,))
+
+    def apply_candidate(
+        self, candidate_id: str, *, force: bool, reviewer: str | None
+    ) -> tuple[str | None, list[str]]:
+        with self.connect() as conn:
+            candidate = conn.execute(
+                """
+                SELECT c.*,i."sourceId",i."projectKey",i."canonicalUrl"
+                FROM "ExtractionCandidate" c JOIN "ContentItem" i ON i."id"=c."contentItemId"
+                WHERE c."id"=%s
+                """,
+                (candidate_id,),
+            ).fetchone()
+        if not candidate:
+            raise KeyError(candidate_id)
+        kind = candidate["kind"]
+        payload = dict(candidate["payload"] or {})
+        threshold = 0.95 if kind == "TICKET" else 0.90
+        if not force and float(candidate["confidence"]) < threshold:
+            return None, ["confidence below automatic threshold"]
+        errors: list[str] = []
+        entity_id: str | None = None
+        entity_time: datetime | None = None
+        with self.connect() as conn, conn.transaction():
+            ip = conn.execute(
+                'SELECT "id" FROM "Ip" WHERE "slug"=%s', (candidate["projectKey"],)
+            ).fetchone()
+            ip_id = ip["id"] if ip else None
+            if kind == "EVENT":
+                starts_at = _parse_time(payload.get("startsAt"))
+                if not payload.get("titleJa"):
+                    errors.append("titleJa is required")
+                if not starts_at:
+                    errors.append("valid startsAt is required")
+                if not errors:
+                    entity_time = starts_at
+                    entity_id = _stable_id("event", candidate_id)
+                    event_type = (
+                        payload.get("eventType")
+                        if payload.get("eventType") in EVENT_TYPES
+                        else "LIVE"
+                    )
+                    slug = _slug(
+                        payload.get("titleJa"), hashlib.sha256(candidate_id.encode()).hexdigest()
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO "Event" (
+                            "id","slug","sourceKey","titleJa","titleZh","startsAt","endsAt","doorsAt",
+                            "ipId","eventType","officialUrl","sourceId"
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT ("sourceKey") DO UPDATE SET
+                            "titleJa"=EXCLUDED."titleJa","titleZh"=EXCLUDED."titleZh",
+                            "startsAt"=EXCLUDED."startsAt","endsAt"=EXCLUDED."endsAt",
+                            "doorsAt"=EXCLUDED."doorsAt","eventType"=EXCLUDED."eventType",
+                            "officialUrl"=EXCLUDED."officialUrl","updatedAt"=NOW()
+                        """,
+                        (
+                            entity_id,
+                            slug,
+                            candidate_id,
+                            payload.get("titleJa"),
+                            payload.get("titleZh"),
+                            starts_at,
+                            _parse_time(payload.get("endsAt")),
+                            _parse_time(payload.get("doorsAt")),
+                            ip_id,
+                            event_type,
+                            payload.get("officialUrl") or candidate["canonicalUrl"],
+                            candidate["sourceId"],
+                        ),
+                    )
+            elif kind == "RELEASE":
+                release_on = _parse_time(payload.get("releaseOn"))
+                if not payload.get("titleJa"):
+                    errors.append("titleJa is required")
+                if not release_on:
+                    errors.append("valid releaseOn is required")
+                if not errors:
+                    entity_time = release_on
+                    entity_id = _stable_id("release", candidate_id)
+                    release_kind = (
+                        payload.get("kind") if payload.get("kind") in RELEASE_KINDS else "CD"
+                    )
+                    slug = _slug(
+                        payload.get("titleJa"), hashlib.sha256(candidate_id.encode()).hexdigest()
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO "ReleaseItem" (
+                            "id","slug","sourceKey","titleJa","titleZh","kind","releaseOn","ipId","officialUrl"
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT ("sourceKey") DO UPDATE SET
+                            "titleJa"=EXCLUDED."titleJa","titleZh"=EXCLUDED."titleZh",
+                            "kind"=EXCLUDED."kind","releaseOn"=EXCLUDED."releaseOn",
+                            "officialUrl"=EXCLUDED."officialUrl"
+                        """,
+                        (
+                            entity_id,
+                            slug,
+                            candidate_id,
+                            payload.get("titleJa"),
+                            payload.get("titleZh"),
+                            release_kind,
+                            release_on,
+                            ip_id,
+                            payload.get("officialUrl") or candidate["canonicalUrl"],
+                        ),
+                    )
+            elif kind == "TICKET":
+                opens_at = _parse_time(payload.get("opensAt"))
+                event_url = payload.get("eventOfficialUrl")
+                event = (
+                    conn.execute(
+                        'SELECT "id" FROM "Event" WHERE "officialUrl"=%s ORDER BY "updatedAt" DESC LIMIT 1',
+                        (event_url,),
+                    ).fetchone()
+                    if event_url
+                    else None
+                )
+                closes_at = _parse_time(payload.get("closesAt"))
+                if not event:
+                    errors.append("exact eventOfficialUrl match is required")
+                if not opens_at:
+                    errors.append("valid opensAt is required")
+                if opens_at and closes_at and closes_at < opens_at:
+                    errors.append("closesAt is before opensAt")
+                if not errors:
+                    entity_id = _stable_id("ticket", candidate_id)
+                    phase = (
+                        payload.get("phase") if payload.get("phase") in TICKET_PHASES else "OTHER"
+                    )
+                    platform = (
+                        payload.get("platform")
+                        if payload.get("platform") in TICKET_PLATFORMS
+                        else "official"
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO "TicketWindow" (
+                            "id","sourceKey","eventId","phase","phaseLabelJa","opensAt","closesAt",
+                            "resultAt","platform","url"
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT ("sourceKey") DO UPDATE SET
+                            "eventId"=EXCLUDED."eventId","phase"=EXCLUDED."phase",
+                            "phaseLabelJa"=EXCLUDED."phaseLabelJa","opensAt"=EXCLUDED."opensAt",
+                            "closesAt"=EXCLUDED."closesAt","resultAt"=EXCLUDED."resultAt",
+                            "platform"=EXCLUDED."platform","url"=EXCLUDED."url"
+                        """,
+                        (
+                            entity_id,
+                            candidate_id,
+                            event["id"],
+                            phase,
+                            payload.get("phaseLabelJa"),
+                            opens_at,
+                            closes_at,
+                            _parse_time(payload.get("resultAt")),
+                            platform,
+                            payload.get("url"),
+                        ),
+                    )
+            else:
+                errors.append("unknown candidate kind")
+            if entity_id and kind in {"EVENT", "RELEASE"}:
+                title_original = payload.get("titleJa")
+                title_zh = payload.get("titleZh")
+                canonical_url = payload.get("officialUrl") or candidate["canonicalUrl"]
+                search_text = "\n".join(
+                    value for value in (title_original, title_zh, candidate["projectKey"]) if value
+                )
+                conn.execute(
+                    """
+                    INSERT INTO "SearchDocument" (
+                        "id","entityType","entityId","titleOriginal","titleZh","projectKey",
+                        "kind","country","publishedAt","canonicalUrl","searchText"
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,'JP',%s,%s,%s)
+                    ON CONFLICT ("entityType","entityId") DO UPDATE SET
+                        "titleOriginal"=EXCLUDED."titleOriginal","titleZh"=EXCLUDED."titleZh",
+                        "projectKey"=EXCLUDED."projectKey","publishedAt"=EXCLUDED."publishedAt",
+                        "canonicalUrl"=EXCLUDED."canonicalUrl","searchText"=EXCLUDED."searchText",
+                        "updatedAt"=NOW()
+                    """,
+                    (
+                        _stable_id("search", f"{kind}:{entity_id}"),
+                        kind,
+                        entity_id,
+                        title_original,
+                        title_zh,
+                        candidate["projectKey"],
+                        kind,
+                        entity_time,
+                        canonical_url,
+                        search_text,
+                    ),
+                )
+            status = (
+                "APPROVED"
+                if reviewer and not errors
+                else "AUTO_APPLIED"
+                if not errors
+                else "PENDING"
+            )
+            conn.execute(
+                """
+                UPDATE "ExtractionCandidate" SET "status"=%s,"validationErrors"=%s,
+                    "appliedEntityType"=%s,"appliedEntityId"=%s,"reviewedBy"=%s,
+                    "reviewedAt"=CASE WHEN CAST(%s AS TEXT) IS NULL THEN "reviewedAt" ELSE NOW() END,
+                    "updatedAt"=NOW()
+                WHERE "id"=%s
+                """,
+                (
+                    status,
+                    Jsonb(errors),
+                    kind if entity_id else None,
+                    entity_id,
+                    reviewer,
+                    reviewer,
+                    candidate_id,
+                ),
+            )
+        return entity_id, errors
+
+    def process(self, job: dict[str, Any]) -> None:
+        resource = self.resource(job["resourceId"])
+        if resource["content_hash"] != job["contentHash"]:
+            self.finish(job["id"])
+            return
+        category = _category(f"{resource.get('title') or ''}\n{resource.get('content') or ''}")
+        content_id, _ = self.upsert_content(resource, enrichment=None, category=category)
+        source_type = (resource.get("attributes") or {}).get("source_type")
+        if source_type == ASOBI_SOURCE_TYPE:
+            source_id = _stable_id("source", resource["source_id"])
+            if resource["kind"] == "ticket_act":
+                self.upsert_asobi_event(resource, source_id=source_id)
+            elif resource["kind"] == "ticket_reception":
+                applied = self.upsert_asobi_tickets(resource)
+                reception = ((resource.get("attributes") or {}).get("asobi_ticket") or {}).get(
+                    "reception"
+                ) or {}
+                entry_status = (reception.get("attributes") or {}).get("entry_period_status")
+                if applied == 0 and entry_status == "within_entry_period":
+                    enrichment = self.call_llm(resource, category)
+                    if enrichment:
+                        content_id, _ = self.upsert_content(
+                            resource, enrichment=enrichment, category=category
+                        )
+                        for fact in enrichment.get("facts") or []:
+                            if isinstance(fact, dict) and fact.get("kind") in {
+                                "EVENT",
+                                "TICKET",
+                                "RELEASE",
+                            }:
+                                self.candidate(content_id, fact)
+            elif resource["kind"] == "ticket_booth":
+                enrichment = self.call_llm(resource, category)
+                if enrichment:
+                    self.upsert_content(resource, enrichment=enrichment, category=category)
+            self.finish(job["id"])
+            return
+        if source_type in TICKET_SOURCE_PLATFORMS:
+            source_id = _stable_id("source", resource["source_id"])
+            self.upsert_ticket_page(
+                resource,
+                source_id=source_id,
+                platform=TICKET_SOURCE_PLATFORMS[source_type],
+            )
+            self.remove_news_projection(content_id)
+            self.finish(job["id"])
+            return
+        enrichment = self.call_llm(resource, category)
+        if enrichment:
+            content_id, _ = self.upsert_content(resource, enrichment=enrichment, category=category)
+            for fact in enrichment.get("facts") or []:
+                if isinstance(fact, dict) and fact.get("kind") in {"EVENT", "TICKET", "RELEASE"}:
+                    self.candidate(content_id, fact)
+        self.finish(job["id"])
+
+    def process_once(self) -> bool:
+        job = self.claim()
+        if not job:
+            return False
+        try:
+            self.process(job)
+            LOGGER.info("normalized job=%s resource=%s", job["id"], job["resourceId"])
+        except Exception as exc:
+            LOGGER.exception("normalization failed job=%s", job["id"])
+            self.fail(job, exc)
+        return True
+
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        if self.path not in {"/", "/health"}:
+            self.send_response(404)
+            self.end_headers()
+            return
+        body = b'{"service":"genchi-normalizer","ready":true}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_args: Any) -> None:
+        return
+
+
+def run(settings: Settings) -> None:
+    stop = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    signal.signal(signal.SIGINT, lambda *_: stop.set())
+    server = ThreadingHTTPServer(("0.0.0.0", 8070), HealthHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    normalizer = Normalizer(settings)
+    LOGGER.info("normalizer started llm_enabled=%s", settings.llm_enabled)
+    try:
+        while not stop.is_set():
+            if not normalizer.process_once():
+                stop.wait(settings.poll_seconds)
+    finally:
+        server.shutdown()

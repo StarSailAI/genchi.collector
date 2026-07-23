@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "allfeeds-control"
+version = "0.1.0"
+description = "Controller service for the AllFeeds distributed collection framework"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+  "allfeeds-contracts>=0.1.0",
+  "alembic>=1.13",
+  "croniter>=3.0",
+  "fastapi>=0.115",
+  "psycopg[binary,pool]>=3.2",
+  "pydantic>=2.8",
+  "pyyaml>=6.0",
+  "requests>=2.32",
+  "uvicorn>=0.30",
+]
+
+[project.scripts]
+allfeeds-control = "allfeeds_control.cli:main"
+allfeeds = "allfeeds_control.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.data-files]
+"allfeeds_control_migrations" = ["alembic.ini"]
+"allfeeds_control_migrations/alembic" = ["alembic/env.py"]
+"allfeeds_control_migrations/alembic/versions" = ["alembic/versions/*.py"]

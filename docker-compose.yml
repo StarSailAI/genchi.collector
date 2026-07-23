@@ -1,0 +1,169 @@
+name: genchi-collector
+
+x-database: &database
+  DATABASE_URL: postgresql://genchi:${POSTGRES_PASSWORD:-genchi-local}@postgres:5432/genchi
+  ALLFEEDS_DB_SCHEMA: allfeeds
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: genchi
+      POSTGRES_USER: genchi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-genchi-local}
+      GENCHI_READER_PASSWORD: ${GENCHI_READER_PASSWORD:-genchi-reader-local}
+      TZ: UTC
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init-reader.sh:/docker-entrypoint-initdb.d/10-init-reader.sh:ro
+    ports:
+      - "${POSTGRES_BIND_HOST:-127.0.0.1}:${POSTGRES_PORT:-5433}:5432"
+    networks: [collector, genchi-data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U genchi -d genchi"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  control:
+    build:
+      context: .
+      dockerfile: services/controller/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - >-
+        allfeeds-control migrate &&
+        allfeeds-control enrollment-bootstrap --token "$${ENROLLMENT_TOKEN}" --max-uses 100000 &&
+        exec allfeeds-control serve --host 0.0.0.0 --port 8060
+    environment:
+      <<: *database
+      ALLFEEDS_SOURCES: /app/config/sources.yaml
+      CONTROL_API_TOKEN: ${CONTROL_API_TOKEN:-genchi-local-control-token}
+      ENROLLMENT_TOKEN: ${ENROLLMENT_TOKEN:-genchi-local-enrollment-token}
+      DB_POOL_MIN: ${DB_POOL_MIN:-1}
+      DB_POOL_MAX: ${DB_POOL_MAX:-32}
+      REGISTRAR_TICK_SECONDS: ${REGISTRAR_TICK_SECONDS:-10}
+    volumes:
+      - ./config:/app/config:ro
+    ports:
+      - "${CONTROL_BIND_HOST:-127.0.0.1}:${CONTROL_PORT:-8060}:8060"
+    networks: [collector]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8060/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  cloakbrowser:
+    image: ${CLOAKBROWSER_IMAGE:-cloakhq/cloakbrowser:0.4.12}
+    restart: unless-stopped
+    command: ["python", "/app/genchi_browser_service.py"]
+    shm_size: ${CLOAKBROWSER_SHM_SIZE:-1gb}
+    environment:
+      CLOAKBROWSER_API_TOKEN: ${CLOAKBROWSER_API_TOKEN:-genchi-local-browser-token}
+      CLOAKBROWSER_AUTO_UPDATE: "false"
+      CLOAKBROWSER_PROFILE_DIR: /data/profile
+      CLOAKBROWSER_HEADLESS: ${CLOAKBROWSER_HEADLESS:-1}
+      CLOAKBROWSER_HUMANIZE: ${CLOAKBROWSER_HUMANIZE:-1}
+      CLOAKBROWSER_CONCURRENCY: ${CLOAKBROWSER_CONCURRENCY:-2}
+      CLOAKBROWSER_FINGERPRINT_SEED: ${CLOAKBROWSER_FINGERPRINT_SEED:-42426}
+      CLOAKBROWSER_LOCALE: ${CLOAKBROWSER_LOCALE:-ja-JP}
+      CLOAKBROWSER_LICENSE_KEY: ${CLOAKBROWSER_LICENSE_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./services/browser/service.py:/app/genchi_browser_service.py:ro
+      - cloakbrowser-state:/data
+    networks: [collector]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3003/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+
+  worker:
+    build:
+      context: .
+      dockerfile: services/worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      control:
+        condition: service_healthy
+      cloakbrowser:
+        condition: service_healthy
+    environment:
+      <<: *database
+      CONTROL_URL: http://control:8060
+      CONTROL_TLS_VERIFY: "0"
+      ENROLLMENT_TOKEN: ${ENROLLMENT_TOKEN:-genchi-local-enrollment-token}
+      ALLFEEDS_NODE_ID: ${ALLFEEDS_NODE_ID:-genchi-resident-01}
+      ALLFEEDS_WORKER_CONCURRENCY: ${ALLFEEDS_WORKER_CONCURRENCY:-4}
+      WORKER_STATE_PATH: /var/lib/allfeeds-worker/identity.json
+      ASSET_STORE_PATH: /data/assets
+      CLOAKBROWSER_URL: http://cloakbrowser:3003
+      CLOAKBROWSER_API_TOKEN: ${CLOAKBROWSER_API_TOKEN:-genchi-local-browser-token}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - worker-state:/var/lib/allfeeds-worker
+      - asset-data:/data/assets
+    networks: [collector]
+
+  normalizer:
+    build:
+      context: .
+      dockerfile: services/normalizer/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      control:
+        condition: service_healthy
+    command: ["sh", "-c", "genchi-normalizer migrate && exec genchi-normalizer run"]
+    environment:
+      <<: *database
+      GENCHI_DB_SCHEMA: genchi
+      NORMALIZER_POLL_SECONDS: ${NORMALIZER_POLL_SECONDS:-2}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_RESPONSE_FORMAT: ${LLM_RESPONSE_FORMAT:-auto}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks: [collector]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8070/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      control:
+        condition: service_healthy
+    environment:
+      CONTROL_URL: http://control:8060
+      CONTROL_API_TOKEN: ${CONTROL_API_TOKEN:-genchi-local-control-token}
+      CONTROL_TLS_VERIFY: "0"
+    ports:
+      - "${DASHBOARD_BIND_HOST:-127.0.0.1}:${DASHBOARD_PORT:-8050}:8050"
+    networks: [collector]
+
+volumes:
+  postgres-data:
+  worker-state:
+  asset-data:
+  cloakbrowser-state:
+
+networks:
+  collector:
+  genchi-data:
+    name: genchi-data

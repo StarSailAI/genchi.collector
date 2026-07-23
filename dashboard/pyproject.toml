@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "allfeeds-dashboard"
+version = "0.1.0"
+description = "Read-only operations dashboard for AllFeeds"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+  "requests>=2.32",
+  "streamlit>=1.41",
+  "streamlit-autorefresh>=1.0.1",
+]
+
+[project.scripts]
+allfeeds-dashboard = "allfeeds_dashboard.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+allfeeds_dashboard = ["favicon.png"]

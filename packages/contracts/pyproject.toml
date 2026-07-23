@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "allfeeds-contracts"
+version = "0.1.0"
+description = "Versioned protocol and data models for AllFeeds"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = ["pydantic>=2.8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

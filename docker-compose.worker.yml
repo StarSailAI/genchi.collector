@@ -1,0 +1,21 @@
+services:
+  worker:
+    build:
+      context: .
+      dockerfile: services/worker/Dockerfile
+    restart: unless-stopped
+    environment:
+      CONTROL_URL: ${CONTROL_URL}
+      CONTROL_TLS_VERIFY: ${CONTROL_TLS_VERIFY:-1}
+      DATABASE_URL: ${DATABASE_URL}
+      ALLFEEDS_DB_SCHEMA: ${ALLFEEDS_DB_SCHEMA:-allfeeds}
+      ENROLLMENT_TOKEN: ${ENROLLMENT_TOKEN:-}
+      ALLFEEDS_NODE_ID: ${ALLFEEDS_NODE_ID}
+      ALLFEEDS_WORKER_CONCURRENCY: ${ALLFEEDS_WORKER_CONCURRENCY:-auto}
+      ALLFEEDS_WORKER_VERSION: ${ALLFEEDS_WORKER_VERSION:-0.1.0}
+      WORKER_STATE_PATH: /var/lib/allfeeds-worker/identity.json
+      ASSET_STORE_PATH: /data/assets
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ${WORKER_STATE_HOST_PATH:-./runtime/worker-state}:/var/lib/allfeeds-worker
+      - ${ASSET_STORE_HOST_PATH:-./runtime/assets}:/data/assets
