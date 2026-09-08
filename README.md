@@ -20,6 +20,6 @@ Genchi 的采集、活动目录与提醒后端。持续收集日本二次元现�
 
 本机网站为 `http://localhost:13000/zh-Hans`，测试收信箱为 `http://localhost:18025`。
 
-远程机器使用共用 `.env`、生产 Compose 覆盖文件和 Caddy 入口，参见 [单机部署与配置](docs/production.md)。
+远程机器使用共用 `.env`、生产 Compose 覆盖文件、Nginx HTTPS 入口和 Resend 邮件，参见 [单机部署与配置](docs/production.md)。
 
 [启动、架构与验证](docs/product-v2.md) · [命名与词表维护](docs/naming.md) · [服务器配置建议](docs/hosting-size.md) · [数据源说明](docs/ticket-platform-sources.md) · [Agent 开发约束](AGENTS.md)

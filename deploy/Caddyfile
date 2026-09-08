@@ -1,9 +1,0 @@
-{
-	admin 127.0.0.1:2019
-}
-
-{$PUBLIC_SITE_URL} {
-	encode zstd gzip
-	header -Server
-	reverse_proxy web:3000
-}

@@ -10,6 +10,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .importer import import_legacy
+from .inbound import InboundError, Resend, backfill, forward_one, reconcile
 from .naming import normalize_catalog
 from .notifications import deliver_one, plan
 from .pipeline import index_raw, process_one
@@ -24,6 +25,10 @@ def main():
     sub.add_parser("plan")
     sub.add_parser("index-raw")
     sub.add_parser("refresh-structured")
+    sub.add_parser("inbound-backfill", help="Queue all retained Resend received mail, deduplicated")
+    sub.add_parser(
+        "inbound-status", help="Show forwarding counts and failures without mail contents"
+    )
     names = sub.add_parser("normalize-names", help="Preview/apply audited Chinese display names")
     names.add_argument("--apply", action="store_true")
     names.add_argument("--output", help="Write the complete reviewable report as JSON")
@@ -63,6 +68,17 @@ def main():
             print(json.dumps({"queued": result.rowcount}))
     elif args.command == "plan":
         plan(catalog)
+    elif args.command == "inbound-backfill":
+        print(json.dumps(backfill(catalog)))
+    elif args.command == "inbound-status":
+        with catalog.connect() as conn:
+            counts = conn.execute(
+                "SELECT status,count(*) FROM genchi_private.inbound_mail GROUP BY status"
+            ).fetchall()
+            failures = conn.execute(
+                "SELECT email_id,status,attempts,last_error FROM genchi_private.inbound_mail WHERE status IN ('FAILED','UNCERTAIN') ORDER BY created_at DESC LIMIT 50"
+            ).fetchall()
+            print(json.dumps({"counts": counts, "failures": failures}, default=str))
     else:
         stop = threading.Event()
         signal.signal(signal.SIGTERM, lambda *_: stop.set())
@@ -82,16 +98,26 @@ def main():
         health = ThreadingHTTPServer(("0.0.0.0", 8070), Health)
         threading.Thread(target=health.serve_forever, daemon=True).start()
         last_plan = 0
+        last_inbound_scan = 0
+        inbound_client = Resend() if os.getenv("RESEND_API_KEY") else None
         while not stop.is_set():
             try:
                 state["heartbeat"] = time.monotonic()
                 if args.mode == "catalog":
                     busy = process_one(catalog)
                 elif args.mode == "notifications":
+                    if time.monotonic() - last_inbound_scan > 60:
+                        try:
+                            reconcile(catalog, inbound_client)
+                        except InboundError as exc:
+                            logging.warning("Resend inbox reconciliation: %s", exc)
+                        finally:
+                            last_inbound_scan = time.monotonic()
                     if time.monotonic() - last_plan > 30:
                         plan(catalog)
                         last_plan = time.monotonic()
                     busy = deliver_one(catalog)
+                    busy = forward_one(catalog, inbound_client) or busy
                 else:
                     busy = False
                 stop.wait(0.1 if busy else 2)

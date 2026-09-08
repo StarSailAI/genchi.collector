@@ -26,32 +26,10 @@ services:
     mem_limit: 256m
   notifier:
     image: genchi/product:${GENCHI_IMAGE_TAG:-current}
-    mem_limit: 192m
+    # Attachment encoding and a durable retry payload can briefly consume extra memory.
+    mem_limit: 512m
+    command: ["genchi-product", "worker", "--mode", "${NOTIFIER_WORKER_MODE:-idle}"]
   mailpit:
     mem_limit: 96m
   dashboard:
     profiles: ["operations"]
-  gateway:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    mem_limit: 96m
-    environment:
-      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:?Set PUBLIC_SITE_URL}
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    networks: [genchi-data]
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
-      start_period: 10s
-
-volumes:
-  caddy-data:
-  caddy-config:

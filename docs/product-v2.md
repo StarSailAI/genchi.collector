@@ -99,8 +99,12 @@ allfeeds-control config-validate --sources config/sources.yaml
 - 参与状态未记录时，结果 / 付款事项带条件提示；记录申请、中选或购票后，已完成的相应事项不再占据个人日程。邮件发送前执行同样的轮次判断；修改另一轮不会抑制本轮提醒。DELETE `/me/participation/{id}?round_key=...` 可恢复为未记录。
 - `/calendar` 保留 ICS 使用的节点读取接口，新增 `total/page/limit`。网站循环取完分页，不静默截取前 2,000 项。
 
-上述读取 API 与参与状态撤销沿用原有表结构；当前完整版本还包含下述名称规范迁移，SchemaContract 为 1.3。
+上述读取 API 与参与状态撤销沿用原有表结构；当前完整版本包含名称规范与收信转发迁移，SchemaContract 为 1.4，兼容网站的 1.3 读取契约。
 
 ## 名称规范（SchemaContract 1.3）
 
 原始名称与展示名称分开保存，网站 / 日程 / 邮件 / ICS 共用展示字段。所有模型提取请求注入同一个版本化专有名词表；确定性规则无法处理的名称进入名称审核。名称修订不改变事实 revision，也不触发活动变更提醒。详见 [命名规范与词表维护](naming.md) 与 [第一版服务器建议](hosting-size.md)。
+
+## 收信转发（SchemaContract 1.4）
+
+Resend 收件进入独立私有队列 `genchi_private.inbound_mail`，由 notifier 转发到 `ADMIN_EMAIL`，与账户登录、关注及退订状态无关。邮件不进入活动目录或模型提取。回调签名、附件、幂等重试与运维命令见 [单机部署](production.md#resend-收信转发)。

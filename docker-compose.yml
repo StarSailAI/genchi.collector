@@ -156,6 +156,7 @@ services:
       PRODUCT_ADMIN_TOKEN: ${PRODUCT_ADMIN_TOKEN:?Set PRODUCT_ADMIN_TOKEN in .env}
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://localhost:13000}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@genchi.local}
+      RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
     ports: ["127.0.0.1:${PRODUCT_PORT:-18080}:8080"]
     networks: [collector, genchi-data]
     healthcheck:
@@ -185,6 +186,9 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-Genchi <hello@genchi.local>}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@genchi.local}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
     networks: [collector]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8070/health', timeout=3)"]

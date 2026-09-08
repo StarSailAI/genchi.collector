@@ -422,6 +422,8 @@ def smtp_send(recipient, subject, body, message_id, account_id):
     message["To"] = recipient
     message["Subject"] = subject
     message["Message-ID"] = f"<{message_id}@genchi.local>"
+    if host.lower() == "smtp.resend.com":
+        message["Resend-Idempotency-Key"] = message_id
     site = os.getenv("PUBLIC_SITE_URL", "http://localhost:13000")
     message["List-Unsubscribe"] = (
         f"<{site}/api/product/auth/unsubscribe?token={unsubscribe_token(account_id)}>"
@@ -429,7 +431,10 @@ def smtp_send(recipient, subject, body, message_id, account_id):
     message["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     message.set_content(body)
     client = smtplib.SMTP_SSL if security == "ssl" else smtplib.SMTP
-    with client(host, int(os.getenv("SMTP_PORT", "1025")), timeout=20) as smtp:
+    options = {"timeout": 20}
+    if security == "ssl":
+        options["context"] = ssl.create_default_context()
+    with client(host, int(os.getenv("SMTP_PORT", "1025")), **options) as smtp:
         if security == "starttls":
             smtp.starttls(context=ssl.create_default_context())
         if os.getenv("SMTP_USER"):

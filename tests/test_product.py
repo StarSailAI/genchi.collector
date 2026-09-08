@@ -4,6 +4,7 @@ import json
 import os
 import re
 import runpy
+import ssl
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -19,6 +20,7 @@ from genchi_product.notifications import (
     eligible_follows,
     plan,
     render_mail,
+    smtp_send,
     unsubscribe_token,
 )
 from genchi_product.pipeline import extract_text, process_one
@@ -28,6 +30,31 @@ from pydantic import ValidationError
 
 DSN = os.getenv("ALLFEEDS_TEST_DATABASE_URL")
 NOW = datetime(2030, 6, 1, 0, tzinfo=UTC)
+
+
+def test_resend_smtp_uses_verified_tls_and_stable_idempotency_key(monkeypatch):
+    for key, value in {
+        "SMTP_HOST": "smtp.resend.com",
+        "SMTP_PORT": "465",
+        "SMTP_SECURITY": "ssl",
+        "SMTP_USER": "resend",
+        "SMTP_PASSWORD": "re_test_only",
+        "PRODUCT_SECRET": "s" * 40,
+        "MAIL_FROM": "Genchi <hello@example.test>",
+        "PUBLIC_SITE_URL": "https://events.example.test",
+    }.items():
+        monkeypatch.setenv(key, value)
+    with patch("genchi_product.notifications.smtplib.SMTP_SSL") as smtp:
+        smtp_send("recipient@example.test", "A reminder", "Body", "stable-mail-id", "account-id")
+    args, kwargs = smtp.call_args
+    assert args == ("smtp.resend.com", 465)
+    assert kwargs["context"].verify_mode == ssl.CERT_REQUIRED
+    assert kwargs["context"].check_hostname is True
+    connection = smtp.return_value.__enter__.return_value
+    connection.login.assert_called_once_with("resend", "re_test_only")
+    message = connection.send_message.call_args.args[0]
+    assert message["Resend-Idempotency-Key"] == "stable-mail-id"
+    assert "https://events.example.test/" in message["List-Unsubscribe"]
 
 
 def proof(verified=True, version="one"):
@@ -83,6 +110,9 @@ def catalog(monkeypatch):
             "upgrade"
         ]()
         runpy.run_path(str(Path("services/normalizer/alembic/versions/0006_catalog_names.py")))[
+            "upgrade"
+        ]()
+        runpy.run_path(str(Path("services/normalizer/alembic/versions/0007_inbound_mail.py")))[
             "upgrade"
         ]()
     with psycopg.connect(DSN, autocommit=True) as conn:

@@ -9,8 +9,11 @@ from zoneinfo import ZoneInfo
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from starlette.concurrency import run_in_threadpool
+from svix.webhooks import Webhook, WebhookVerificationError
 
 from .domain import KINDS, ActivityInput
+from .inbound import enqueue_received
 from .naming import change_summary, sync_name
 from .notifications import enqueue, signing_key, verify_unsubscribe
 from .presentation import agenda_groups, followed_ids
@@ -197,10 +200,44 @@ def create_app(catalog: Catalog | None = None):
             contract = conn.execute(
                 'SELECT major,minor FROM "SchemaContract" WHERE id=1'
             ).fetchone()
-            ready = bool(contract and contract["major"] == 1 and contract["minor"] >= 3)
+            ready = bool(contract and contract["major"] == 1 and contract["minor"] >= 4)
             if not ready:
-                raise HTTPException(503, "Catalog schema 1.3 required")
-            return {"ok": True, "schema": "1.3", "service": "genchi-product"}
+                raise HTTPException(503, "Catalog schema 1.4 required")
+            return {
+                "ok": True,
+                "schema": f"{contract['major']}.{contract['minor']}",
+                "service": "genchi-product",
+            }
+
+    @app.post("/webhooks/resend")
+    async def resend_received(request: Request):
+        secret = os.environ.get("RESEND_WEBHOOK_SECRET", "")
+        if not secret:
+            raise HTTPException(503, "Resend inbound is not configured")
+        raw = bytearray()
+        async for chunk in request.stream():
+            if len(raw) + len(chunk) > 65536:
+                raise HTTPException(413, "Webhook payload too large")
+            raw.extend(chunk)
+        try:
+            event = Webhook(secret).verify(bytes(raw), dict(request.headers))
+        except WebhookVerificationError:
+            raise HTTPException(401, "Invalid webhook signature") from None
+        except ValueError:
+            raise HTTPException(400, "Invalid webhook payload") from None
+        if not isinstance(event, dict):
+            raise HTTPException(400, "Invalid webhook payload")
+        if event.get("type") != "email.received":
+            return {"ok": True, "ignored": True}
+        try:
+            email_id = event["data"]["email_id"]
+            if not isinstance(email_id, str):
+                raise ValueError("Invalid email id")
+            queued = await run_in_threadpool(enqueue_received, catalog, email_id)
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(400, "Invalid received email id") from None
+        # Acknowledge only after durable commit. Body/attachments are fetched by the worker.
+        return {"ok": True, "queued": queued}
 
     @app.get("/subjects")
     def subjects():

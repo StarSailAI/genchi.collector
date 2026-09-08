@@ -8,6 +8,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -98,7 +99,24 @@ def prepare(root: Path) -> dict[str, str]:
             "Fill LLM_BASE_URL, LLM_API_KEY and LLM_MODEL together, or leave all empty"
         )
     values["CATALOG_WORKER_MODE"] = "catalog" if all(llm) else "idle"
-    if values.get("SMTP_HOST", "mailpit") != "mailpit":
+    provider = values.get("MAIL_PROVIDER", "resend")
+    if provider not in {"resend", "smtp"}:
+        raise ValueError("MAIL_PROVIDER must be resend or smtp")
+    if provider == "resend":
+        values.update(
+            SMTP_HOST="smtp.resend.com",
+            SMTP_PORT="465",
+            SMTP_SECURITY="ssl",
+            SMTP_USER="resend",
+            SMTP_PASSWORD=values.get("RESEND_API_KEY", ""),
+        )
+        values["NOTIFIER_WORKER_MODE"] = "notifications" if values["SMTP_PASSWORD"] else "idle"
+    else:
+        values["NOTIFIER_WORKER_MODE"] = "notifications"
+    if (
+        values["NOTIFIER_WORKER_MODE"] == "notifications"
+        and values.get("SMTP_HOST", "mailpit") != "mailpit"
+    ):
         if values.get("SMTP_SECURITY") not in {"ssl", "starttls"}:
             raise ValueError("External SMTP requires SMTP_SECURITY=ssl or starttls")
         if not 1 <= int(values.get("SMTP_PORT", "0")) <= 65535:
@@ -250,11 +268,23 @@ def main() -> None:
         print("Catalog worker mode:", values["CATALOG_WORKER_MODE"])
         print(
             "Email:",
-            "private Mailpit capture" if values["SMTP_HOST"] == "mailpit" else "external SMTP",
+            "paused; fill RESEND_API_KEY"
+            if values["NOTIFIER_WORKER_MODE"] == "idle"
+            else "Resend SMTP/TLS"
+            if values.get("MAIL_PROVIDER", "resend") == "resend"
+            else "private Mailpit capture"
+            if values["SMTP_HOST"] == "mailpit"
+            else "external SMTP",
         )
         print(
             "X collection:",
             "enabled" if values.get("ENABLE_X", "false").lower() == "true" else "disabled",
+        )
+        print(
+            "Inbound forwarding:",
+            "configured"
+            if values.get("RESEND_WEBHOOK_SECRET")
+            else "not configured; run deploy/inbound-setup.py after enabling receiving",
         )
         if not values.get("ADMIN_EMAIL"):
             print("Pending: ADMIN_EMAIL")
@@ -280,24 +310,14 @@ def main() -> None:
             ],
         )
         compose(root, "web", ["up", "-d", "--no-build", "--wait", "--wait-timeout", "120", "web"])
-        compose(
-            root, "backend", ["up", "-d", "--no-build", "--wait", "--wait-timeout", "60", "gateway"]
-        )
-        compose(
-            root,
-            "backend",
-            [
-                "exec",
-                "-T",
-                "gateway",
-                "caddy",
-                "reload",
-                "--address",
-                "127.0.0.1:2019",
-                "--config",
-                "/etc/caddy/Caddyfile",
-            ],
-        )
+        if shutil.which("nginx"):
+            privileged = [] if os.geteuid() == 0 else ["sudo", "-n"]
+            subprocess.run(privileged + ["nginx", "-t"], check=True)
+            subprocess.run(privileged + ["systemctl", "reload", "nginx"], check=True)
+        else:
+            print(
+                "Application services ready on loopback; configure host Nginx before public access."
+            )
     elif args.command == "status":
         for target in ("backend", "web"):
             compose(root, target, ["ps"])
