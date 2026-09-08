@@ -106,7 +106,7 @@ def download_attachment(url: str, limit: int) -> bytes:
     host = parsed.hostname or ""
     if (
         parsed.scheme != "https"
-        or not host.endswith(".resend.com")
+        or not (host.endswith(".resend.com") or host == "cdn.resend.app")
         or parsed.username
         or parsed.password
         or parsed.port not in (None, 443)
@@ -251,7 +251,9 @@ def build_forward(client: Resend, email_id: str) -> dict | None:
             if item.get("content_type"):
                 attachment["content_type"] = item["content_type"]
             if item.get("content_id"):
-                attachment["content_id"] = item["content_id"]
+                # Received MIME headers can retain brackets; the send API expects
+                # the bare ID used by cid: references in the HTML.
+                attachment["content_id"] = item["content_id"].removeprefix("<").removesuffix(">")
             remaining -= len(json.dumps(attachment).encode()) + 1
             if remaining < 0:
                 raise InboundError("mail_size_limit", permanent=True)

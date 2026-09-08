@@ -108,7 +108,7 @@ class FakeResend:
         yield [
             {
                 "filename": "logo.png",
-                "content_id": "logo",
+                "content_id": "<logo>",
                 "content_type": "image/png",
                 "size": 3,
                 "download_url": "https://inbound-cdn.resend.com/signed",
@@ -252,6 +252,35 @@ def test_attachment_url_public_address_and_size_bounds(monkeypatch):
 
     with pytest.raises(inbound.InboundError, match="mail_size_limit"):
         inbound.read_bounded(LargeResponse(), 5)
+
+
+def test_resend_current_cdn_is_allowed_without_credentials_or_redirects(monkeypatch):
+    monkeypatch.setattr(
+        inbound.socket,
+        "getaddrinfo",
+        lambda *_args, **_kw: [(None, None, None, None, ("8.8.8.8", 443))],
+    )
+
+    class Response:
+        status_code = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def iter_content(self, *_):
+            yield b"attachment"
+
+    def get(url, **kwargs):
+        assert url == "https://cdn.resend.app/file"
+        assert kwargs["allow_redirects"] is False
+        assert "headers" not in kwargs
+        return Response()
+
+    monkeypatch.setattr(inbound.requests, "get", get)
+    assert inbound.download_attachment("https://cdn.resend.app/file", 100) == b"attachment"
 
 
 def test_resend_pagination_uses_cursor_and_detects_repeated_pages(monkeypatch):
