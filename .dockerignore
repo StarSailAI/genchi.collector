@@ -1,5 +1,7 @@
 .git
-.env
+.env*
+.runtime
+.playwright-mcp
 .venv
 __pycache__
 *.py[cod]

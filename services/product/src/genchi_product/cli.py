@@ -28,7 +28,7 @@ def main():
     names.add_argument("--apply", action="store_true")
     names.add_argument("--output", help="Write the complete reviewable report as JSON")
     worker = sub.add_parser("worker")
-    worker.add_argument("--mode", choices=["catalog", "notifications"], default="catalog")
+    worker.add_argument("--mode", choices=["catalog", "notifications", "idle"], default="catalog")
     args = parser.parse_args()
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s"
@@ -87,11 +87,13 @@ def main():
                 state["heartbeat"] = time.monotonic()
                 if args.mode == "catalog":
                     busy = process_one(catalog)
-                else:
+                elif args.mode == "notifications":
                     if time.monotonic() - last_plan > 30:
                         plan(catalog)
                         last_plan = time.monotonic()
                     busy = deliver_one(catalog)
+                else:
+                    busy = False
                 stop.wait(0.1 if busy else 2)
             except Exception:
                 logging.exception("product worker iteration failed")

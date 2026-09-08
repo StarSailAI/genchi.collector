@@ -1,0 +1,5 @@
+# Layer over the sibling genchi.news/docker-compose.yml.
+services:
+  web:
+    image: genchi/web:${GENCHI_IMAGE_TAG:-current}
+    mem_limit: 512m
