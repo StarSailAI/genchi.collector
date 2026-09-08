@@ -30,6 +30,7 @@ pythonpath = [
   "plugins/builtin/src",
   "plugins/genchi/src",
   "services/normalizer/src",
+  "services/product/src",
   "dashboard/src",
   "examples/custom-fetcher/src",
 ]

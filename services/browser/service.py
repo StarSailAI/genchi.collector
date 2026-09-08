@@ -33,7 +33,7 @@ def _enabled(name: str, default: str = "0") -> bool:
 
 def _authorized(request: web.Request) -> bool:
     expected = os.environ.get("CLOAKBROWSER_API_TOKEN", "").strip()
-    return not expected or secrets.compare_digest(
+    return bool(expected) and secrets.compare_digest(
         request.headers.get("Authorization", ""), f"Bearer {expected}"
     )
 

@@ -123,7 +123,7 @@ services:
     depends_on:
       control:
         condition: service_healthy
-    command: ["sh", "-c", "genchi-normalizer migrate && exec genchi-normalizer run"]
+    command: ["sh", "-c", "genchi-normalizer migrate && exec genchi-product worker --mode catalog"]
     environment:
       <<: *database
       GENCHI_DB_SCHEMA: genchi
@@ -140,6 +140,63 @@ services:
       timeout: 5s
       retries: 8
       start_period: 30s
+
+  product:
+    build:
+      context: .
+      dockerfile: services/normalizer/Dockerfile
+    command: ["genchi-product", "serve"]
+    restart: unless-stopped
+    depends_on:
+      normalizer:
+        condition: service_healthy
+    environment:
+      <<: *database
+      PRODUCT_SECRET: ${PRODUCT_SECRET:?Set PRODUCT_SECRET in .env}
+      PRODUCT_ADMIN_TOKEN: ${PRODUCT_ADMIN_TOKEN:?Set PRODUCT_ADMIN_TOKEN in .env}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://localhost:13000}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@genchi.local}
+    ports: ["127.0.0.1:${PRODUCT_PORT:-18080}:8080"]
+    networks: [collector, genchi-data]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  notifier:
+    build:
+      context: .
+      dockerfile: services/normalizer/Dockerfile
+    command: ["genchi-product", "worker", "--mode", "notifications"]
+    restart: unless-stopped
+    depends_on:
+      product:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    environment:
+      <<: *database
+      PRODUCT_SECRET: ${PRODUCT_SECRET:?Set PRODUCT_SECRET in .env}
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://localhost:13000}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURITY: ${SMTP_SECURITY:-none}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-Genchi <hello@genchi.local>}
+    networks: [collector]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8070/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
+  mailpit:
+    image: axllent/mailpit:v1.27.4
+    restart: unless-stopped
+    ports: ["127.0.0.1:${MAILPIT_PORT:-18025}:8025"]
+    networks: [collector]
 
   dashboard:
     build:

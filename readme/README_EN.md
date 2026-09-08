@@ -1,3 +1,5 @@
+> This repository includes the Genchi activity catalog and notification product. See [Genchi v2 operations](../docs/product-v2.md). The framework reference below describes the inherited AllFeeds runtime.
+
 <p align="center">
   <img src="../assets/allfeeds-logo.png" alt="AllFeeds" width="380">
 </p>

@@ -10,7 +10,8 @@ This repository is an independent, domain-specific derivative of AllFeeds. In
 addition to the framework rules below, preserve these boundaries:
 
 1. This repository exclusively owns collection, normalization, database
-   migrations and writes. `genchi.news` is a read-only consumer.
+   migrations and writes. `genchi.news` reads the product API and uses a same-origin
+   proxy for authenticated actions; it never writes the database directly.
 2. Raw framework state belongs to `allfeeds`; curated website data belongs to
    `genchi`. Do not move raw crawling concerns into the curated schema.
 3. X collection must go through the private, authenticated CloakBrowser adapter.
@@ -52,7 +53,8 @@ packages/sdk/             Public Fetcher, Sink and Asset Store interfaces
 services/controller/      FastAPI control plane, task pool and migrations
 services/worker/          Worker runtime, process isolation and built-in Sink
 services/browser/         Restricted CloakBrowser HTTP adapter
-services/normalizer/      Raw-to-curated pipeline and curated migrations
+services/normalizer/      Legacy pipeline and curated migrations
+services/product/         Canonical catalog, review API, accounts and notification outbox
 plugins/builtin/          Generic RSS, web, JSON API and Sitemap Fetchers
 plugins/genchi/           Genchi official-site and X Fetchers
 dashboard/                Read-only Streamlit operations UI
@@ -251,7 +253,7 @@ Python 3.11 or newer is required. From the repository root:
 ```bash
 python -m pip install -e packages/contracts -e packages/sdk \
   -e services/controller -e services/worker -e plugins/builtin \
-  -e plugins/genchi -e services/normalizer -e dashboard \
+  -e plugins/genchi -e services/normalizer -e services/product -e dashboard \
   -e examples/custom-fetcher -e '.[dev]'
 
 ruff check .
@@ -297,3 +299,21 @@ A change is complete only when:
 6. Plugin and Source configuration validation pass when relevant.
 7. User-facing docs are updated without turning the README into a developer
    manual.
+
+## Product v2 invariants
+
+- Read `docs/product-v2.md` for the current domain and deployment model.
+- Candidate model output never updates published activities before review.
+- Stable upstream mappings survive corrections and explicit official grouping.
+- DATE and TBD must never generate precise reminders or fabricated timestamps.
+- Account tables stay in `genchi_private`; never grant them to the website reader.
+- Recheck membership, participation, cancellation and revision immediately before SMTP.
+- An uncertain SMTP result needs operator investigation; never blindly retry it.
+- Local acceptance uses Mailpit. Do not send real external email without explicit authorization.
+
+## Naming invariants
+
+- `services/normalizer/src/genchi_normalizer/data/glossary.json` is the single editorial glossary. Every LLM extraction / relevance call must include `glossary_prompt()`.
+- Preserve original titles, source identifiers and round keys. Normalize only display fields; never merge by translated title.
+- Naming edits use `catalog_names` / `catalog_name_history`, not event revision or notification changes. Preserve an editor override until its original source name changes.
+- Read `docs/naming.md` before changing glossary or title handling. Coordinate schema 1.3 with the website.

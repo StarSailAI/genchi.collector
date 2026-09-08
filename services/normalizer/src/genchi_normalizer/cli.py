@@ -51,9 +51,7 @@ def _review(normalizer: Normalizer, args: argparse.Namespace) -> None:
             raise SystemExit(f"candidate not found: {args.id}")
         print(json.dumps(row, default=str, ensure_ascii=False, indent=2))
     elif args.review_command == "approve":
-        entity_id, errors = normalizer.apply_candidate(
-            args.id, force=True, reviewer=args.reviewer
-        )
+        entity_id, errors = normalizer.apply_candidate(args.id, force=True, reviewer=args.reviewer)
         if errors:
             raise SystemExit("cannot approve: " + "; ".join(errors))
         print(json.dumps({"approved": True, "entity_id": entity_id}))
@@ -102,6 +100,8 @@ def main() -> None:
     legacy.add_argument("--dry-run", action="store_true")
     reprocess = sub.add_parser("reprocess")
     reprocess.add_argument("--source", required=True)
+    activity_backfill = sub.add_parser("activity-backfill")
+    activity_backfill.add_argument("--limit", type=int)
     review = sub.add_parser("review")
     review_sub = review.add_subparsers(dest="review_command", required=True)
     review_list = review_sub.add_parser("list")
@@ -139,6 +139,9 @@ def main() -> None:
         print(json.dumps({"dry_run": args.dry_run, "inserted": counts}, ensure_ascii=False))
     elif args.command == "reprocess":
         _reprocess(Normalizer(settings), args.source)
+    elif args.command == "activity-backfill":
+        counts = Normalizer(settings).backfill_activity_profiles(limit=args.limit)
+        print(json.dumps(counts, ensure_ascii=False))
     else:
         _review(Normalizer(settings), args)
 

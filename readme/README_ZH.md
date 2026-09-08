@@ -1,3 +1,5 @@
+> 本仓库已加入 Genchi 活动目录与邮件提醒产品。参见 [Genchi v2 运行说明](../docs/product-v2.md)。下文保留继承的 AllFeeds 框架参考。
+
 <p align="center">
   <img src="../assets/allfeeds-logo.png" alt="AllFeeds" width="380">
 </p>

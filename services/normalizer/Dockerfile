@@ -4,7 +4,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 GENCHI_ALEMBIC_ROOT=/app/normal
 WORKDIR /app
 
 COPY services/normalizer /app/normalizer
-RUN pip install --no-cache-dir /app/normalizer
+COPY services/product /app/product
+RUN pip install --no-cache-dir /app/normalizer /app/product
 
 WORKDIR /app/normalizer
 CMD ["genchi-normalizer", "run"]

@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "genchi-product"
+version = "0.2.0"
+description = "Canonical activity catalog, subscriptions and notifications"
+requires-python = ">=3.11"
+dependencies = ["fastapi>=0.115", "uvicorn>=0.30", "psycopg[binary]>=3.2", "pydantic>=2.8", "requests>=2.32", "genchi-normalizer>=0.1.0"]
+
+[project.scripts]
+genchi-product = "genchi_product.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+genchi_product = ["data/*.json"]

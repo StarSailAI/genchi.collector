@@ -58,7 +58,8 @@ def test_migration_claim_sink_and_backfill(monkeypatch) -> None:
         command.upgrade(alembic, "head")
 
         store = ControlStore(settings)
-        assert store.reconcile_sources(load_sources(settings.config_path)) == 8
+        source_config = load_sources(settings.config_path)
+        assert store.reconcile_sources(source_config) == len(source_config.value.sources)
         plugins = (
             PluginInventory(
                 name="genchi.official_site",

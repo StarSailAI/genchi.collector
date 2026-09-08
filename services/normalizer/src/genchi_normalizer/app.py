@@ -14,13 +14,15 @@ from datetime import UTC, datetime, timedelta
 from html import unescape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo
 
 import psycopg
 import requests
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+
+from .glossary import glossary_prompt
 
 LOGGER = logging.getLogger("genchi.normalizer")
 PROJECT_PREFIX = "project:"
@@ -47,6 +49,9 @@ TICKET_SOURCE_PLATFORMS = {
     "pia_ticket": "pia",
     "lawson_ticket": "lawson",
 }
+TICKET_UNKNOWN_PROJECTS = {"", "anime-general", "unknown"}
+ACTIVITY_PROMPT_VERSION = "activity-v1"
+ACTIVITY_AUTO_THRESHOLD = 0.95
 JST = ZoneInfo("Asia/Tokyo")
 
 
@@ -110,6 +115,130 @@ def _category(text: str) -> str:
     if any(value in lowered for value in ("動画", "放送", "radio", "ラジオ", "配信番組")):
         return "MEDIA"
     return "OTHER"
+
+
+def _ticket_payload(resource: dict[str, Any]) -> dict[str, Any]:
+    attributes = resource.get("attributes") or {}
+    payload = attributes.get("ticket_page") or attributes.get("eplus_ticket") or {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _ticket_string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [
+        unescape(str(item)).strip()
+        for item in value
+        if item is not None and unescape(str(item)).strip()
+    ]
+
+
+def _ticket_relevance_rules(
+    resource: dict[str, Any],
+    *,
+    platform: str,
+) -> dict[str, Any]:
+    payload = _ticket_payload(resource)
+    discoveries = [item for item in payload.get("discovery") or [] if isinstance(item, dict)]
+    native_categories = _ticket_string_list(
+        payload.get("nativeCategories") or payload.get("relatedGenres")
+    )
+    if not native_categories:
+        match = re.search(r"(?:^|\n)ジャンル:\s*([^\n]+)", resource.get("content") or "")
+        if match:
+            native_categories = [match.group(1).strip()]
+    search_queries = _ticket_string_list(
+        [item.get("searchQuery") for item in discoveries if item.get("searchQuery")]
+    )
+    if not search_queries:
+        query = parse_qs(urlparse(str(resource.get("url") or "")).query)
+        search_queries = _ticket_string_list(query.get("keyword") or query.get("kw"))
+
+    signals: list[str] = []
+    trusted_sources = [
+        str(item.get("sourceUrl") or "") for item in discoveries if item.get("trustedCategory")
+    ]
+    if trusted_sources:
+        signals.extend(f"trusted-category:{value}" for value in trusted_sources)
+        return {
+            "status": "accepted",
+            "confidence": 0.99,
+            "method": "rule",
+            "reason": "由票务平台的动画专属分类页发现",
+            "signals": signals,
+            "subjectName": None,
+            "subjectType": "UNKNOWN",
+        }
+
+    signals.extend(f"native-category:{value}" for value in native_categories)
+    signals.extend(f"search-query:{value}" for value in search_queries)
+    signals.extend(
+        f"configured-discovery:{value}"
+        for value in _ticket_string_list(payload.get("matchedKeywords"))
+    )
+    return {
+        "status": "review",
+        "confidence": 0.5,
+        "method": "structured-gate",
+        "reason": f"{platform} 的结构化发现信息只能用于召回，需要语义判断",
+        "signals": signals,
+        "subjectName": None,
+        "subjectType": "UNKNOWN",
+    }
+
+
+def _activity_identity_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", unescape(value)).casefold()
+    return re.sub(r"[\W_]+", "", normalized)
+
+
+def _activity_fingerprint(value: str) -> str:
+    identity = _activity_identity_text(value)
+    return hashlib.sha256((identity or value.strip()).encode()).hexdigest()
+
+
+def _activity_titles(resource: dict[str, Any]) -> list[str]:
+    payload = _ticket_payload(resource)
+    titles = [
+        unescape(str(item.get("name") or "")).strip()
+        for item in payload.get("events") or []
+        if isinstance(item, dict) and str(item.get("name") or "").strip()
+    ]
+    asobi_act = ((resource.get("attributes") or {}).get("asobi_ticket") or {}).get("act") or {}
+    asobi_title = str((asobi_act.get("attributes") or {}).get("name") or "").strip()
+    if asobi_title:
+        titles.append(unescape(asobi_title))
+    if not titles and str(resource.get("title") or "").strip():
+        titles = [unescape(str(resource["title"])).strip()]
+    unique: dict[str, str] = {}
+    for title in titles:
+        unique.setdefault(_activity_fingerprint(title), title)
+    return list(unique.values())
+
+
+def _activity_validation_conflicts(resource: dict[str, Any], decision: dict[str, Any]) -> list[str]:
+    payload = _ticket_payload(resource)
+    source_times = {
+        parsed.astimezone(UTC).replace(second=0, microsecond=0)
+        for item in payload.get("events") or []
+        if isinstance(item, dict)
+        for parsed in [_parse_time(item.get("startsAt"))]
+        if parsed
+    }
+    conflicts: list[str] = []
+    llm_times = [
+        parsed.astimezone(UTC).replace(second=0, microsecond=0)
+        for value in decision.get("sessionTimes") or []
+        for parsed in [_parse_time(value)]
+        if parsed
+    ]
+    if source_times and llm_times and not any(value in source_times for value in llm_times):
+        conflicts.append("LLM sessionTimes do not match structured platform times")
+    if decision.get("status") == "accepted" and not decision.get("shortTitle"):
+        conflicts.append("accepted activity is missing shortTitle")
+    if decision.get("status") == "accepted" and not decision.get("evidence"):
+        conflicts.append("accepted activity is missing evidence")
+    return conflicts
 
 
 def _news_kind(category: str) -> str:
@@ -386,39 +515,20 @@ class Normalizer:
             raise RuntimeError(f"raw resource {resource_id} no longer exists")
         return row
 
-    def call_llm(self, resource: dict[str, Any], category: str) -> dict[str, Any] | None:
+    def _call_llm_json(
+        self,
+        *,
+        schema_name: str,
+        schema: dict[str, Any],
+        prompt: str,
+        system_prompt: str,
+        max_tokens: int,
+    ) -> dict[str, Any] | None:
         if not self.settings.llm_enabled:
             return None
         endpoint = self.settings.llm_base_url.rstrip("/")
         if not endpoint.endswith("/chat/completions"):
             endpoint += "/chat/completions" if endpoint.endswith("/v1") else "/v1/chat/completions"
-        schema = {
-            "name": "genchi_content",
-            "strict": True,
-            "schema": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["titleZh", "summaryZh", "category", "facts"],
-                "properties": {
-                    "titleZh": {"type": ["string", "null"]},
-                    "summaryZh": {"type": ["string", "null"]},
-                    "category": {"type": "string", "enum": ["EVENT", "RELEASE", "MEDIA", "OTHER"]},
-                    "facts": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "required": ["kind", "confidence", "data"],
-                            "properties": {
-                                "kind": {"type": "string", "enum": ["EVENT", "TICKET", "RELEASE"]},
-                                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                                "data": {"type": "object"},
-                            },
-                        },
-                    },
-                },
-            },
-        }
         response_format = self.settings.llm_response_format
         if response_format == "auto":
             hostname = (urlparse(endpoint).hostname or "").lower()
@@ -433,8 +543,76 @@ class Normalizer:
         format_payload = (
             {"type": "json_object"}
             if response_format == "json_object"
-            else {"type": "json_schema", "json_schema": schema}
+            else {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_name,
+                    "strict": True,
+                    "schema": schema,
+                },
+            }
         )
+        response = requests.post(
+            endpoint,
+            headers={"Authorization": f"Bearer {self.settings.llm_api_key}"},
+            json={
+                "model": self.settings.llm_model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": system_prompt + glossary_prompt(),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                "response_format": format_payload,
+                "temperature": 0,
+                "max_tokens": max_tokens,
+            },
+            timeout=90,
+        )
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            detail = response.text[:1000]
+            if self.settings.llm_api_key:
+                detail = detail.replace(self.settings.llm_api_key, "[REDACTED]")
+            raise RuntimeError(f"LLM HTTP {response.status_code}: {detail}") from exc
+        payload = response.json()
+        choice = payload["choices"][0]
+        content = choice["message"]["content"]
+        if not content:
+            raise RuntimeError("LLM returned empty content")
+        if choice.get("finish_reason") == "length":
+            raise RuntimeError("LLM JSON output was truncated")
+        result = json.loads(content)
+        if not isinstance(result, dict):
+            raise RuntimeError("LLM output is not a JSON object")
+        return result
+
+    def call_llm(self, resource: dict[str, Any], category: str) -> dict[str, Any] | None:
+        schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["titleZh", "summaryZh", "category", "facts"],
+            "properties": {
+                "titleZh": {"type": ["string", "null"]},
+                "summaryZh": {"type": ["string", "null"]},
+                "category": {"type": "string", "enum": ["EVENT", "RELEASE", "MEDIA", "OTHER"]},
+                "facts": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["kind", "confidence", "data"],
+                        "properties": {
+                            "kind": {"type": "string", "enum": ["EVENT", "TICKET", "RELEASE"]},
+                            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                            "data": {"type": "object"},
+                        },
+                    },
+                },
+            },
+        }
         prompt = (
             "Return one JSON object and no Markdown. Extract only explicit facts from this Japanese official "
             "announcement. Keep uncertain dates or event references out of facts. Translate only the title and "
@@ -454,42 +632,472 @@ class Normalizer:
             f"Rule category: {category}\nURL: {resource.get('url')}\n"
             f"Title: {resource.get('title')}\nBody:\n{(resource.get('content') or '')[:16000]}"
         )
-        response = requests.post(
-            endpoint,
-            headers={"Authorization": f"Bearer {self.settings.llm_api_key}"},
-            json={
-                "model": self.settings.llm_model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "You normalize official Japanese music and live-event information.",
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                "response_format": format_payload,
-                "temperature": 0,
-                "max_tokens": 4096,
-            },
-            timeout=90,
+        enrichment = self._call_llm_json(
+            schema_name="genchi_content",
+            schema=schema,
+            prompt=prompt,
+            system_prompt="You normalize official Japanese music and live-event information.",
+            max_tokens=4096,
         )
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as exc:
-            detail = response.text[:1000]
-            if self.settings.llm_api_key:
-                detail = detail.replace(self.settings.llm_api_key, "[REDACTED]")
-            raise RuntimeError(f"LLM HTTP {response.status_code}: {detail}") from exc
-        payload = response.json()
-        choice = payload["choices"][0]
-        content = choice["message"]["content"]
-        if not content:
-            raise RuntimeError("LLM returned empty content")
-        if choice.get("finish_reason") == "length":
-            raise RuntimeError("LLM JSON output was truncated")
-        enrichment = json.loads(content)
+        if enrichment is None:
+            return None
         if not isinstance(enrichment, dict) or not isinstance(enrichment.get("facts"), list):
             raise RuntimeError("LLM output does not match the expected object shape")
         return enrichment
+
+    def call_ticket_relevance_llm(
+        self,
+        resource: dict[str, Any],
+        *,
+        platform: str,
+        rule_decision: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "isRelevant",
+                "confidence",
+                "reason",
+                "subjectName",
+                "subjectType",
+                "canonicalTitle",
+                "shortTitle",
+                "projectName",
+                "eventType",
+                "works",
+                "performers",
+                "venues",
+                "sessionTimes",
+                "ticketPhases",
+                "evidence",
+            ],
+            "properties": {
+                "isRelevant": {"type": "boolean"},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                "reason": {"type": "string"},
+                "subjectName": {"type": ["string", "null"]},
+                "subjectType": {
+                    "type": "string",
+                    "enum": [
+                        "IP",
+                        "ARTIST",
+                        "VOICE_ACTOR",
+                        "VTUBER",
+                        "EVENT_SERIES",
+                        "UNKNOWN",
+                    ],
+                },
+                "canonicalTitle": {"type": ["string", "null"]},
+                "shortTitle": {"type": ["string", "null"]},
+                "projectName": {"type": ["string", "null"]},
+                "eventType": {
+                    "type": ["string", "null"],
+                    "enum": [
+                        "LIVE",
+                        "FES",
+                        "ANNIV",
+                        "RELEASE_EVENT",
+                        "RADIO",
+                        "OTHER",
+                        None,
+                    ],
+                },
+                "works": {"type": "array", "items": {"type": "string"}},
+                "performers": {"type": "array", "items": {"type": "string"}},
+                "venues": {"type": "array", "items": {"type": "string"}},
+                "sessionTimes": {"type": "array", "items": {"type": "string"}},
+                "ticketPhases": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": sorted(TICKET_PHASES),
+                    },
+                },
+                "evidence": {"type": "array", "items": {"type": "string"}},
+            },
+        }
+        payload = _ticket_payload(resource)
+        prompt = (
+            "Return one JSON object and no Markdown. Decide whether this Japanese ticket listing belongs in "
+            "an anime-culture calendar. Include events directly connected to anime, manga, games, light novels, "
+            "voice actors, anisong, VTubers, 2.5D adaptations, or creators performing specifically in those "
+            "roles. Exclude ordinary theatre, unrelated J-pop/rock bands, sports, tourism admission, and generic "
+            "events. A search query such as アニメ, 声優, or ゲーム is discovery context only and is not evidence "
+            "by itself. Base the decision on the actual title, platform categories, and listing text. "
+            "Extract other explicit facts in the same call so they can be cross-checked against platform data. "
+            "subjectName is the recognizable work, franchise, performer, group, or event-series. "
+            "canonicalTitle is the official activity title without ticketing wrappers. shortTitle is a concise, "
+            "recognizable Japanese or commonly-used proper name for a calendar; preserve names and never truncate "
+            "them mechanically. projectName is the franchise or project when explicit. sessionTimes must be ISO "
+            "8601 timestamps with offsets. evidence contains short exact fragments from the listing supporting "
+            "the relevance decision and extracted identity. Use null or an empty list instead of guessing.\n"
+            "JSON shape: "
+            '{"isRelevant":boolean,"confidence":number,"reason":string,'
+            '"subjectName":string|null,'
+            '"subjectType":"IP|ARTIST|VOICE_ACTOR|VTUBER|EVENT_SERIES|UNKNOWN",'
+            '"canonicalTitle":string|null,"shortTitle":string|null,"projectName":string|null,'
+            '"eventType":"LIVE|FES|ANNIV|RELEASE_EVENT|RADIO|OTHER"|null,'
+            '"works":string[],"performers":string[],"venues":string[],'
+            '"sessionTimes":string[],"ticketPhases":string[],"evidence":string[]}.\n'
+            f"Platform: {platform}\n"
+            f"URL: {resource.get('url')}\n"
+            f"Title: {resource.get('title')}\n"
+            f"Native categories: {json.dumps(payload.get('nativeCategories') or payload.get('relatedGenres') or [], ensure_ascii=False)}\n"
+            f"Discovery: {json.dumps(payload.get('discovery') or [], ensure_ascii=False)}\n"
+            f"Rule signals: {json.dumps(rule_decision.get('signals') or [], ensure_ascii=False)}\n"
+            f"Listing:\n{(resource.get('content') or '')[:12000]}"
+        )
+        result = self._call_llm_json(
+            schema_name="genchi_ticket_relevance",
+            schema=schema,
+            prompt=prompt,
+            system_prompt="You are a conservative Japanese anime-culture ticket relevance classifier.",
+            max_tokens=1800,
+        )
+        if result is None:
+            return None
+        required = {
+            "isRelevant",
+            "confidence",
+            "reason",
+            "subjectName",
+            "subjectType",
+            "canonicalTitle",
+            "shortTitle",
+            "projectName",
+            "eventType",
+            "works",
+            "performers",
+            "venues",
+            "sessionTimes",
+            "ticketPhases",
+            "evidence",
+        }
+        if not required.issubset(result):
+            raise RuntimeError("LLM ticket relevance output is missing required fields")
+        confidence = float(result["confidence"])
+        if not 0 <= confidence <= 1 or not isinstance(result["isRelevant"], bool):
+            raise RuntimeError("LLM ticket relevance output has invalid values")
+        subject_type = str(result["subjectType"])
+        if subject_type not in {
+            "IP",
+            "ARTIST",
+            "VOICE_ACTOR",
+            "VTUBER",
+            "EVENT_SERIES",
+            "UNKNOWN",
+        }:
+            raise RuntimeError("LLM ticket relevance output has invalid subjectType")
+        status = (
+            "accepted"
+            if result["isRelevant"] and confidence >= ACTIVITY_AUTO_THRESHOLD
+            else "rejected"
+            if not result["isRelevant"] and confidence >= ACTIVITY_AUTO_THRESHOLD
+            else "review"
+        )
+        decision = {
+            "status": status,
+            "confidence": confidence,
+            "method": "llm",
+            "reason": str(result["reason"]).strip(),
+            "signals": list(rule_decision.get("signals") or []),
+            "subjectName": (
+                str(result["subjectName"]).strip() if result.get("subjectName") else None
+            ),
+            "subjectType": subject_type,
+            "canonicalTitle": (
+                str(result["canonicalTitle"]).strip() if result.get("canonicalTitle") else None
+            ),
+            "shortTitle": (str(result["shortTitle"]).strip() if result.get("shortTitle") else None),
+            "projectName": (
+                str(result["projectName"]).strip() if result.get("projectName") else None
+            ),
+            "eventType": (
+                str(result["eventType"]) if result.get("eventType") in EVENT_TYPES else None
+            ),
+            "works": [
+                str(value).strip() for value in result.get("works") or [] if str(value).strip()
+            ],
+            "performers": [
+                str(value).strip() for value in result.get("performers") or [] if str(value).strip()
+            ],
+            "venues": [
+                str(value).strip() for value in result.get("venues") or [] if str(value).strip()
+            ],
+            "sessionTimes": [
+                str(value).strip()
+                for value in result.get("sessionTimes") or []
+                if str(value).strip()
+            ],
+            "ticketPhases": [
+                str(value)
+                for value in result.get("ticketPhases") or []
+                if str(value) in TICKET_PHASES
+            ],
+            "evidence": [
+                str(value).strip() for value in result.get("evidence") or [] if str(value).strip()
+            ],
+        }
+        conflicts = _activity_validation_conflicts(resource, decision)
+        decision["validationConflicts"] = conflicts
+        if conflicts:
+            decision["status"] = "review"
+        return decision
+
+    def cached_activity_decision(self, resource: dict[str, Any]) -> dict[str, Any] | None:
+        titles = _activity_titles(resource)
+        if not titles:
+            return None
+        fingerprints = [_activity_fingerprint(title) for title in titles]
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM "ActivityProfile"
+                WHERE "fingerprint" = ANY(%s) AND "promptVersion"=%s
+                ORDER BY "updatedAt" DESC
+                """,
+                (fingerprints, ACTIVITY_PROMPT_VERSION),
+            ).fetchall()
+        if not rows:
+            return None
+        row = rows[0]
+        if row["reviewStatus"] == "REVIEW" and row.get("contentHash") != resource.get(
+            "content_hash"
+        ):
+            return None
+        facts = dict(row.get("facts") or {})
+        facts.update(
+            {
+                "status": str(row["reviewStatus"]).lower(),
+                "confidence": float(row["relevanceConfidence"]),
+                "method": "activity-cache",
+                "canonicalTitle": row.get("canonicalTitle"),
+                "shortTitle": row.get("shortTitle"),
+                "subjectName": row.get("subjectName"),
+                "subjectType": row.get("subjectType") or "UNKNOWN",
+                "eventType": row.get("eventType"),
+                "evidence": list(row.get("evidence") or []),
+            }
+        )
+        return facts
+
+    def store_activity_profiles(
+        self,
+        resource: dict[str, Any],
+        decision: dict[str, Any],
+    ) -> dict[str, str]:
+        titles = _activity_titles(resource)
+        if not titles:
+            return {}
+        tags = [str(value) for value in resource.get("tags") or []]
+        project = _tag(tags, PROJECT_PREFIX)
+        status = str(decision.get("status") or "review").upper()
+        if status not in {"ACCEPTED", "REVIEW", "REJECTED"}:
+            status = "REVIEW"
+        confidence = float(decision.get("confidence") or 0)
+        mapping: dict[str, str] = {}
+        with self.connect() as conn, conn.transaction():
+            ip = (
+                conn.execute('SELECT "id" FROM "Ip" WHERE "slug"=%s', (project,)).fetchone()
+                if project and project not in TICKET_UNKNOWN_PROJECTS
+                else None
+            )
+            for title in titles:
+                fingerprint = _activity_fingerprint(title)
+                profile_id = _stable_id("activity", fingerprint)
+                short_title = str(decision.get("shortTitle") or "").strip() or None
+                canonical_title = str(decision.get("canonicalTitle") or "").strip() or title
+                slug = _slug(short_title or canonical_title, fingerprint)
+                conn.execute(
+                    """
+                    INSERT INTO "ActivityProfile" (
+                        "id","slug","fingerprint","canonicalTitle","shortTitle",
+                        "subjectName","subjectType","ipId","eventType",
+                        "relevanceConfidence","reviewStatus","facts","evidence",
+                        "contentHash","llmModel","promptVersion"
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT ("fingerprint") DO UPDATE SET
+                        "canonicalTitle"=EXCLUDED."canonicalTitle",
+                        "shortTitle"=COALESCE(EXCLUDED."shortTitle","ActivityProfile"."shortTitle"),
+                        "subjectName"=COALESCE(EXCLUDED."subjectName","ActivityProfile"."subjectName"),
+                        "subjectType"=EXCLUDED."subjectType",
+                        "ipId"=COALESCE(EXCLUDED."ipId","ActivityProfile"."ipId"),
+                        "eventType"=COALESCE(EXCLUDED."eventType","ActivityProfile"."eventType"),
+                        "relevanceConfidence"=EXCLUDED."relevanceConfidence",
+                        "reviewStatus"=EXCLUDED."reviewStatus",
+                        "facts"=EXCLUDED."facts","evidence"=EXCLUDED."evidence",
+                        "contentHash"=EXCLUDED."contentHash","llmModel"=EXCLUDED."llmModel",
+                        "promptVersion"=EXCLUDED."promptVersion","updatedAt"=NOW()
+                    """,
+                    (
+                        profile_id,
+                        slug,
+                        fingerprint,
+                        canonical_title,
+                        short_title,
+                        decision.get("subjectName"),
+                        decision.get("subjectType") or "UNKNOWN",
+                        ip["id"] if ip else None,
+                        decision.get("eventType"),
+                        confidence,
+                        status,
+                        Jsonb(decision),
+                        Jsonb(decision.get("evidence") or []),
+                        resource.get("content_hash"),
+                        self.settings.llm_model,
+                        ACTIVITY_PROMPT_VERSION,
+                    ),
+                )
+                mapping[fingerprint] = profile_id
+        return mapping
+
+    def backfill_activity_profiles(self, *, limit: int | None = None) -> dict[str, int]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT e."id",e."titleJa",e."titleZh",e."startsAt",e."doorsAt",
+                    e."eventType",e."officialUrl",e."activityId",
+                    i."slug" AS "projectSlug",
+                    COALESCE(v."nameJa",v."nameZh") AS "venueName",
+                    COALESCE(
+                        jsonb_agg(
+                            jsonb_build_object(
+                                'phase',t."phase",'label',t."phaseLabelJa",
+                                'opensAt',t."opensAt",'closesAt',t."closesAt",
+                                'resultAt',t."resultAt",'platform',t."platform"
+                            )
+                        ) FILTER (WHERE t."id" IS NOT NULL),
+                        '[]'::jsonb
+                    ) AS tickets
+                FROM "Event" e
+                LEFT JOIN "Ip" i ON i."id"=e."ipId"
+                LEFT JOIN "Venue" v ON v."id"=e."venueId"
+                LEFT JOIN "TicketWindow" t ON t."eventId"=e."id"
+                GROUP BY e."id",i."slug",v."nameJa",v."nameZh"
+                ORDER BY e."startsAt",e."id"
+                """
+            ).fetchall()
+        families: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            title = str(row.get("titleJa") or row.get("titleZh") or "").strip()
+            if not title:
+                continue
+            families.setdefault(_activity_fingerprint(title), []).append(row)
+        selected = list(families.items())
+        if limit is not None:
+            selected = selected[: max(0, limit)]
+        counts = {
+            "families": 0,
+            "accepted": 0,
+            "review": 0,
+            "rejected": 0,
+            "linked": 0,
+            "errors": 0,
+        }
+        for fingerprint, family in selected:
+            representative = family[0]
+            title = str(
+                representative.get("titleJa") or representative.get("titleZh") or ""
+            ).strip()
+            project = str(representative.get("projectSlug") or "unknown")
+            event_items = [
+                {
+                    "id": str(item["id"]),
+                    "name": str(item.get("titleJa") or item.get("titleZh") or title),
+                    "startsAt": item["startsAt"].isoformat(),
+                    "doorsAt": item["doorsAt"].isoformat() if item.get("doorsAt") else None,
+                    "venue": {"name": item.get("venueName")},
+                    "ticketWindows": list(item.get("tickets") or []),
+                }
+                for item in family
+            ]
+            assessment_items = (
+                event_items if len(event_items) <= 9 else [*event_items[:8], event_items[-1]]
+            )
+            content = "\n".join(
+                [
+                    f"Official title: {title}",
+                    f"Configured project: {project}",
+                    f"Total sessions: {len(event_items)}",
+                    "Sessions:",
+                    *[
+                        f"- {item['startsAt']} / {(item.get('venue') or {}).get('name') or 'unknown venue'}"
+                        for item in assessment_items
+                    ],
+                    "Ticket phases:",
+                    *[
+                        f"- {ticket.get('phase')} {ticket.get('label') or ''}"
+                        for item in assessment_items
+                        for ticket in item.get("ticketWindows") or []
+                    ],
+                ]
+            )
+            content_hash = hashlib.sha256(content.encode()).hexdigest()
+            resource = {
+                "title": title,
+                "content": content,
+                "url": representative.get("officialUrl"),
+                "content_hash": content_hash,
+                "attributes": {
+                    "source_type": "activity_backfill",
+                    "ticket_page": {
+                        "pageId": f"backfill:{fingerprint}",
+                        "events": assessment_items,
+                        "nativeCategories": [],
+                        "discovery": [],
+                    },
+                },
+                "tags": [f"project:{project}"],
+            }
+            decision = self.cached_activity_decision(resource)
+            if not decision:
+                try:
+                    decision = self.call_ticket_relevance_llm(
+                        resource,
+                        platform="curated",
+                        rule_decision={
+                            "status": "review",
+                            "confidence": 0.5,
+                            "method": "structured-gate",
+                            "reason": "legacy activity family requires semantic assessment",
+                            "signals": ["curated-event-family"],
+                            "subjectName": None,
+                            "subjectType": "UNKNOWN",
+                        },
+                    )
+                except (KeyError, TypeError, ValueError, RuntimeError) as exc:
+                    counts["errors"] += 1
+                    LOGGER.warning(
+                        "activity backfill LLM output rejected fingerprint=%s title=%r error=%s",
+                        fingerprint,
+                        title,
+                        exc,
+                    )
+            if not decision:
+                decision = {
+                    "status": "review",
+                    "confidence": 0,
+                    "method": "llm-unavailable",
+                    "reason": "activity backfill requires LLM",
+                    "signals": [],
+                    "subjectName": None,
+                    "subjectType": "UNKNOWN",
+                }
+            mapping = self.store_activity_profiles(resource, decision)
+            activity_id = mapping.get(fingerprint)
+            if activity_id:
+                event_ids = [str(item["id"]) for item in family]
+                with self.connect() as conn, conn.transaction():
+                    conn.execute(
+                        'UPDATE "Event" SET "activityId"=%s,"updatedAt"=NOW() WHERE "id" = ANY(%s)',
+                        (activity_id, event_ids),
+                    )
+                counts["linked"] += len(event_ids)
+            status = str(decision.get("status") or "review")
+            counts[status if status in {"accepted", "review", "rejected"} else "review"] += 1
+            counts["families"] += 1
+        return counts
 
     def upsert_content(
         self,
@@ -503,6 +1111,8 @@ class Normalizer:
         country = _tag(tags, COUNTRY_PREFIX, "JP") or "JP"
         timezone = _tag(tags, TIMEZONE_PREFIX, "Asia/Tokyo") or "Asia/Tokyo"
         source_type = (resource.get("attributes") or {}).get("source_type")
+        if source_type in TICKET_SOURCE_PLATFORMS and project in TICKET_UNKNOWN_PROJECTS:
+            project = "unknown"
         source_kind = (
             "TWITTER"
             if resource["kind"] == "x_post"
@@ -700,6 +1310,7 @@ class Normalizer:
         resource: dict[str, Any],
         *,
         source_id: str,
+        activity_profiles: dict[str, str] | None = None,
     ) -> str | None:
         payload = (resource.get("attributes") or {}).get("asobi_ticket") or {}
         act = payload.get("act") or {}
@@ -711,6 +1322,7 @@ class Normalizer:
             return None
         source_key = f"asobi:act:{act_id}"
         entity_id = _stable_id("event", source_key)
+        activity_id = (activity_profiles or {}).get(_activity_fingerprint(title))
         official_url = f"{resource.get('url')}#act-{act_id}"
         project = _tag([str(value) for value in resource.get("tags") or []], PROJECT_PREFIX)
         media = (resource.get("attributes") or {}).get("media") or []
@@ -730,12 +1342,13 @@ class Normalizer:
                 """
                 INSERT INTO "Event" (
                     "id","slug","sourceKey","titleJa","startsAt","endsAt","doorsAt",
-                    "ipId","eventType","officialUrl","keyVisualUrl","sourceId"
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'LIVE',%s,%s,%s)
+                    "ipId","activityId","eventType","officialUrl","keyVisualUrl","sourceId"
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'LIVE',%s,%s,%s)
                 ON CONFLICT ("sourceKey") DO UPDATE SET
                     "titleJa"=EXCLUDED."titleJa","startsAt"=EXCLUDED."startsAt",
                     "endsAt"=EXCLUDED."endsAt","doorsAt"=EXCLUDED."doorsAt",
                     "ipId"=EXCLUDED."ipId","officialUrl"=EXCLUDED."officialUrl",
+                    "activityId"=COALESCE(EXCLUDED."activityId","Event"."activityId"),
                     "keyVisualUrl"=EXCLUDED."keyVisualUrl","sourceId"=EXCLUDED."sourceId",
                     "updatedAt"=NOW()
                 """,
@@ -748,6 +1361,7 @@ class Normalizer:
                     _parse_time(attributes.get("performance_ends_at")),
                     _parse_time(attributes.get("opens_at")),
                     ip_id,
+                    activity_id,
                     official_url,
                     key_visual_url,
                     source_id,
@@ -892,6 +1506,7 @@ class Normalizer:
         *,
         source_id: str,
         platform: str,
+        activity_profiles: dict[str, str] | None = None,
     ) -> tuple[int, int]:
         attributes = resource.get("attributes") or {}
         payload = attributes.get("ticket_page") or attributes.get("eplus_ticket") or {}
@@ -901,11 +1516,17 @@ class Normalizer:
         events = [item for item in payload.get("events") or [] if isinstance(item, dict)]
         if not page_id or not events:
             return 0, 0
-        project = _tag(
-            [str(value) for value in resource.get("tags") or []],
-            PROJECT_PREFIX,
-            "anime-general",
+        project = str(
+            payload.get("project")
+            or _tag(
+                [str(value) for value in resource.get("tags") or []],
+                PROJECT_PREFIX,
+                "unknown",
+            )
+            or "unknown"
         )
+        if project in TICKET_UNKNOWN_PROJECTS:
+            project = "unknown"
         media = attributes.get("media") or []
         key_visual_url = next(
             (
@@ -922,7 +1543,7 @@ class Normalizer:
         with self.connect() as conn, conn.transaction():
             ip = (
                 conn.execute('SELECT "id" FROM "Ip" WHERE "slug"=%s', (project,)).fetchone()
-                if project
+                if project != "unknown"
                 else None
             )
             ip_id = ip["id"] if ip else None
@@ -937,6 +1558,7 @@ class Normalizer:
                 venue = item.get("venue") if isinstance(item.get("venue"), dict) else {}
                 venue_name = unescape(str(venue.get("name") or "")).strip()
                 venue_url = str(venue.get("url") or "").strip() or None
+                activity_id = (activity_profiles or {}).get(_activity_fingerprint(title))
                 event_id, reused_event = self._matching_ticket_event(
                     conn,
                     event_source_key=event_source_key,
@@ -980,10 +1602,11 @@ class Normalizer:
                     conn.execute(
                         """
                         UPDATE "Event"
-                        SET "ipId"=COALESCE("ipId",%s),"updatedAt"=NOW()
+                        SET "ipId"=COALESCE("ipId",%s),
+                            "activityId"=COALESCE("activityId",%s),"updatedAt"=NOW()
                         WHERE "id"=%s
                         """,
-                        (ip_id, event_id),
+                        (ip_id, activity_id, event_id),
                     )
                 else:
                     slug = _slug(
@@ -994,12 +1617,13 @@ class Normalizer:
                         """
                         INSERT INTO "Event" (
                             "id","slug","sourceKey","titleJa","startsAt","endsAt","doorsAt",
-                            "venueId","ipId","eventType","officialUrl","keyVisualUrl","sourceId"
-                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                            "venueId","ipId","activityId","eventType","officialUrl","keyVisualUrl","sourceId"
+                        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                         ON CONFLICT ("sourceKey") DO UPDATE SET
                             "titleJa"=EXCLUDED."titleJa","startsAt"=EXCLUDED."startsAt",
                             "endsAt"=EXCLUDED."endsAt","doorsAt"=EXCLUDED."doorsAt",
                             "venueId"=EXCLUDED."venueId","ipId"=EXCLUDED."ipId",
+                            "activityId"=COALESCE(EXCLUDED."activityId","Event"."activityId"),
                             "eventType"=EXCLUDED."eventType","officialUrl"=EXCLUDED."officialUrl",
                             "keyVisualUrl"=EXCLUDED."keyVisualUrl","sourceId"=EXCLUDED."sourceId",
                             "updatedAt"=NOW()
@@ -1014,6 +1638,7 @@ class Normalizer:
                             _parse_time(item.get("doorsAt")),
                             venue_id,
                             ip_id,
+                            activity_id,
                             _eplus_event_type(title),
                             event_url,
                             key_visual_url,
@@ -1116,6 +1741,106 @@ class Normalizer:
                     (len(ticket_source_prefix), ticket_source_prefix),
                 )
         return event_count, ticket_count
+
+    def set_ticket_relevance(
+        self,
+        content_id: str,
+        decision: dict[str, Any],
+    ) -> None:
+        processing_status = {
+            "accepted": "READY",
+            "review": "REVIEW",
+            "rejected": "REJECTED",
+        }.get(str(decision.get("status")), "REVIEW")
+        with self.connect() as conn, conn.transaction():
+            conn.execute(
+                """
+                UPDATE "ContentItem"
+                SET "metadata"=jsonb_set(
+                        COALESCE("metadata",'{}'::jsonb),
+                        '{ticketRelevance}',
+                        %s,
+                        TRUE
+                    ),
+                    "processingStatus"=%s,
+                    "updatedAt"=NOW()
+                WHERE "id"=%s
+                """,
+                (Jsonb(decision), processing_status, content_id),
+            )
+
+    def remove_ticket_page_projection(
+        self,
+        resource: dict[str, Any],
+        *,
+        platform: str,
+    ) -> tuple[int, int]:
+        payload = _ticket_payload(resource)
+        page_id = str(payload.get("pageId") or "")
+        if not page_id:
+            return 0, 0
+        event_source_keys = [
+            f"{platform}:event:{item.get('id')}"
+            for item in payload.get("events") or []
+            if isinstance(item, dict) and item.get("id")
+        ]
+        ticket_prefix = f"{platform}:reception:{page_id}:"
+        with self.connect() as conn, conn.transaction():
+            deleted_tickets = conn.execute(
+                """
+                DELETE FROM "TicketWindow"
+                WHERE LEFT("sourceKey", %s)=%s
+                RETURNING "eventId"
+                """,
+                (len(ticket_prefix), ticket_prefix),
+            ).fetchall()
+            candidate_event_ids = {
+                str(row["eventId"]) for row in deleted_tickets if row.get("eventId")
+            }
+            if event_source_keys:
+                candidate_event_ids.update(
+                    str(row["id"])
+                    for row in conn.execute(
+                        'SELECT "id" FROM "Event" WHERE "sourceKey" = ANY(%s)',
+                        (event_source_keys,),
+                    ).fetchall()
+                )
+            removable_event_ids: list[str] = []
+            if candidate_event_ids:
+                removable_event_ids = [
+                    str(row["id"])
+                    for row in conn.execute(
+                        """
+                        SELECT e."id"
+                        FROM "Event" e
+                        WHERE e."id" = ANY(%s)
+                          AND e."sourceKey" = ANY(%s)
+                          AND NOT EXISTS (
+                              SELECT 1 FROM "TicketWindow" t WHERE t."eventId"=e."id"
+                          )
+                          AND NOT EXISTS (
+                              SELECT 1 FROM "EventNews" n WHERE n."eventId"=e."id"
+                          )
+                          AND NOT EXISTS (
+                              SELECT 1 FROM "EventArtist" a WHERE a."eventId"=e."id"
+                          )
+                        """,
+                        (list(candidate_event_ids), event_source_keys or [""]),
+                    ).fetchall()
+                ]
+            if removable_event_ids:
+                conn.execute(
+                    """
+                    DELETE FROM "SearchDocument"
+                    WHERE "entityType"='EVENT' AND "entityId" = ANY(%s)
+                    """,
+                    (removable_event_ids,),
+                )
+                conn.execute(
+                    'DELETE FROM "Event" WHERE "id" = ANY(%s)',
+                    (removable_event_ids,),
+                )
+        return len(deleted_tickets), len(removable_event_ids)
 
     def remove_news_projection(self, content_id: str) -> None:
         with self.connect() as conn, conn.transaction():
@@ -1354,7 +2079,30 @@ class Normalizer:
         if source_type == ASOBI_SOURCE_TYPE:
             source_id = _stable_id("source", resource["source_id"])
             if resource["kind"] == "ticket_act":
-                self.upsert_asobi_event(resource, source_id=source_id)
+                rule_decision = {
+                    "status": "review",
+                    "confidence": 0.5,
+                    "method": "structured-gate",
+                    "reason": "official ticket act requires one semantic activity assessment",
+                    "signals": ["official-ticket-act"],
+                    "subjectName": None,
+                    "subjectType": "UNKNOWN",
+                }
+                decision = self.cached_activity_decision(resource)
+                if not decision:
+                    decision = self.call_ticket_relevance_llm(
+                        resource,
+                        platform="official",
+                        rule_decision=rule_decision,
+                    )
+                if not decision:
+                    decision = rule_decision
+                activity_profiles = self.store_activity_profiles(resource, decision)
+                self.upsert_asobi_event(
+                    resource,
+                    source_id=source_id,
+                    activity_profiles=activity_profiles,
+                )
             elif resource["kind"] == "ticket_reception":
                 applied = self.upsert_asobi_tickets(resource)
                 reception = ((resource.get("attributes") or {}).get("asobi_ticket") or {}).get(
@@ -1381,12 +2129,44 @@ class Normalizer:
             self.finish(job["id"])
             return
         if source_type in TICKET_SOURCE_PLATFORMS:
+            platform = TICKET_SOURCE_PLATFORMS[source_type]
+            decision = _ticket_relevance_rules(resource, platform=platform)
+            cached_decision = self.cached_activity_decision(resource)
+            if cached_decision:
+                decision = cached_decision
+            else:
+                llm_decision = self.call_ticket_relevance_llm(
+                    resource,
+                    platform=platform,
+                    rule_decision=decision,
+                )
+                if llm_decision:
+                    decision = llm_decision
+            activity_profiles = self.store_activity_profiles(resource, decision)
+            self.set_ticket_relevance(content_id, decision)
             source_id = _stable_id("source", resource["source_id"])
-            self.upsert_ticket_page(
-                resource,
-                source_id=source_id,
-                platform=TICKET_SOURCE_PLATFORMS[source_type],
-            )
+            if decision["status"] == "accepted":
+                self.upsert_ticket_page(
+                    resource,
+                    source_id=source_id,
+                    platform=platform,
+                    activity_profiles=activity_profiles,
+                )
+            else:
+                removed_tickets, removed_events = self.remove_ticket_page_projection(
+                    resource,
+                    platform=platform,
+                )
+                LOGGER.info(
+                    "ticket relevance=%s platform=%s title=%r reason=%s "
+                    "removed_tickets=%s removed_events=%s",
+                    decision["status"],
+                    platform,
+                    resource.get("title"),
+                    decision.get("reason"),
+                    removed_tickets,
+                    removed_events,
+                )
             self.remove_news_projection(content_id)
             self.finish(job["id"])
             return

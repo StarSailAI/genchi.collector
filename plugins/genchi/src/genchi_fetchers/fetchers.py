@@ -580,7 +580,7 @@ def _eplus_project(
         matched = [keyword for keyword in keywords if _eplus_normalize(keyword) in normalized]
         if matched:
             return project, matched
-    return "anime-general", []
+    return "unknown", []
 
 
 def _eplus_detail_url(base_url: str, href: str) -> tuple[str, str] | None:
@@ -957,10 +957,29 @@ class EplusTicketFetcher(FetcherPlugin):
             if _eplus_detail_url("https://eplus.jp", str(value))
         ][: config.max_tracked_details]
         refresh_cursor = int(checkpoint.get("refresh_cursor") or 0)
-        candidates: dict[str, tuple[str, bool]] = {}
+        candidates: dict[str, str] = {}
+        discoveries: dict[str, list[dict[str, Any]]] = {}
         errors: list[str] = []
         list_pages = 0
         seed_pages = 0
+
+        def add_candidate(
+            page_id: str,
+            detail_url: str,
+            *,
+            kind: str,
+            source_url: str,
+            trusted_category: bool,
+        ) -> None:
+            candidates.setdefault(page_id, detail_url)
+            discovery = {
+                "kind": kind,
+                "sourceUrl": source_url,
+                "trustedCategory": trusted_category,
+            }
+            known = discoveries.setdefault(page_id, [])
+            if discovery not in known:
+                known.append(discovery)
 
         for seed_url in config.seed_urls:
             try:
@@ -970,7 +989,13 @@ class EplusTicketFetcher(FetcherPlugin):
                 continue
             seed_pages += 1
             for page_id, detail_url in _eplus_discover_details(html, seed_url):
-                candidates.setdefault(page_id, (detail_url, True))
+                add_candidate(
+                    page_id,
+                    detail_url,
+                    kind="platform_word",
+                    source_url=seed_url,
+                    trusted_category=False,
+                )
 
         selected_roots = [
             config.category_urls[(root_cursor + offset) % len(config.category_urls)]
@@ -993,7 +1018,13 @@ class EplusTicketFetcher(FetcherPlugin):
                     break
                 list_pages += 1
                 for page_id, detail_url in _eplus_discover_details(html, page_url):
-                    candidates.setdefault(page_id, (detail_url, True))
+                    add_candidate(
+                        page_id,
+                        detail_url,
+                        kind="platform_category",
+                        source_url=page_url,
+                        trusted_category=True,
+                    )
                 discovered_next = _eplus_next_page(html, page_url)
                 if page_index >= 1:
                     page_cursors[root] = discovered_next or f"{root}/p2"
@@ -1006,7 +1037,13 @@ class EplusTicketFetcher(FetcherPlugin):
                 url = tracked[(refresh_cursor + offset) % len(tracked)]
                 parsed = _eplus_detail_url("https://eplus.jp", url)
                 if parsed:
-                    candidates.setdefault(parsed[0], (parsed[1], True))
+                    add_candidate(
+                        parsed[0],
+                        parsed[1],
+                        kind="refresh",
+                        source_url=url,
+                        trusted_category=False,
+                    )
             refresh_cursor = (refresh_cursor + count) % len(tracked)
 
         if not candidates and errors:
@@ -1017,9 +1054,9 @@ class EplusTicketFetcher(FetcherPlugin):
         event_count = 0
         ticket_count = 0
         tracked_set = dict.fromkeys(tracked)
-        for page_id, (detail_url, category_discovered) in list(candidates.items())[
-            : config.max_detail_pages
-        ]:
+        for page_id, detail_url in list(candidates.items())[: config.max_detail_pages]:
+            discovery = discoveries.get(page_id, [])
+            category_discovered = any(bool(item.get("trustedCategory")) for item in discovery)
             try:
                 html = self._html(client, browser, detail_url, require_events=True)
                 parsed = _eplus_parse_detail(
@@ -1058,6 +1095,8 @@ class EplusTicketFetcher(FetcherPlugin):
                             "project": project,
                             "matchedKeywords": parsed["matchedKeywords"],
                             "relatedGenres": parsed["relatedGenres"],
+                            "nativeCategories": parsed["relatedGenres"],
+                            "discovery": discovery,
                             "events": events,
                         },
                         "media": parsed["media"],
@@ -1112,7 +1151,18 @@ _JAPANESE_DATE_RE = re.compile(r"(?P<year>20\d{2})[/-](?P<month>\d{1,2})[/-](?P<
 
 
 def _response_html(response: requests.Response) -> str:
-    return str(BeautifulSoup(response.content, "lxml"))
+    content = response.content
+    encoding = str(getattr(response, "encoding", None) or "utf-8")
+    try:
+        decoded = content.decode(encoding)
+    except (LookupError, UnicodeDecodeError):
+        decoded = content.decode("utf-8", errors="replace")
+    return str(BeautifulSoup(decoded, "lxml"))
+
+
+def _pia_ticket_phase(label: str, page_text: str) -> str:
+    phase = _eplus_ticket_phase(label)
+    return phase if phase != "OTHER" else _eplus_ticket_phase(page_text[:500])
 
 
 def _ticket_timestamps(value: str) -> list[str]:
@@ -1264,7 +1314,7 @@ def _pia_window(
         "id": window_id,
         "upstreamId": sale_id,
         "label": label or fallback_label or "チケット受付",
-        "phase": _eplus_ticket_phase(f"{label} {page_text[:500]}"),
+        "phase": _pia_ticket_phase(label, page_text),
         "opensAt": opens_at,
         "closesAt": closes_at,
         "resultAt": result_values[0] if result_values else None,
@@ -1443,11 +1493,50 @@ class PiaTicketFetcher(FetcherPlugin):
         ][: config.max_tracked_details]
         refresh_cursor = int(checkpoint.get("refresh_cursor") or 0)
         candidates: dict[str, str] = {}
+        discoveries: dict[str, list[dict[str, Any]]] = {}
         errors: list[str] = []
         discovery_pages = 0
         sale_pages = 0
 
-        discovery_urls = list(config.discovery_urls)
+        def add_candidate(
+            page_id: str,
+            detail_url: str,
+            *,
+            kind: str,
+            source_url: str,
+            search_query: str | None = None,
+            trusted_category: bool = False,
+        ) -> None:
+            candidates.setdefault(page_id, detail_url)
+            discovery: dict[str, Any] = {
+                "kind": kind,
+                "sourceUrl": source_url,
+                "trustedCategory": trusted_category,
+            }
+            if search_query:
+                discovery["searchQuery"] = search_query
+            known = discoveries.setdefault(page_id, [])
+            if discovery not in known:
+                known.append(discovery)
+
+        trusted_discovery_urls = {
+            url
+            for url in config.discovery_urls
+            if urlsplit(url).path.startswith("/anime/")
+            or (
+                urlsplit(url).path == "/pia/tag/tag.do"
+                and "0000037" in parse_qs(urlsplit(url).query).get("tagCd", [])
+            )
+        }
+        discovery_urls: list[tuple[str, str, str | None, bool]] = [
+            (
+                url,
+                "platform_category",
+                None,
+                url in trusted_discovery_urls,
+            )
+            for url in config.discovery_urls
+        ]
         if config.search_keywords and config.keywords_per_run:
             count = min(config.keywords_per_run, len(config.search_keywords))
             selected = [
@@ -1455,11 +1544,16 @@ class PiaTicketFetcher(FetcherPlugin):
                 for offset in range(count)
             ]
             discovery_urls.extend(
-                f"https://t.pia.jp/pia/search_all.do?{urlencode({'kw': keyword})}"
+                (
+                    f"https://t.pia.jp/pia/search_all.do?{urlencode({'kw': keyword})}",
+                    "search",
+                    keyword,
+                    False,
+                )
                 for keyword in selected
             )
             keyword_cursor = (keyword_cursor + count) % len(config.search_keywords)
-        for url in discovery_urls:
+        for url, discovery_kind, search_query, trusted_category in discovery_urls:
             try:
                 html = self._html(client, browser, url)
             except TransientError as exc:
@@ -1467,7 +1561,14 @@ class PiaTicketFetcher(FetcherPlugin):
                 continue
             discovery_pages += 1
             for page_id, detail_url in _pia_discover_details(html, url):
-                candidates.setdefault(page_id, detail_url)
+                add_candidate(
+                    page_id,
+                    detail_url,
+                    kind=discovery_kind,
+                    source_url=url,
+                    search_query=search_query,
+                    trusted_category=trusted_category,
+                )
         if tracked and config.refresh_details_per_run:
             count = min(config.refresh_details_per_run, len(tracked))
             for offset in range(count):
@@ -1476,7 +1577,12 @@ class PiaTicketFetcher(FetcherPlugin):
                     tracked[(refresh_cursor + offset) % len(tracked)],
                 )
                 if parsed:
-                    candidates.setdefault(parsed[0], parsed[1])
+                    add_candidate(
+                        parsed[0],
+                        parsed[1],
+                        kind="refresh",
+                        source_url=tracked[(refresh_cursor + offset) % len(tracked)],
+                    )
             refresh_cursor = (refresh_cursor + count) % len(tracked)
         if not candidates and errors:
             raise TransientError(f"all Ticket Pia discovery pages failed: {errors[0]}")
@@ -1565,6 +1671,8 @@ class PiaTicketFetcher(FetcherPlugin):
                             "pageId": page_id,
                             "project": project,
                             "matchedKeywords": matched_keywords,
+                            "nativeCategories": [],
+                            "discovery": discoveries.get(page_id, []),
                             "events": events,
                         },
                         "media": [{"type": "image", "url": image}] if image else [],
@@ -1613,6 +1721,7 @@ def _lawson_parse_results(
     html: str,
     *,
     page_url: str,
+    search_query: str,
     project_keywords: dict[str, tuple[str, ...]],
 ) -> list[dict[str, Any]]:
     soup = BeautifulSoup(html, "lxml")
@@ -1728,6 +1837,15 @@ def _lawson_parse_results(
                 "project": project,
                 "matchedKeywords": matched_keywords,
                 "category": category,
+                "nativeCategories": [category] if category else [],
+                "discovery": [
+                    {
+                        "kind": "search",
+                        "sourceUrl": page_url,
+                        "searchQuery": search_query,
+                        "trustedCategory": False,
+                    }
+                ],
                 "events": events,
             }
         )
@@ -1796,6 +1914,7 @@ class LawsonTicketFetcher(FetcherPlugin):
             for parsed in _lawson_parse_results(
                 html,
                 page_url=final_url,
+                search_query=keyword,
                 project_keywords=config.project_keywords,
             ):
                 page_id = str(parsed["pageId"])
@@ -1803,6 +1922,9 @@ class LawsonTicketFetcher(FetcherPlugin):
                 if not existing:
                     parsed_results[page_id] = parsed
                     continue
+                for discovery in parsed["discovery"]:
+                    if discovery not in existing["discovery"]:
+                        existing["discovery"].append(discovery)
                 existing_events = {event["id"]: event for event in existing["events"]}
                 for event in parsed["events"]:
                     current = existing_events.get(event["id"])
@@ -1852,6 +1974,8 @@ class LawsonTicketFetcher(FetcherPlugin):
                             "pageId": parsed["pageId"],
                             "project": project,
                             "matchedKeywords": parsed["matchedKeywords"],
+                            "nativeCategories": parsed["nativeCategories"],
+                            "discovery": parsed["discovery"],
                             "events": events,
                         },
                         "media": [],

@@ -11,7 +11,12 @@ from genchi_fetchers import (
     PiaTicketFetcher,
     XProfileFetcher,
 )
-from genchi_fetchers.fetchers import _eplus_ticket_phase
+from genchi_fetchers.fetchers import (
+    _eplus_ticket_phase,
+    _pia_ticket_phase,
+    _pia_title,
+    _response_html,
+)
 from genchi_normalizer.app import _category, _eplus_event_type, _stable_id
 
 
@@ -302,7 +307,16 @@ def test_eplus_ticket_discovers_parses_and_filters_anime_page(monkeypatch):
     assert records[0].external_id == "eplus:detail:4512340001"
     assert records[0].title == "THE IDOLM@STER TEST LIVE <DAY1>"
     assert records[0].tags[-1] == "project:idolmaster"
-    event = records[0].attributes["eplus_ticket"]["events"][0]
+    payload = records[0].attributes["eplus_ticket"]
+    assert payload["nativeCategories"] == ["アニメ・ゲーム"]
+    assert payload["discovery"] == [
+        {
+            "kind": "platform_category",
+            "sourceUrl": category_url,
+            "trustedCategory": True,
+        }
+    ]
+    event = payload["events"][0]
     assert event["startsAt"] == "2026-09-01T00:00:00+09:00"
     assert event["doorsAt"] == "2026-09-01T16:00:00+09:00"
     assert event["venue"]["name"] == "テストホール"
@@ -325,6 +339,28 @@ def test_eplus_ticket_phase_and_event_type_rules():
     assert _eplus_event_type("アフタヌーン40周年展") == "OTHER"
     assert _eplus_event_type("GAME MUSIC FESTIVAL") == "FES"
     assert _eplus_event_type("声優 SPECIAL LIVE") == "LIVE"
+
+
+def test_pia_response_uses_declared_utf8_instead_of_lxml_encoding_guess():
+    class Response:
+        encoding = "UTF-8"
+        content = (
+            '<html><head><meta property="og:title" '
+            'content="「ヒックとドラゴン2」in コンサート ＜アニメ版2作目＞ | チケットぴあ">'
+            "</head></html>"
+        ).encode()
+
+    assert _pia_title(_response_html(Response())) == (
+        "「ヒックとドラゴン2」in コンサート ＜アニメ版2作目＞"
+    )
+
+
+def test_pia_ticket_phase_does_not_use_resale_navigation_when_label_is_specific():
+    page_text = "チケットぴあ リセール お知らせ 一般発売"
+
+    assert _pia_ticket_phase("先行先着", page_text) == "ADVANCE"
+    assert _pia_ticket_phase("一般発売", page_text) == "GENERAL"
+    assert _pia_ticket_phase("", "公式リセール 受付中") == "RESALE"
 
 
 def test_pia_ticket_discovers_sales_and_exact_performances(monkeypatch):
@@ -400,7 +436,15 @@ def test_pia_ticket_discovers_sales_and_exact_performances(monkeypatch):
     assert report.details["sale_pages"] == 1
     assert records[0].external_id == "pia:detail:b2600001"
     assert records[0].tags[-1] == "project:idolmaster"
-    event = records[0].attributes["ticket_page"]["events"][0]
+    payload = records[0].attributes["ticket_page"]
+    assert payload["discovery"] == [
+        {
+            "kind": "platform_category",
+            "sourceUrl": discovery_url,
+            "trustedCategory": True,
+        }
+    ]
+    event = payload["events"][0]
     assert event["id"] == "2600001-001"
     assert event["startsAt"] == "2026-09-01T17:00:00+09:00"
     assert event["doorsAt"] == "2026-09-01T16:00:00+09:00"
@@ -459,7 +503,11 @@ def test_lawson_ticket_uses_browser_and_deduplicates_same_day(monkeypatch):
     assert report.details["results"] == 1
     assert report.details["events"] == 1
     assert records[0].external_id == "lawson:result:12345"
-    event = records[0].attributes["ticket_page"]["events"][0]
+    payload = records[0].attributes["ticket_page"]
+    assert payload["nativeCategories"] == ["コンサート アニメ・ゲーム"]
+    assert payload["discovery"][0]["searchQuery"] == "アイドルマスター"
+    assert payload["discovery"][0]["trustedCategory"] is False
+    event = payload["events"][0]
     assert event["startsAt"] == "2026-09-01T00:00:00+09:00"
     assert event["ticketWindows"][0]["phase"] == "LOTTERY_1"
     assert event["ticketWindows"][0]["status"] == "OPEN"
