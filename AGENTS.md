@@ -14,7 +14,7 @@ addition to the framework rules below, preserve these boundaries:
    proxy for authenticated actions; it never writes the database directly.
 2. Raw framework state belongs to `allfeeds`; curated website data belongs to
    `genchi`. Do not move raw crawling concerns into the curated schema.
-3. X collection must go through the private, authenticated CloakBrowser adapter.
+3. X collection must go through the private, authenticated Camoufox adapter.
    Do not expose arbitrary JavaScript execution or a public browser port.
 4. Upstream URLs and page contents remain untrusted. Keep SSRF checks, bounded
    payloads, stable external IDs and idempotent writes.
@@ -52,7 +52,7 @@ packages/contracts/       Shared protocol and Pydantic data models
 packages/sdk/             Public Fetcher, Sink and Asset Store interfaces
 services/controller/      FastAPI control plane, task pool and migrations
 services/worker/          Worker runtime, process isolation and built-in Sink
-services/browser/         Restricted CloakBrowser HTTP adapter
+services/browser/         Restricted Camoufox HTTP adapter
 services/normalizer/      Legacy pipeline and curated migrations
 services/product/         Canonical catalog, review API, accounts and notification outbox
 plugins/builtin/          Generic RSS, web, JSON API and Sitemap Fetchers

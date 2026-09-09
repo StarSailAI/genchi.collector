@@ -71,18 +71,18 @@ class BrowserClient:
         )
         if response.status_code >= 400:
             raise TransientError(f"browser render failed with HTTP {response.status_code}")
-        upstream_status = response.headers.get("X-CloakBrowser-Upstream-Status")
+        upstream_status = response.headers.get("X-Genchi-Browser-Upstream-Status")
         if upstream_status and int(upstream_status) >= 500:
             raise TransientError(f"browser upstream returned HTTP {upstream_status}")
-        return response.text, response.headers.get("X-CloakBrowser-Final-URL", url)
+        return response.text, response.headers.get("X-Genchi-Browser-Final-URL", url)
 
 
 class XProfileConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     handle: str = Field(pattern=r"^[A-Za-z0-9_]{1,15}$")
-    browser_url: str = "http://cloakbrowser:3003"
-    api_token_secret: str = "CLOAKBROWSER_API_TOKEN"
+    browser_url: str = "http://browser:3003"
+    api_token_secret: str = "BROWSER_API_TOKEN"
     max_posts: int = Field(default=50, ge=1, le=200)
     max_scrolls: int = Field(default=8, ge=0, le=30)
 
@@ -853,8 +853,8 @@ class EplusTicketConfig(BaseModel):
     max_content_chars: int = Field(default=120_000, ge=1000, le=500_000)
     rate_limit_seconds: float = Field(default=2.5, ge=1.0, le=60.0)
     browser_fallback: bool = True
-    browser_url: str = "http://cloakbrowser:3003"
-    browser_token_secret: str = "CLOAKBROWSER_API_TOKEN"
+    browser_url: str = "http://browser:3003"
+    browser_token_secret: str = "BROWSER_API_TOKEN"
     project_keywords: dict[str, tuple[str, ...]] = Field(
         default_factory=lambda: dict(EPLUS_PROJECT_KEYWORDS)
     )
@@ -1410,8 +1410,8 @@ class PiaTicketConfig(BaseModel):
     max_content_chars: int = Field(default=120_000, ge=1000, le=500_000)
     rate_limit_seconds: float = Field(default=2.0, ge=1.0, le=60.0)
     browser_fallback: bool = True
-    browser_url: str = "http://cloakbrowser:3003"
-    browser_token_secret: str = "CLOAKBROWSER_API_TOKEN"
+    browser_url: str = "http://browser:3003"
+    browser_token_secret: str = "BROWSER_API_TOKEN"
     project_keywords: dict[str, tuple[str, ...]] = Field(
         default_factory=lambda: dict(EPLUS_PROJECT_KEYWORDS)
     )
@@ -1859,8 +1859,8 @@ class LawsonTicketConfig(BaseModel):
     queries_per_run: int = Field(default=6, ge=1, le=30)
     max_results_per_run: int = Field(default=200, ge=1, le=1000)
     max_content_chars: int = Field(default=120_000, ge=1000, le=500_000)
-    browser_url: str = "http://cloakbrowser:3003"
-    browser_token_secret: str = "CLOAKBROWSER_API_TOKEN"
+    browser_url: str = "http://browser:3003"
+    browser_token_secret: str = "BROWSER_API_TOKEN"
     project_keywords: dict[str, tuple[str, ...]] = Field(
         default_factory=lambda: dict(EPLUS_PROJECT_KEYWORDS)
     )
@@ -2017,8 +2017,8 @@ class OfficialSiteConfig(BaseModel):
     content_selector: str = "article"
     published_selector: str | None = "time"
     browser: bool = False
-    browser_url: str = "http://cloakbrowser:3003"
-    browser_token_secret: str = "CLOAKBROWSER_API_TOKEN"
+    browser_url: str = "http://browser:3003"
+    browser_token_secret: str = "BROWSER_API_TOKEN"
     wait_selector: str | None = None
     max_pages: int = Field(default=2, ge=1, le=20)
     backfill_max_pages: int = Field(default=30, ge=1, le=100)

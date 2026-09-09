@@ -21,7 +21,6 @@ python3 genchi.collector/deploy/manage.py check
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | Chat Completions 兼容接口；三项一起填写 |
 | `RESEND_API_KEY` / `MAIL_FROM` | Resend API key 与已验证域名下的发件地址；登录邮件和提醒统一经 Resend 发送 |
 | `ENABLE_X` / `X_COOKIES_FILE` | 可选官推采集；指定服务器上的 Playwright Cookie 数组 JSON |
-| `CLOAKBROWSER_LICENSE_KEY` | 浏览器服务商要求许可证时填写 |
 
 模型未配置时，normalizer 运行 `idle` 健康模式，不领取或终结处理任务；原文采集与已迁移活动读取继续工作。补齐模型配置后执行 `apply` 才切换到处理模式。未启用 X 时生成的来源配置仅关闭现有四个官推来源，不扩大其他来源范围。既有采集历史保留。
 
@@ -33,9 +32,11 @@ Mailpit 仅保留为私网调试工具，不是生产投递的替代入口；既
 
 ## 构建与启动
 
+浏览器使用 F / Camoufox（Firefox）；版本、访问限制与旧部署迁移步骤见 [浏览器服务](browser.md)。首次构建浏览器镜像还需要访问 GitHub Releases。
+
 ```bash
-python3 genchi.collector/deploy/manage.py compose backend pull postgres cloakbrowser mailpit
-python3 genchi.collector/deploy/manage.py compose backend build control worker normalizer
+python3 genchi.collector/deploy/manage.py compose backend pull postgres mailpit
+python3 genchi.collector/deploy/manage.py compose backend build control worker normalizer browser
 python3 genchi.collector/deploy/manage.py compose web build web
 python3 genchi.collector/deploy/manage.py apply
 python3 genchi.collector/deploy/manage.py status

@@ -1,24 +1,23 @@
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import json
 import logging
 import os
 import re
 import secrets
-import socket
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 from aiohttp import web
-from cloakbrowser import launch_persistent_context_async
+from camoufox.addons import DefaultAddons
+from camoufox.async_api import AsyncCamoufox
+from egress import BlockedDestination, EgressProxy, PublicResolver, public_url
 
-LOGGER = logging.getLogger("genchi.cloakbrowser")
+LOGGER = logging.getLogger("genchi.browser")
 HANDLE_RE = re.compile(r"^[A-Za-z0-9_]{1,15}$")
 X_HOSTS = {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}
-DOCKER_DESKTOP_DNS_PROXY = ipaddress.ip_network("198.18.0.0/15")
 CHALLENGE_MARKERS = (
     "verify you are human",
     "unusual traffic",
@@ -32,7 +31,7 @@ def _enabled(name: str, default: str = "0") -> bool:
 
 
 def _authorized(request: web.Request) -> bool:
-    expected = os.environ.get("CLOAKBROWSER_API_TOKEN", "").strip()
+    expected = os.environ.get("BROWSER_API_TOKEN", "").strip()
     return bool(expected) and secrets.compare_digest(
         request.headers.get("Authorization", ""), f"Bearer {expected}"
     )
@@ -52,55 +51,73 @@ def _json_error(status: int, code: str, detail: str) -> web.HTTPException:
     )
 
 
-async def _public_hostname(hostname: str) -> bool:
-    normalized = hostname.strip().rstrip(".").lower()
-    if not normalized or normalized == "localhost" or normalized.endswith(".localhost"):
-        return False
-    try:
-        return ipaddress.ip_address(normalized).is_global
-    except ValueError:
-        pass
-    loop = asyncio.get_running_loop()
-    try:
-        records = await loop.run_in_executor(
-            None, lambda: socket.getaddrinfo(normalized, None, type=socket.SOCK_STREAM)
-        )
-    except socket.gaierror:
-        return False
-    addresses = {record[4][0].split("%", 1)[0] for record in records}
-    return bool(addresses) and all(
-        (address := ipaddress.ip_address(value)).is_global
-        or address in DOCKER_DESKTOP_DNS_PROXY
-        for value in addresses
-    )
+RESOLVER = PublicResolver()
 
 
 async def _validate_public_url(url: str) -> None:
-    parsed = urlsplit(url)
-    if parsed.scheme not in {"http", "https"} or parsed.username or parsed.password or not parsed.hostname:
-        raise _json_error(400, "INVALID_URL", "url must be a public HTTP(S) URL")
-    if not await _public_hostname(parsed.hostname):
-        raise _json_error(400, "PRIVATE_ADDRESS", "url must resolve to a public address")
+    try:
+        parsed = public_url(url)
+        await RESOLVER.resolve(parsed.hostname)
+    except (BlockedDestination, OSError, ValueError):
+        raise _json_error(
+            400, "PRIVATE_ADDRESS", "url must resolve to a public HTTP(S) address"
+        ) from None
 
 
 async def health(request: web.Request) -> web.Response:
-    context = request.app.get("browser_context")
-    ready = context is not None
-    try:
-        ready = ready and (context.browser is None or context.browser.is_connected())
-    except Exception:
-        ready = False
+    browser = request.app.get("browser")
+    ready = browser is not None and browser.is_connected()
     return web.json_response(
-        {"service": "genchi-cloakbrowser", "ready": ready, "engine": "cloakbrowser"},
+        {
+            "service": "genchi-browser",
+            "ready": ready,
+            "engine": "camoufox",
+            "route": "F",
+            "browserVersion": browser.version if ready else None,
+            "build": os.environ.get("CAMOUFOX_BROWSER", "official/152.0.4-beta.30"),
+        },
         status=200 if ready else 503,
     )
 
 
-async def _new_page(request: web.Request):
-    context = request.app.get("browser_context")
-    if context is None:
+async def _new_page(request: web.Request, *, authenticated=False):
+    browser = request.app.get("browser")
+    if browser is None:
         raise _json_error(503, "NOT_READY", "browser is not ready")
-    return await context.new_page()
+    context = (
+        request.app["x_context"]
+        if authenticated
+        else await browser.new_context(
+            accept_downloads=False,
+            service_workers="block",
+            ignore_https_errors=False,
+        )
+    )
+    try:
+        page = await context.new_page()
+        page.on("dialog", lambda dialog: dialog.dismiss())
+        await page.route_web_socket("**/*", lambda websocket: websocket.close())
+        return page
+    except BaseException:
+        if not authenticated:
+            await context.close()
+        raise
+
+
+async def _close_page(request: web.Request, page):
+    if page.context is request.app["x_context"]:
+        await page.close()
+    else:
+        await page.context.close()
+
+
+async def _guard_public(route: Any, navigation_request: Any) -> bool:
+    try:
+        await _validate_public_url(navigation_request.url)
+    except web.HTTPException:
+        await route.abort("blockedbyclient")
+        return False
+    return True
 
 
 async def fetch(request: web.Request) -> web.Response:
@@ -115,13 +132,10 @@ async def fetch(request: web.Request) -> web.Response:
     async with request.app["browser_semaphore"]:
         page = await _new_page(request)
         try:
+
             async def guard(route: Any, navigation_request: Any) -> None:
-                if navigation_request.is_navigation_request() and navigation_request.frame == page.main_frame:
-                    target = urlsplit(navigation_request.url)
-                    if not target.hostname or not await _public_hostname(target.hostname):
-                        await route.abort("blockedbyclient")
-                        return
-                await route.continue_()
+                if await _guard_public(route, navigation_request):
+                    await route.continue_()
 
             await page.route("**/*", guard)
             response = await page.goto(
@@ -139,10 +153,12 @@ async def fetch(request: web.Request) -> web.Response:
             status = response.status if response else None
         except Exception as exc:
             LOGGER.warning("render failed url=%s error=%s", url, type(exc).__name__)
-            raise _json_error(502, "FETCH_FAILED", f"browser fetch failed: {type(exc).__name__}") from exc
+            raise _json_error(
+                502, "FETCH_FAILED", f"browser fetch failed: {type(exc).__name__}"
+            ) from exc
         finally:
-            await page.close()
-    max_bytes = int(os.environ.get("CLOAKBROWSER_MAX_HTML_BYTES", "12582912"))
+            await _close_page(request, page)
+    max_bytes = int(os.environ.get("BROWSER_MAX_HTML_BYTES", "12582912"))
     encoded = html.encode("utf-8")
     if len(encoded) > max_bytes:
         raise web.HTTPRequestEntityTooLarge(max_size=max_bytes, actual_size=len(encoded))
@@ -151,8 +167,8 @@ async def fetch(request: web.Request) -> web.Response:
         content_type="text/html",
         charset="utf-8",
         headers={
-            "X-CloakBrowser-Upstream-Status": str(status or ""),
-            "X-CloakBrowser-Final-URL": final_url[:2000],
+            "X-Genchi-Browser-Upstream-Status": str(status or ""),
+            "X-Genchi-Browser-Final-URL": final_url[:2000],
             "Cache-Control": "no-store",
         },
     )
@@ -217,15 +233,20 @@ async def extract_x_profile(request: web.Request) -> web.Response:
     max_scrolls = max(0, min(30, int(payload.get("maxScrolls") or 8)))
     known_ids = {str(value) for value in payload.get("knownPostIds") or []}
     async with request.app["browser_semaphore"]:
-        page = await _new_page(request)
+        page = await _new_page(request, authenticated=True)
         try:
+
             async def guard(route: Any, navigation_request: Any) -> None:
-                if navigation_request.is_navigation_request() and navigation_request.frame == page.main_frame:
+                if (
+                    navigation_request.is_navigation_request()
+                    and navigation_request.frame == page.main_frame
+                ):
                     target = urlsplit(navigation_request.url)
                     if target.hostname not in X_HOSTS:
                         await route.abort("blockedbyclient")
                         return
-                await route.continue_()
+                if await _guard_public(route, navigation_request):
+                    await route.continue_()
 
             await page.route("**/*", guard)
             await page.goto(
@@ -254,7 +275,7 @@ async def extract_x_profile(request: web.Request) -> web.Response:
             LOGGER.warning("X extraction failed handle=%s error=%s", handle, type(exc).__name__)
             raise _json_error(502, "EXTRACTION_FAILED", type(exc).__name__) from exc
         finally:
-            await page.close()
+            await _close_page(request, page)
     lowered = body_text.lower()
     if not posts:
         marker = next((value for value in CHALLENGE_MARKERS if value in lowered), None)
@@ -270,7 +291,9 @@ async def extract_x_profile(request: web.Request) -> web.Response:
         {
             "profile": {"handle": handle, "url": f"https://x.com/{handle}"},
             "posts": ordered,
-            "observedAt": __import__("datetime").datetime.now(__import__("datetime").UTC).isoformat(),
+            "observedAt": __import__("datetime")
+            .datetime.now(__import__("datetime").UTC)
+            .isoformat(),
             "extractorVersion": "1.0.0",
         },
         headers={"Cache-Control": "no-store"},
@@ -278,32 +301,57 @@ async def extract_x_profile(request: web.Request) -> web.Response:
 
 
 async def start_browser(app: web.Application) -> None:
-    profile_dir = Path(os.environ.get("CLOAKBROWSER_PROFILE_DIR", "/data/profile"))
-    profile_dir.mkdir(parents=True, exist_ok=True)
-    fingerprint = os.environ.get("CLOAKBROWSER_FINGERPRINT_SEED", "42426").strip()
-    app["browser_context"] = await launch_persistent_context_async(
-        profile_dir,
-        headless=_enabled("CLOAKBROWSER_HEADLESS", "1"),
-        humanize=_enabled("CLOAKBROWSER_HUMANIZE", "1"),
-        args=[f"--fingerprint={fingerprint}"] if fingerprint else [],
-        locale=os.environ.get("CLOAKBROWSER_LOCALE", "ja-JP"),
+    proxy = EgressProxy(RESOLVER)
+    await proxy.start()
+    app["egress_proxy"] = proxy
+    manager = AsyncCamoufox(
+        browser=os.environ.get("CAMOUFOX_BROWSER", "official/152.0.4-beta.30"),
+        headless=_enabled("BROWSER_HEADLESS", "1"),
+        locale=os.environ.get("BROWSER_LOCALE", "ja-JP"),
+        exclude_addons=[DefaultAddons.UBO],
+        proxy={"server": proxy.url},
+        block_webrtc=True,
+        firefox_user_prefs={
+            "network.proxy.no_proxies_on": "",
+            "network.proxy.allow_hijacking_localhost": True,
+            "network.http.http3.enable": False,
+            "network.dns.disablePrefetch": True,
+            "security.fileuri.strict_origin_policy": True,
+        },
     )
-    cookie_path = os.environ.get("CLOAKBROWSER_X_COOKIES_PATH", "").strip()
-    if cookie_path:
-        await app["browser_context"].add_cookies(json.loads(Path(cookie_path).read_text()))
-    LOGGER.info("CloakBrowser ready profile=%s", profile_dir)
+    app["browser_manager"] = manager
+    try:
+        app["browser"] = await manager.__aenter__()
+        app["x_context"] = await app["browser"].new_context(
+            accept_downloads=False,
+            service_workers="block",
+            ignore_https_errors=False,
+        )
+        cookie_path = os.environ.get("BROWSER_X_COOKIES_PATH", "").strip()
+        if cookie_path:
+            cookies = json.loads(Path(cookie_path).read_text())
+            await app["x_context"].add_cookies(cookies)
+    except BaseException:
+        await stop_browser(app)
+        raise
+    LOGGER.info("Camoufox ready route=F version=%s", app["browser"].version)
 
 
 async def stop_browser(app: web.Application) -> None:
-    context = app.get("browser_context")
-    if context is not None:
-        await context.close()
+    try:
+        if app.get("browser") is not None:
+            await app["browser_manager"].__aexit__(None, None, None)
+    finally:
+        app["browser"] = None
+        if app.get("egress_proxy"):
+            await app["egress_proxy"].close()
 
 
 def create_app() -> web.Application:
     app = web.Application(client_max_size=64 * 1024)
-    concurrency = max(1, min(8, int(os.environ.get("CLOAKBROWSER_CONCURRENCY", "2"))))
-    app["browser_context"] = None
+    concurrency = max(1, min(8, int(os.environ.get("BROWSER_CONCURRENCY", "1"))))
+    app["browser"] = None
+    app["x_context"] = None
     app["browser_semaphore"] = asyncio.Semaphore(concurrency)
     app.router.add_get("/", health)
     app.router.add_get("/health", health)

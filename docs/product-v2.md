@@ -66,7 +66,7 @@ docker-compose up -d --build web
 - Product API：`http://127.0.0.1:18080`（只映射回环地址）。
 - 原有控制台和采集端口由 `.env` 保持配置。
 
-日常修改后可单独构建 `normalizer product notifier`。Next.js Docker 构建限制一个构建 CPU、512 MB Node 堆；若本机容器总内存仍不足，可暂时停止本项目的 `worker cloakbrowser dashboard`，构建结束后恢复。
+日常修改后可单独构建 `normalizer product notifier`。Next.js Docker 构建限制一个构建 CPU、512 MB Node 堆；若本机容器总内存仍不足，可暂时停止本项目的 `worker browser dashboard`，构建结束后恢复。
 
 上线前需要配置真实 SMTP（远程连接必须 TLS）、发信域名、公共 HTTPS 域名，并整理试点系列的来源与审核积压。默认 Mailpit 仅用于本地验收。
 

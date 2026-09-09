@@ -27,7 +27,7 @@ def context(records, checkpoint=None):
         emit_asset=lambda *_: None,
         load_checkpoint=lambda: state,
         save_checkpoint=lambda value: state.update(value),
-        secret_provider=lambda name: "browser-token" if name == "CLOAKBROWSER_API_TOKEN" else None,
+        secret_provider=lambda name: "browser-token" if name == "BROWSER_API_TOKEN" else None,
         logger=None,
     )
 

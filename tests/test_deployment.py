@@ -39,6 +39,26 @@ def test_deployment_bootstrap_preserves_secrets_and_pauses_unconfigured_integrat
     cookies.write_text('[{"name":"auth_token","value":"test-only"}]')
     deploy.prepare(tmp_path)
     assert "test-only" in cookies.read_text()
+    assert cookies.parent.stat().st_mode & 0o777 == 0o700
+    assert cookies.stat().st_mode & 0o777 == 0o644
+
+
+def test_browser_env_migration_preserves_tokens_and_other_integrations(tmp_path):
+    path = tmp_path / ".env"
+    old = "CLOAKBROWSER_API_TOKEN='literal$secret # value'\nCLOAKBROWSER_CONCURRENCY=1\nCLOAKBROWSER_IMAGE=old/image\nCLOAKBROWSER_LICENSE_KEY=old-license\nRESEND_API_KEY=keep-me\n"
+    path.write_text(old)
+    deploy.migrate_browser_env(path)
+    values = deploy.read_env(path)
+    assert values == {
+        "BROWSER_API_TOKEN": "literal$secret # value",
+        "BROWSER_CONCURRENCY": "1",
+        "RESEND_API_KEY": "keep-me",
+    }
+    assert (tmp_path / ".deploy/env-before-camoufox").read_text() == old
+    before = path.read_bytes()
+    deploy.migrate_browser_env(path)
+    assert path.read_bytes() == before
+    assert path.stat().st_mode & 0o777 == 0o600
 
 
 def test_deployment_env_literals_validation_and_model_activation(tmp_path):

@@ -61,25 +61,20 @@ services:
       retries: 12
       start_period: 20s
 
-  cloakbrowser:
-    image: ${CLOAKBROWSER_IMAGE:-cloakhq/cloakbrowser:0.4.12}
+  browser:
+    build:
+      context: .
+      dockerfile: services/browser/Dockerfile
+    image: genchi/browser:${GENCHI_IMAGE_TAG:-current}
     restart: unless-stopped
-    command: ["python", "/app/genchi_browser_service.py"]
-    shm_size: ${CLOAKBROWSER_SHM_SIZE:-1gb}
+    init: true
+    shm_size: ${BROWSER_SHM_SIZE:-512m}
     environment:
-      CLOAKBROWSER_API_TOKEN: ${CLOAKBROWSER_API_TOKEN:-genchi-local-browser-token}
-      CLOAKBROWSER_AUTO_UPDATE: "false"
-      CLOAKBROWSER_PROFILE_DIR: /data/profile
-      CLOAKBROWSER_HEADLESS: ${CLOAKBROWSER_HEADLESS:-1}
-      CLOAKBROWSER_HUMANIZE: ${CLOAKBROWSER_HUMANIZE:-1}
-      CLOAKBROWSER_CONCURRENCY: ${CLOAKBROWSER_CONCURRENCY:-2}
-      CLOAKBROWSER_FINGERPRINT_SEED: ${CLOAKBROWSER_FINGERPRINT_SEED:-42426}
-      CLOAKBROWSER_LOCALE: ${CLOAKBROWSER_LOCALE:-ja-JP}
-      CLOAKBROWSER_LICENSE_KEY: ${CLOAKBROWSER_LICENSE_KEY:-}
+      BROWSER_API_TOKEN: ${BROWSER_API_TOKEN:-genchi-local-browser-token}
+      BROWSER_HEADLESS: ${BROWSER_HEADLESS:-1}
+      BROWSER_CONCURRENCY: ${BROWSER_CONCURRENCY:-1}
+      BROWSER_LOCALE: ${BROWSER_LOCALE:-ja-JP}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    volumes:
-      - ./services/browser/service.py:/app/genchi_browser_service.py:ro
-      - cloakbrowser-state:/data
     networks: [collector]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3003/health', timeout=3)"]
@@ -96,7 +91,7 @@ services:
     depends_on:
       control:
         condition: service_healthy
-      cloakbrowser:
+      browser:
         condition: service_healthy
     environment:
       <<: *database
@@ -107,8 +102,8 @@ services:
       ALLFEEDS_WORKER_CONCURRENCY: ${ALLFEEDS_WORKER_CONCURRENCY:-4}
       WORKER_STATE_PATH: /var/lib/allfeeds-worker/identity.json
       ASSET_STORE_PATH: /data/assets
-      CLOAKBROWSER_URL: http://cloakbrowser:3003
-      CLOAKBROWSER_API_TOKEN: ${CLOAKBROWSER_API_TOKEN:-genchi-local-browser-token}
+      BROWSER_URL: http://browser:3003
+      BROWSER_API_TOKEN: ${BROWSER_API_TOKEN:-genchi-local-browser-token}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
       - worker-state:/var/lib/allfeeds-worker
@@ -222,7 +217,6 @@ volumes:
   postgres-data:
   worker-state:
   asset-data:
-  cloakbrowser-state:
 
 networks:
   collector:

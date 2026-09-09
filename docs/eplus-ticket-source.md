@@ -28,7 +28,7 @@ Love Live、BanG Dream、世界计划等；无法可靠映射的条目归入 `an
 
 ## 详情解析
 
-普通 HTTP 是首选；仅当服务端 HTML 缺少活动结构时才通过私网 CloakBrowser 重新渲染。
+普通 HTTP 是首选；仅当服务端 HTML 缺少活动结构时才通过私网 Camoufox 重新渲染。
 保存的数据限定为：
 
 - JSON-LD `Event` 中的活动名、开演/结束时间和场馆；

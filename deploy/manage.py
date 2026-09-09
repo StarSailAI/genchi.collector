@@ -19,7 +19,7 @@ INTERNAL_KEYS = (
     "GENCHI_READER_PASSWORD",
     "CONTROL_API_TOKEN",
     "ENROLLMENT_TOKEN",
-    "CLOAKBROWSER_API_TOKEN",
+    "BROWSER_API_TOKEN",
     "PRODUCT_SECRET",
     "PRODUCT_ADMIN_TOKEN",
 )
@@ -58,6 +58,35 @@ def private_write(path: Path, text: str) -> None:
     with os.fdopen(fd, "w") as file:
         file.write(text)
     path.chmod(0o600)
+
+
+def migrate_browser_env(path: Path) -> None:
+    """Preserve the existing browser credential while retiring engine-specific options."""
+    values = read_env(path)
+    old_keys = [key for key in values if key.startswith("CLOAKBROWSER_")]
+    if not old_keys:
+        print("Browser env already uses the current configuration.")
+        return
+    directory = path.parent / ".deploy"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    backup_path = directory / "env-before-camoufox"
+    if not backup_path.exists():
+        private_write(backup_path, path.read_text())
+    retired = {"IMAGE", "LICENSE_KEY", "FINGERPRINT_SEED", "PROFILE_DIR", "HUMANIZE", "AUTO_UPDATE"}
+    lines = []
+    for line in path.read_text().splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key.strip().startswith("CLOAKBROWSER_"):
+            suffix = key.strip().removeprefix("CLOAKBROWSER_")
+            current = "BROWSER_" + suffix
+            if suffix in retired or current in values:
+                continue
+            if suffix == "URL":
+                value = value.replace("http://cloakbrowser:3003", "http://browser:3003")
+            line = current + "=" + value
+        lines.append(line)
+    private_write(path, "\n".join(lines) + "\n")
+    print("Browser env migrated; existing credentials preserved, previous env backed up privately.")
 
 
 def init_env(root: Path, site: str) -> None:
@@ -147,6 +176,9 @@ def prepare(root: Path) -> dict[str, str]:
     cookie_target = secret_dir / "x-cookies.json"
     if enable_x or not cookie_target.exists():
         private_write(cookie_target, json.dumps(cookies))
+    # The parent remains 0700 on the host. Bind only this file into the non-root
+    # browser container; no other secret directory contents become accessible.
+    cookie_target.chmod(0o644)
     source = (root / "genchi.collector/config/sources.yaml").read_text()
     if not enable_x:
         parts = re.split(r"(?m)(?=^  - id: )", source)
@@ -245,13 +277,16 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init")
     init.add_argument("--site-url", required=True)
-    for name in ("check", "apply", "status", "backup"):
+    for name in ("check", "apply", "status", "backup", "migrate-browser-env"):
         sub.add_parser(name)
     raw = sub.add_parser("compose", help="Forward arguments to backend or web Compose")
     raw.add_argument("target", choices=["backend", "web"])
     raw.add_argument("args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     root = args.root.resolve()
+    if args.command == "migrate-browser-env":
+        migrate_browser_env(root / ".env")
+        return
     if args.command == "init":
         init_env(root, args.site_url)
         return
@@ -301,7 +336,7 @@ def main() -> None:
                 "240",
                 "postgres",
                 "control",
-                "cloakbrowser",
+                "browser",
                 "worker",
                 "normalizer",
                 "product",

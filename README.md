@@ -12,7 +12,7 @@ Genchi 的采集、活动目录与提醒后端。持续收集日本二次元现�
 
 保留现有 12 个来源；新作品和艺人的采集范围仍由 `config/catalog.yaml` 手工启用。旧数据保留，活动更新使用稳定链接。
 
-- `control` / `worker` / `cloakbrowser`：调度与私网采集。
+- `control` / `worker` / `browser`：调度与私网采集。
 - `normalizer`：数据库迁移、原文索引、活动处理 Worker。
 - `product`：活动查询、邮箱登录、关注与审核 API。
 - `notifier` / `mailpit`：提醒规划、可靠投递与本地测试收信。

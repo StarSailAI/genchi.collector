@@ -11,12 +11,12 @@ services:
   worker:
     image: genchi/worker:${GENCHI_IMAGE_TAG:-current}
     mem_limit: 512m
-  cloakbrowser:
+  browser:
     mem_limit: 1400m
     environment:
-      CLOAKBROWSER_X_COOKIES_PATH: /run/genchi-secrets/x-cookies.json
+      BROWSER_X_COOKIES_PATH: /run/genchi-secrets/x-cookies.json
     volumes:
-      - ${GENCHI_ROOT}/secrets:/run/genchi-secrets:ro
+      - ${GENCHI_ROOT}/secrets/x-cookies.json:/run/genchi-secrets/x-cookies.json:ro
   normalizer:
     image: genchi/product:${GENCHI_IMAGE_TAG:-current}
     mem_limit: 384m
