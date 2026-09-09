@@ -22,7 +22,7 @@ python3 genchi.collector/deploy/manage.py check
 | `ADMIN_EMAIL` | 用于登录审核工作台的邮箱 |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | Chat Completions 兼容接口；三项一起填写 |
 | `RESEND_API_KEY` / `MAIL_FROM` | Resend API key 与已验证域名下的发件地址；登录邮件和提醒统一经 Resend 发送 |
-| `ENABLE_X` / `X_COOKIES_FILE` | 可选官推采集；指定服务器上的 Playwright Cookie 数组 JSON |
+| `ENABLE_X` / `X_AUTH_MODE` / `X_COOKIES_FILE` | 可选官推采集；默认 anonymous，无需 Cookie。仅 cookies 模式需指定服务器上的 Playwright Cookie 数组 JSON |
 
 模型未配置时，normalizer 运行 `idle` 健康模式，不领取或终结处理任务；原文采集与已迁移活动读取继续工作。补齐模型配置后执行 `apply` 才切换到处理模式。未启用 X 时生成的来源配置仅关闭现有四个官推来源，不扩大其他来源范围。既有采集历史保留。
 
@@ -34,7 +34,7 @@ Mailpit 仅保留为私网调试工具，不是生产投递的替代入口；既
 
 生产 Controller 从独立的 `/app/runtime/sources.yaml` 读取生成配置，不把它嵌套挂载到仓库配置目录中。升级时必须在容器内核对实际读取路径和开关，再检查数据库调度，避免替换代码文件后意外读回未经 `ENABLE_X` 过滤的来源配置。
 
-来源每天运行一次，cron 使用 `Asia/Tokyo`，错开执行以控制单机负载。北京时间的计划为：BanG Dream! 02:00、Girls Band Cry 02:20、Love Live! 02:40、偶像大师 03:10、ASOBI 03:40、e+ 04:10、ぴあ 05:20、Lawson 06:30。四个 X 来源预留 07:00–07:30；只有配置有效 Cookie 并设置 `ENABLE_X=true` 才启用。
+来源每天运行一次，cron 使用 `Asia/Tokyo`，错开执行以控制单机负载。北京时间的计划为：BanG Dream! 02:00、Girls Band Cry 02:20、Love Live! 02:40、偶像大师 03:10、ASOBI 03:40、e+ 04:10、ぴあ 05:20、Lawson 06:30。四个 X 来源使用 07:00–07:30；设置 `ENABLE_X=true` 即可启用默认的 Camoufox 匿名采集，先手动验收再恢复日调度。只有选择 cookies 模式才需要登录凭据。
 
 验收时逐个使用控制 API/CLI 注册手动任务，检查 `allfeeds.task_runs` 的最终状态和报告，再核对 `resources`、`resource_versions`、`genchi.catalog_jobs` 与审核/目录证据。正常抽取的待审核候选不等于采集失败；模型输出不完整、证据不符或原生场次关系缺失仍必须留在审核队列。
 

@@ -160,11 +160,15 @@ def prepare(root: Path) -> dict[str, str]:
         directory.chmod(0o700)
     enable_x = values.get("ENABLE_X", "false").lower() == "true"
     cookies = []
-    if enable_x:
+    auth_mode = values.get("X_AUTH_MODE", "anonymous")
+    if auth_mode not in {"anonymous", "cookies"}:
+        raise ValueError("X_AUTH_MODE must be anonymous or cookies")
+    values["X_AUTH_MODE"] = auth_mode
+    if enable_x and auth_mode == "cookies":
         cookie_path = Path(values.get("X_COOKIES_FILE", "")).expanduser()
         if not cookie_path.is_file() or cookie_path.stat().st_size > 131072:
             raise ValueError(
-                "ENABLE_X=true requires a Cookie JSON file in X_COOKIES_FILE (max 128KB)"
+                "X_AUTH_MODE=cookies requires a Cookie JSON file in X_COOKIES_FILE (max 128KB)"
             )
         cookies = json.loads(cookie_path.read_text())
         if (
@@ -174,7 +178,7 @@ def prepare(root: Path) -> dict[str, str]:
         ):
             raise ValueError("X_COOKIES_FILE must contain a nonempty Playwright cookies array")
     cookie_target = secret_dir / "x-cookies.json"
-    if enable_x or not cookie_target.exists():
+    if (enable_x and auth_mode == "cookies") or not cookie_target.exists():
         private_write(cookie_target, json.dumps(cookies))
     # The parent remains 0700 on the host. Bind only this file into the non-root
     # browser container; no other secret directory contents become accessible.

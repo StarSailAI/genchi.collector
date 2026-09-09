@@ -106,3 +106,22 @@ def test_deployment_env_literals_validation_and_model_activation(tmp_path):
     )
     with pytest.raises(ValueError, match="requires SMTP_SECURITY"):
         deploy.prepare(tmp_path)
+
+
+def test_x_anonymous_enable_needs_no_cookie_but_cookie_mode_is_explicit(tmp_path):
+    config = tmp_path / "genchi.collector/config"
+    config.mkdir(parents=True)
+    shutil.copy2(REPO / "config/sources.yaml", config / "sources.yaml")
+    deploy.init_env(tmp_path, "https://events.example.test")
+    env = tmp_path / ".env"
+    enabled = env.read_text().replace("ENABLE_X=false", "ENABLE_X=true")
+    env.write_text(enabled)
+    assert deploy.prepare(tmp_path)["X_AUTH_MODE"] == "anonymous"
+    sources = yaml.safe_load((tmp_path / ".deploy/sources.yaml").read_text())["sources"]
+    assert sum(s["enabled"] for s in sources) == 12
+    env.write_text(enabled.replace("X_AUTH_MODE=anonymous", "X_AUTH_MODE=cookies"))
+    with pytest.raises(ValueError, match="Cookie JSON"):
+        deploy.prepare(tmp_path)
+    env.write_text(enabled.replace("X_AUTH_MODE=anonymous", "X_AUTH_MODE=unknown"))
+    with pytest.raises(ValueError, match="X_AUTH_MODE"):
+        deploy.prepare(tmp_path)

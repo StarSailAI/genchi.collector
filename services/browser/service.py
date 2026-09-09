@@ -6,6 +6,8 @@ import logging
 import os
 import re
 import secrets
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -14,6 +16,7 @@ from aiohttp import web
 from camoufox.addons import DefaultAddons
 from camoufox.async_api import AsyncCamoufox
 from egress import BlockedDestination, EgressProxy, PublicResolver, public_url
+from x_parser import failure_code, parse_detail, parse_profile
 
 LOGGER = logging.getLogger("genchi.browser")
 HANDLE_RE = re.compile(r"^[A-Za-z0-9_]{1,15}$")
@@ -189,52 +192,40 @@ async def fetch(request: web.Request) -> web.Response:
     )
 
 
-EXTRACT_POSTS_JS = r"""
-(articles) => articles.map((article) => {
-  const attr = (selector, name) => {
-    const node = article.querySelector(selector);
-    return node ? (node.getAttribute(name) || node.textContent || '').trim() : null;
-  };
-  const text = (selector) => {
-    const node = article.querySelector(selector);
-    return node ? (node.innerText || node.textContent || '').trim() : null;
-  };
-  const permalink = Array.from(article.querySelectorAll('a[href*="/status/"]'))
-    .map((node) => node.href).find((value) => /\/status\/\d+/.test(value));
-  const idMatch = (article.dataset.tweetId || permalink || '').match(/(?:status\/)?(\d{6,})/);
-  const media = [];
-  for (const image of article.querySelectorAll('[data-testid="tweetPhoto"] img, video[poster]')) {
-    const url = image.currentSrc || image.src || image.poster;
-    if (url && !media.some((item) => item.url === url)) {
-      media.push({type: image.tagName === 'VIDEO' ? 'video' : 'image', url});
-    }
-  }
-  for (const image of article.querySelectorAll('meta[itemprop="image"], meta[itemprop="contentUrl"]')) {
-    const url = image.getAttribute('content');
-    if (url && !media.some((item) => item.url === url)) media.push({type: 'image', url});
-  }
-  const links = Array.from(article.querySelectorAll('a[href]'))
-    .map((node) => node.href).filter((value, index, values) => value && values.indexOf(value) === index);
-  const metric = (testId) => {
-    const node = article.querySelector(`[data-testid="${testId}"]`);
-    return node ? (node.getAttribute('aria-label') || node.innerText || '').trim() : null;
-  };
-  const articleBody = attr('[itemprop="articleBody"]', 'content') || text('[itemprop="articleBody"]') || text('[data-testid="tweetText"]');
-  return {
-    id: idMatch ? idMatch[1] : attr('[itemprop="identifier"]', 'content'),
-    url: permalink || attr('[itemprop="url"]', 'href') || attr('[itemprop="url"]', 'content'),
-    authorHandle: attr('[itemprop="author"] [itemprop="alternateName"]', 'content') || text('[data-testid="User-Name"] a[href^="/"] span'),
-    authorName: attr('[itemprop="author"] [itemprop="name"]', 'content') || text('[data-testid="User-Name"]'),
-    text: articleBody,
-    publishedAt: attr('time', 'datetime') || attr('[itemprop="datePublished"]', 'content'),
-    links,
-    hashtags: (articleBody || '').match(/#[\p{L}\p{N}_]+/gu) || [],
-    media,
-    pinned: /(^|\n)(Pinned|固定済み)(\n|$)/i.test(article.innerText || ''),
-    metrics: {reply: metric('reply'), repost: metric('retweet'), like: metric('like')}
-  };
-}).filter((post) => post.id && post.url && post.text)
-"""
+def _x_error_code(exc):
+    network = re.search(r"NS_ERROR_[A-Z_]+|NS_BINDING_ABORTED|net::ERR_[A-Z_]+", str(exc))
+    return network.group() if network else str(exc)[:160] if isinstance(exc, ValueError) else type(exc).__name__
+
+
+async def _read_x_page(page, url, diagnostics=None):
+    for attempt in range(2):
+        try:
+            response = await page.goto(url, wait_until="domcontentloaded", timeout=25_000)
+        except Exception as exc:
+            code = _x_error_code(exc)
+            transient = code.startswith(("NS_ERROR_NET_", "net::ERR_CONNECTION_")) or code in {"TimeoutError", "NS_BINDING_ABORTED"}
+            if attempt or not transient:
+                raise
+        else:
+            if attempt or response is None or response.status not in {502, 503, 504}:
+                break
+        if diagnostics is not None:
+            diagnostics["pageRetries"] += 1
+        await page.wait_for_timeout(2_000)
+    if response is not None and response.status >= 400:
+        raise ValueError(f"UPSTREAM_HTTP_{response.status}")
+    try:
+        await page.wait_for_selector('article a[href*="/status/"]', state="attached", timeout=12_000)
+    except Exception:
+        # Inspect the actual landing page to distinguish a login wall from
+        # missing markup; no articles is never a successful empty collection.
+        html = await page.content()
+        raise ValueError(failure_code(html, page.url)) from None
+    await page.wait_for_timeout(1_000)
+    html = await page.content()
+    if len(html.encode("utf-8")) > int(os.environ.get("BROWSER_MAX_HTML_BYTES", "12582912")):
+        raise ValueError("PAGE_TOO_LARGE")
+    return html
 
 
 async def extract_x_profile(request: web.Request) -> web.Response:
@@ -244,73 +235,88 @@ async def extract_x_profile(request: web.Request) -> web.Response:
     handle = str(payload.get("handle") or "").lstrip("@").strip()
     if not HANDLE_RE.fullmatch(handle):
         raise _json_error(400, "INVALID_HANDLE", "handle must be a valid X account name")
-    max_posts = max(1, min(200, int(payload.get("maxPosts") or 50)))
-    max_scrolls = max(0, min(30, int(payload.get("maxScrolls") or 8)))
+    max_posts = max(1, min(50, int(payload.get("maxPosts") or 50)))
+    max_scrolls = max(0, min(12, int(payload.get("maxScrolls", 8))))
     known_ids = {str(value) for value in payload.get("knownPostIds") or []}
+    mode = os.environ.get("BROWSER_X_AUTH_MODE", "anonymous")
     async with request.app["browser_semaphore"]:
-        page = await _new_page(request, authenticated=True)
+        page = await _new_page(request, authenticated=mode == "cookies")
+        posts, discovered, errors = {}, {}, []
+        diagnostics = {"pageRetries": 0}
+        deadline = time.monotonic() + 165
+        stop_reason, scrolls, malformed = "scroll_limit", 0, 0
         try:
-
             async def guard(route: Any, navigation_request: Any) -> None:
-                if (
-                    navigation_request.is_navigation_request()
-                    and navigation_request.frame == page.main_frame
-                ):
-                    target = urlsplit(navigation_request.url)
-                    if target.hostname not in X_HOSTS:
+                if navigation_request.is_navigation_request() and navigation_request.frame == page.main_frame:
+                    if urlsplit(navigation_request.url).hostname not in X_HOSTS:
                         await route.abort("blockedbyclient")
                         return
                 if await _guard_public(route, navigation_request):
-                    await route.continue_()
+                    if _enabled("BROWSER_BLOCK_MEDIA", "1") and navigation_request.resource_type in {"image", "media", "font"}:
+                        await route.abort("blockedbyclient")
+                    else:
+                        await route.continue_()
 
             await page.route("**/*", guard)
-            await page.goto(
-                f"https://x.com/{handle}", wait_until="domcontentloaded", timeout=90_000
-            )
-            await page.wait_for_timeout(3_000)
-            posts: dict[str, dict[str, Any]] = {}
+            html = await _read_x_page(page, f"https://x.com/{handle}", diagnostics)
             no_growth = 0
-            for _ in range(max_scrolls + 1):
-                batch = await page.locator(
-                    'article[data-tweet-id], article[itemtype*="SocialMediaPosting"], article[data-testid="tweet"]'
-                ).evaluate_all(EXTRACT_POSTS_JS)
-                before = len(posts)
+            for iteration in range(max_scrolls + 1):
+                batch, missing = parse_profile(html)
+                malformed = max(malformed, missing)
+                before = len(discovered)
                 for post in batch:
-                    posts[str(post["id"])] = post
-                if len(posts) >= max_posts or (known_ids and known_ids.intersection(posts)):
+                    discovered[post["id"]] = post
+                no_growth = no_growth + 1 if len(discovered) == before else 0
+                if len(discovered) >= max_posts:
+                    stop_reason = "post_limit"
                     break
-                no_growth = no_growth + 1 if len(posts) == before else 0
                 if no_growth >= 2:
+                    stop_reason = "public_window_end"
                     break
-                await page.mouse.wheel(0, 1800)
-                await page.wait_for_timeout(1_500)
-            body_text = (await page.locator("body").inner_text(timeout=5_000))[:10_000]
-            final_url = page.url
+                if iteration < max_scrolls:
+                    await page.mouse.wheel(0, 1800)
+                    await page.wait_for_timeout(1_500)
+                    scrolls += 1
+                    html = await page.content()
+            if not discovered:
+                raise ValueError(failure_code(html, page.url))
+            # A known pinned post must not stop discovery. Read the entire
+            # bounded public window, then hydrate each visible post separately.
+            for stub in list(discovered.values())[:max_posts]:
+                if time.monotonic() >= deadline:
+                    errors.append({"id": stub["id"], "code": "DETAIL_TIME_BUDGET"})
+                    continue
+                try:
+                    async with asyncio.timeout(max(1, deadline - time.monotonic())):
+                        detail = await _read_x_page(page, stub["url"], diagnostics)
+                        post = parse_detail(detail, stub["url"])
+                    posts[post["id"]] = post
+                except Exception as exc:
+                    # Diagnostic text consists only of our own parser errors;
+                    # browser exceptions can contain URLs or page content.
+                    code = _x_error_code(exc)
+                    errors.append({"id": stub["id"], "code": code[:160]})
+            if not posts:
+                raise ValueError(errors[0]["code"] if errors else "NO_COMPLETE_POSTS")
         except Exception as exc:
-            LOGGER.warning("X extraction failed handle=%s error=%s", handle, type(exc).__name__)
-            raise _json_error(502, "EXTRACTION_FAILED", type(exc).__name__) from exc
+            code = _x_error_code(exc)
+            LOGGER.warning("X extraction failed handle=%s code=%s", handle, code[:160])
+            raise _json_error(409 if code in {"LOGIN_REQUIRED", "CHALLENGE", "EMPTY_OR_MARKUP_CHANGED"} else 502,
+                              code[:160], "X public extraction did not return complete posts") from exc
         finally:
             await _close_page(request, page)
-    lowered = body_text.lower()
-    if not posts:
-        marker = next((value for value in CHALLENGE_MARKERS if value in lowered), None)
-        if marker:
-            raise _json_error(409, "CHALLENGE", f"X challenge detected: {marker}")
-        if "/login" in final_url or "log in to x" in lowered:
-            raise _json_error(409, "LOGIN_REQUIRED", "X requires an authenticated profile")
-        raise _json_error(409, "EMPTY_OR_MARKUP_CHANGED", "no semantic X posts were found")
-    ordered = sorted(
-        posts.values(), key=lambda value: value.get("publishedAt") or "", reverse=True
-    )[:max_posts]
+    overlap = [p["id"] for p in discovered.values() if p["id"] in known_ids and not p["pinned"]]
+    gap_possible = bool(known_ids) and not overlap
+    coverage = {**diagnostics, "mode": mode, "scope": "visible_profile_window", "stopReason": stop_reason,
+                "scrolls": scrolls, "discovered": len(discovered), "completed": len(posts),
+                "malformedArticles": malformed, "previousNonPinnedOverlap": len(overlap),
+                "limitReached": stop_reason in {"post_limit", "scroll_limit"},
+                "gapPossible": gap_possible, "bootstrap": not bool(known_ids)}
     return web.json_response(
-        {
-            "profile": {"handle": handle, "url": f"https://x.com/{handle}"},
-            "posts": ordered,
-            "observedAt": __import__("datetime")
-            .datetime.now(__import__("datetime").UTC)
-            .isoformat(),
-            "extractorVersion": "1.0.0",
-        },
+        {"profile": {"handle": handle, "url": f"https://x.com/{handle}"},
+         "posts": sorted(posts.values(), key=lambda p: p["publishedAt"], reverse=True),
+         "observedAt": datetime.now(UTC).isoformat(), "extractorVersion": "2.0.0",
+         "coverage": coverage, "errors": errors},
         headers={"Cache-Control": "no-store"},
     )
 
@@ -343,7 +349,7 @@ async def start_browser(app: web.Application) -> None:
             ignore_https_errors=False,
         )
         cookie_path = os.environ.get("BROWSER_X_COOKIES_PATH", "").strip()
-        if cookie_path:
+        if cookie_path and os.environ.get("BROWSER_X_AUTH_MODE", "anonymous") == "cookies":
             cookies = json.loads(Path(cookie_path).read_text())
             await app["x_context"].add_cookies(cookies)
     except BaseException:

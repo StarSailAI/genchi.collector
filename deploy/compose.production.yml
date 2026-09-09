@@ -18,6 +18,7 @@ services:
   browser:
     mem_limit: 1400m
     environment:
+      BROWSER_X_AUTH_MODE: ${X_AUTH_MODE:-anonymous}
       BROWSER_X_COOKIES_PATH: /run/genchi-secrets/x-cookies.json
     volumes:
       - ${GENCHI_ROOT}/secrets/x-cookies.json:/run/genchi-secrets/x-cookies.json:ro

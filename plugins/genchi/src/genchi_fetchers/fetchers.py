@@ -156,16 +156,35 @@ class XProfileFetcher(FetcherPlugin):
             },
             timeout=210,
         )
+        if response.status_code in {401, 403}:
+            raise AuthenticationError("browser API authorization failed")
+        if response.status_code == 429:
+            raise RateLimitError("X is rate limited", retry_after_seconds=SafeHttpClient._retry_after(response, 60))
         if response.status_code >= 400:
             try:
                 detail = response.json().get("code") or response.json().get("detail")
             except ValueError:
                 detail = response.text[:200]
+            if detail == "UPSTREAM_HTTP_429":
+                raise RateLimitError("X public page is rate limited", retry_after_seconds=60)
+            if detail == "LOGIN_REQUIRED":
+                raise AuthenticationError("X currently requires login for this public page")
             raise TransientError(f"X extraction failed: {detail}")
         payload = response.json()
         posts = payload.get("posts") or []
         if not posts:
             raise TransientError("X extraction returned no posts")
+        # Validate the complete response before writing any post. Identity and
+        # absolute publication time must come from the same permalink page.
+        for post in posts:
+            identity = re.fullmatch(r"/([A-Za-z0-9_]{1,15})/status/(\d{6,25})/?", urlsplit(post.get("url") or "").path)
+            url = urlsplit(post.get("url") or "")
+            stamp = _time(post.get("publishedAt"))
+            if (not identity or identity[2] != str(post.get("id")) or url.scheme != "https"
+                    or url.hostname not in {"x.com", "twitter.com", "www.x.com", "www.twitter.com"}
+                    or not stamp or (not post.get("text") and not post.get("media"))
+                    or post.get("textComplete") is False):
+                raise TransientError("X extraction returned an incomplete or mismatched post")
         observed_at = _time(payload.get("observedAt")) or datetime.now(UTC)
         emitted_ids: list[str] = []
         for post in posts:
@@ -190,18 +209,28 @@ class XProfileFetcher(FetcherPlugin):
                         "links": post.get("links") or [],
                         "hashtags": post.get("hashtags") or [],
                         "media": post.get("media") or [],
-                        "metrics": post.get("metrics") or {},
-                        "pinned": bool(post.get("pinned")),
+                        # Likes and pinned position are volatile timeline state,
+                        # not new evidence versions that should trigger the LLM.
+                        "quoted_post_urls": post.get("quotedPostUrls") or [],
+                        "text_complete": post.get("textComplete", True),
+                        "publication_time_source": post.get("publicationTimeSource"),
                         "extractor_version": payload.get("extractorVersion"),
                     },
                     tags=request.tags,
                 )
             )
         merged_ids = list(dict.fromkeys([*emitted_ids, *known_ids]))[:200]
-        context.set_checkpoint(
-            {"known_post_ids": merged_ids, "last_success_at": observed_at.isoformat()}
-        )
-        return FetchReport(details={"handle": config.handle, "posts": len(posts)})
+        coverage = payload.get("coverage") or {}
+        errors = payload.get("errors") or []
+        if not errors and not coverage.get("malformedArticles"):
+            context.set_checkpoint(
+                {"known_post_ids": merged_ids, "last_success_at": observed_at.isoformat(),
+                 "coverage": coverage}
+            )
+        partial = bool(errors or coverage.get("malformedArticles") or coverage.get("gapPossible") or coverage.get("limitReached"))
+        return FetchReport(status="partial" if partial else "succeeded", details={
+            "handle": config.handle, "posts": len(posts), "coverage": coverage, "errors": errors,
+        })
 
 
 def _plain_html(value: Any) -> str:

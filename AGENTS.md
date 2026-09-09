@@ -15,7 +15,9 @@ addition to the framework rules below, preserve these boundaries:
 2. Raw framework state belongs to `allfeeds`; curated website data belongs to
    `genchi`. Do not move raw crawling concerns into the curated schema.
 3. X collection must go through the private, authenticated Camoufox adapter.
-   Do not expose arbitrary JavaScript execution or a public browser port.
+   API authentication is separate from X login: use anonymous public contexts by
+   default; account cookies require explicit configuration. Do not expose
+   arbitrary JavaScript execution or a public browser port.
 4. Upstream URLs and page contents remain untrusted. Keep SSRF checks, bounded
    payloads, stable external IDs and idempotent writes.
 5. Every curated schema change updates `SchemaContract`; incompatible changes
