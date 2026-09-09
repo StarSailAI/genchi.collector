@@ -15,6 +15,7 @@ from allfeeds_sdk import (
     FetchContext,
     FetchRequest,
     RateLimitError,
+    TransientError,
     UpstreamHTTPError,
 )
 from bs4 import BeautifulSoup
@@ -250,6 +251,31 @@ def test_lawson_period_pass_preserves_range_and_admission_conditions():
     assert events[0]["endsAt"] == "2026-09-30"
     assert "土日祝は入場不可" in events[0]["ticketWindows"][0]["notes"]
     assert events[0]["ticketWindows"][0]["nativePerformanceKeys"] == ["native-pass-id"]
+
+
+@pytest.mark.parametrize("known_empty", [True, False])
+def test_lawson_empty_search_requires_the_official_empty_state(monkeypatch, known_empty):
+    def render(_browser, url, **kwargs):
+        assert "#navSearchCount.NoResult" in kwargs["selector"]
+        return ('<div id="navSearchCount" class="NoResult"><p>条件に一致するチケットは見つかりませんでした。</p></div>'
+                if known_empty else '<div id="layout_search_result">Loading...</div>'), url
+
+    monkeypatch.setattr(BrowserClient, "render", render)
+    records, state = [], {}
+    request = FetchRequest(task_id=1, source_id="lawson", operation="fetch", tags=(), config={
+        "search_keywords": ["作品名"], "queries_per_run": 1,
+    })
+    if known_empty:
+        result = LawsonTicketFetcher().fetch(context(records, state), request)
+        assert result.status == "succeeded"
+        assert result.details["search_pages"] == 1
+        assert result.details["empty_queries"] == ["作品名"]
+        assert result.details["results"] == 0
+    else:
+        with pytest.raises(TransientError, match="neither results nor an explicit empty state"):
+            LawsonTicketFetcher().fetch(context(records, state), request)
+        assert state == {}
+    assert records == []
 
 
 def test_lawson_native_round_separates_pass_from_dated_ticket_and_survives_deadline_change():

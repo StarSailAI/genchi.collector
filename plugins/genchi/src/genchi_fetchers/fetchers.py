@@ -2047,11 +2047,19 @@ class LawsonTicketFetcher(FetcherPlugin):
         ]
         parsed_results: dict[str, dict[str, Any]] = {}
         errors: list[str] = []
+        empty_queries: list[str] = []
         pages = 0
         for keyword in selected:
             url = f"https://l-tike.com/search/?{urlencode({'keyword': keyword})}"
             try:
-                html, final_url = browser.render(url, selector="#layout_search_result")
+                html, final_url = browser.render(url, selector="#layout_search_result, #navSearchCount.NoResult")
+                soup = BeautifulSoup(html, "lxml")
+                if not soup.select_one(".ResultBox"):
+                    empty = soup.select_one("#navSearchCount.NoResult")
+                    if empty and "条件に一致するチケットは見つかりませんでした" in empty.get_text(" ", strip=True):
+                        empty_queries.append(keyword)
+                    else:
+                        raise TransientError("Lawson search has neither results nor an explicit empty state")
             except RateLimitError:
                 raise
             except TransientError as exc:
@@ -2144,6 +2152,7 @@ class LawsonTicketFetcher(FetcherPlugin):
             details={
                 "search_pages": pages,
                 "queries": selected,
+                "empty_queries": empty_queries,
                 "results": emitted,
                 "events": event_count,
                 "ticket_windows": ticket_count,

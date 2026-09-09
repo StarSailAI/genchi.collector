@@ -20,6 +20,7 @@ if since.tzinfo is None:
 stats = defaultdict(Counter)
 issues = []
 with Catalog().connect() as conn:
+    conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
     subjects = conn.execute("SELECT * FROM catalog_subjects").fetchall()
     resources = conn.execute("""SELECT r.*,j.status job_status,j.content_hash job_hash,v.id version_id FROM allfeeds.resources r
         LEFT JOIN catalog_jobs j ON j.resource_id=r.id

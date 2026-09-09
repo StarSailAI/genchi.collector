@@ -75,14 +75,21 @@ def repair(conn, resources, subjects, *, apply=False):
         scopes = {row["occurrence_id"] for row in conn.execute(
             "SELECT occurrence_id FROM catalog_milestone_scopes WHERE milestone_id=%s", (old["id"],),
         ).fetchall()}
-        # Only a proven split narrows scopes. An ordinary ID alias must not
-        # discard older occurrences absent from today's bounded search results.
-        removed = sorted(scopes - chosen["scopes"]) if len(variants) > 1 else []
+        # Remove only scopes explicitly assigned to another current variant.
+        # Absence from a bounded search is not proof that a historical scope
+        # was wrong, even when the round itself has to be split.
+        other_scopes = set().union(*(value["scopes"] for key, value in variants.items() if key != new_key))
+        removed = sorted((scopes & other_scopes) - chosen["scopes"])
         if existing and not removed and old["round_key"] == chosen["node"].round_key:
             continue
         plans.append({"old_key": old_key, "new_key": new_key, "milestone_id": old["id"],
                       "activity_id": old["activity_id"], "new_round_key": chosen["node"].round_key,
                       "variants": len(variants), "removed_scopes": removed})
+    targets = {}
+    for plan in plans:
+        previous = targets.setdefault(plan["new_key"], plan["milestone_id"])
+        if previous != plan["milestone_id"]:
+            raise ValueError(f"Multiple existing rounds claim one native reception: {plan['new_key']}")
     if apply:
         for plan in plans:
             conn.execute(

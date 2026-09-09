@@ -1135,6 +1135,11 @@ def test_lawson_round_repair_preserves_legacy_id_and_splits_scopes(catalog, monk
     weekend = weekend.model_copy(update={'milestones': [old_node]})
     catalog.publish(weekday)
     catalog.publish(weekend)
+    historical = weekend.model_copy(update={
+        'source_key': 'older-weekend', 'occurrence_key': 'older-weekend',
+        'time': Moment(precision='TIME', starts_at=NOW + timedelta(days=19)),
+    })
+    catalog.publish(historical)
     weekday_node = old_node.model_copy(update={
         'source_key': 'native-ticket:lawson:weekday', 'round_key': 'lawson:weekday', 'notes': 'weekday',
         'time': Moment(precision='TIME', starts_at=old_node.time.starts_at, ends_at=NOW + timedelta(days=4)),
@@ -1149,7 +1154,7 @@ def test_lawson_round_repair_preserves_legacy_id_and_splits_scopes(catalog, monk
         old_id = conn.execute("SELECT id FROM catalog_milestones WHERE round_key='lawson:old'").fetchone()['id']
         plan = repair(conn, resources, [])
         assert len(plan) == 1 and len(plan[0]['removed_scopes']) == 1
-        assert conn.execute("SELECT count(*) n FROM catalog_milestone_scopes WHERE milestone_id=%s", (old_id,)).fetchone()['n'] == 2
+        assert conn.execute("SELECT count(*) n FROM catalog_milestone_scopes WHERE milestone_id=%s", (old_id,)).fetchone()['n'] == 3
         old_revision = conn.execute("SELECT revision FROM catalog_milestones WHERE id=%s", (old_id,)).fetchone()['revision']
         assert repair(conn, resources, [], apply=True) == plan
     for item in items:
@@ -1159,5 +1164,5 @@ def test_lawson_round_repair_preserves_legacy_id_and_splits_scopes(catalog, monk
         assert len(rounds) == 2
         assert next(row['id'] for row in rounds if row['round_key'] == 'lawson:weekend') == old_id
         assert conn.execute("SELECT revision FROM catalog_milestones WHERE id=%s", (old_id,)).fetchone()['revision'] == old_revision
-        assert conn.execute("SELECT count(*) n FROM catalog_milestone_scopes WHERE milestone_id=%s", (old_id,)).fetchone()['n'] == 1
+        assert conn.execute("SELECT count(*) n FROM catalog_milestone_scopes WHERE milestone_id=%s", (old_id,)).fetchone()['n'] == 2
         assert repair(conn, resources, [], apply=True) == []
