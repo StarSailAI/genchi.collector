@@ -248,6 +248,11 @@ seconds and avoid expensive per-row API calls.
 
 ## Development Workflow
 
+Live crawling, browser probes and upstream/API acceptance run on the deployed
+server only. Keep local worker, normalizer, notifier and collection browser
+stopped; local work is limited to editing and offline tests. Production sources
+run once daily, with staggered schedules, after source-by-source acceptance.
+
 Python 3.11 or newer is required. From the repository root:
 
 ```bash

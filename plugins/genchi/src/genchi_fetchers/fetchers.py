@@ -3,23 +3,28 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 import unicodedata
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from html import unescape
 from typing import Any
 from urllib.parse import parse_qs, quote, urlencode, urljoin, urlsplit
+from zoneinfo import ZoneInfo
 
 import requests
 from allfeeds_builtin.http import SafeHttpClient
 from allfeeds_contracts import FetchReport, ResourceRecord
 from allfeeds_sdk import (
+    AuthenticationError,
     ConfigurationError,
     FetchContext,
     FetcherManifest,
     FetcherPlugin,
     FetchRequest,
+    RateLimitError,
     TransientError,
+    UpstreamHTTPError,
 )
 from bs4 import BeautifulSoup
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -45,8 +50,11 @@ def _time(value: Any) -> datetime | None:
 
 
 def _text(node: Any, selector: str | None) -> str | None:
-    selected = node.select_one(selector) if selector else None
-    return selected.get_text("\n", strip=True) if selected else None
+    for selected in node.select(selector) if selector else []:
+        value = selected.get_text("\n", strip=True)
+        if value:
+            return value
+    return None
 
 
 def _meta(soup: BeautifulSoup, *names: str) -> str | None:
@@ -61,19 +69,53 @@ class BrowserClient:
     def __init__(self, base_url: str, token: str):
         self.base_url = base_url.rstrip("/")
         self.headers = {"Authorization": f"Bearer {token}"}
+        self.rate_limit_retries = 0
 
     def render(self, url: str, *, selector: str | None = None) -> tuple[str, str]:
+        # Public navigation can fail briefly even while the browser is healthy.
+        # Retry this page, not the entire multi-page source. HTTP/policy/auth
+        # failures are not made retryable by this boundary.
+        for attempt in range(3):
+            try:
+                return self._render_once(url, selector=selector)
+            except RateLimitError as exc:
+                # Honor a short server cooldown on this page before restarting
+                # a long crawl. Long or repeated limits return to the scheduler.
+                delay = max(60, exc.retry_after_seconds or 60) * (attempt + 1)
+                if attempt == 2 or delay > 180:
+                    raise
+                self.rate_limit_retries += 1
+                time.sleep(delay)
+            except (TransientError, requests.ConnectionError, requests.Timeout) as exc:
+                if attempt == 2:
+                    raise TransientError(
+                        f"browser page failed after 3 attempts: {type(exc).__name__}"
+                    ) from exc
+                time.sleep(2 ** (attempt + 1))
+        raise AssertionError("unreachable")
+
+    def _render_once(self, url: str, *, selector: str | None = None) -> tuple[str, str]:
         response = requests.post(
             f"{self.base_url}/fetch",
             headers=self.headers,
             json={"url": url, "selector": selector, "waitSeconds": 3, "timeoutSeconds": 90},
             timeout=110,
         )
+        if response.status_code in {401, 403}:
+            raise AuthenticationError(f"browser API authorization failed: HTTP {response.status_code}")
+        if response.status_code == 400:
+            raise ConfigurationError("browser rejected the page request or destination")
+        if response.status_code == 429:
+            raise RateLimitError("browser API is rate limited", retry_after_seconds=SafeHttpClient._retry_after(response, 60))
         if response.status_code >= 400:
             raise TransientError(f"browser render failed with HTTP {response.status_code}")
         upstream_status = response.headers.get("X-Genchi-Browser-Upstream-Status")
+        if upstream_status == "429":
+            raise RateLimitError("browser upstream is rate limited", retry_after_seconds=SafeHttpClient._retry_after(response, 60))
         if upstream_status and int(upstream_status) >= 500:
             raise TransientError(f"browser upstream returned HTTP {upstream_status}")
+        if upstream_status and int(upstream_status) >= 400:
+            raise UpstreamHTTPError(int(upstream_status), url, response_text=response.text)
         return response.text, response.headers.get("X-Genchi-Browser-Final-URL", url)
 
 
@@ -646,7 +688,7 @@ def _eplus_jst(value: str | None) -> str | None:
         return None
     raw = str(value).strip()
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
-        return f"{raw}T00:00:00+09:00"
+        return raw
     if re.search(r"(?:Z|[+-]\d{2}:\d{2})$", raw):
         return raw
     return f"{raw}+09:00"
@@ -788,6 +830,11 @@ def _eplus_parse_detail(
         article = articles[index] if index < len(articles) else None
         windows = _eplus_ticket_windows(article) if article else []
         starts_at = _eplus_jst(event.get("startDate"))
+        if starts_at and len(starts_at) == 10 and article:
+            clocks = set(re.findall(r"開演\s*[：:]?\s*(\d{1,2}):(\d{2})", article.get_text(" ", strip=True)))
+            if len(clocks) == 1:
+                hour, minute = next(iter(clocks))
+                starts_at = f"{starts_at}T{int(hour):02d}:{minute}:00+09:00"
         events.append(
             {
                 "id": variant,
@@ -838,6 +885,22 @@ def _eplus_parse_detail(
         "events": events,
         "media": [{"type": "image", "url": image}] if image else [],
     }
+
+
+def _select_ticket_details(candidates, discoveries, limit: int, cursor: int):
+    """Reserve refresh capacity and rotate discovery; fixed first pages cannot starve the tail."""
+    refresh = [
+        item for item in candidates.items()
+        if any(d.get("kind") == "refresh" for d in discoveries.get(item[0], []))
+    ][:limit]
+    refresh_ids = {item[0] for item in refresh}
+    other = [item for item in candidates.items() if item[0] not in refresh_ids]
+    if not other:
+        return refresh, 0
+    start = cursor % len(other)
+    count = min(limit - len(refresh), len(other))
+    selected = [other[(start + index) % len(other)] for index in range(count)]
+    return refresh + selected, (start + count) % len(other)
 
 
 class EplusTicketConfig(BaseModel):
@@ -915,6 +978,8 @@ class EplusTicketFetcher(FetcherPlugin):
                 raise TransientError("e+ returned its congestion page")
             if not require_events or _eplus_jsonld_events(BeautifulSoup(direct_html, "lxml")):
                 return direct_html
+        except RateLimitError:
+            raise
         except TransientError:
             if not browser:
                 raise
@@ -962,6 +1027,7 @@ class EplusTicketFetcher(FetcherPlugin):
         errors: list[str] = []
         list_pages = 0
         seed_pages = 0
+        missing_details: list[str] = []
 
         def add_candidate(
             page_id: str,
@@ -984,6 +1050,8 @@ class EplusTicketFetcher(FetcherPlugin):
         for seed_url in config.seed_urls:
             try:
                 html = self._html(client, browser, seed_url)
+            except RateLimitError:
+                raise
             except TransientError as exc:
                 errors.append(f"{seed_url}: {exc}")
                 continue
@@ -1013,6 +1081,15 @@ class EplusTicketFetcher(FetcherPlugin):
                     page_url = discovered_next
                 try:
                     html = self._html(client, browser, page_url)
+                except UpstreamHTTPError as exc:
+                    if exc.status_code in {404, 410} and page_index > 0:
+                        # Inventory shrinks as ticket pages expire. A stale saved
+                        # pagination cursor must not terminate the entire source.
+                        page_cursors.pop(root, None)
+                        break
+                    raise
+                except RateLimitError:
+                    raise
                 except TransientError as exc:
                     errors.append(f"{page_url}: {exc}")
                     break
@@ -1054,7 +1131,11 @@ class EplusTicketFetcher(FetcherPlugin):
         event_count = 0
         ticket_count = 0
         tracked_set = dict.fromkeys(tracked)
-        for page_id, detail_url in list(candidates.items())[: config.max_detail_pages]:
+        selected_details, detail_cursor = _select_ticket_details(
+            candidates, discoveries, config.max_detail_pages,
+            int(checkpoint.get("detail_cursor") or 0),
+        )
+        for page_id, detail_url in selected_details:
             discovery = discoveries.get(page_id, [])
             category_discovered = any(bool(item.get("trustedCategory")) for item in discovery)
             try:
@@ -1067,6 +1148,14 @@ class EplusTicketFetcher(FetcherPlugin):
                     category_discovered=category_discovered,
                     max_content_chars=config.max_content_chars,
                 )
+            except UpstreamHTTPError as exc:
+                if exc.status_code not in {404, 410}:
+                    raise
+                missing_details.append(detail_url)
+                tracked_set.pop(detail_url, None)
+                continue
+            except RateLimitError:
+                raise
             except TransientError as exc:
                 errors.append(f"{detail_url}: {exc}")
                 continue
@@ -1118,6 +1207,7 @@ class EplusTicketFetcher(FetcherPlugin):
                 "category_page_cursors": page_cursors,
                 "tracked_detail_urls": tracked,
                 "refresh_cursor": refresh_cursor,
+                "detail_cursor": detail_cursor,
             }
         )
         return FetchReport(
@@ -1126,11 +1216,13 @@ class EplusTicketFetcher(FetcherPlugin):
                 "list_pages": list_pages,
                 "seed_pages": seed_pages,
                 "candidates": len(candidates),
+                "selected_details": len(selected_details),
                 "details": emitted,
                 "rejected": rejected,
                 "events": event_count,
                 "ticket_windows": ticket_count,
                 "tracked": len(tracked),
+                "missing_details": missing_details,
                 "errors": errors[:10],
             },
         )
@@ -1364,6 +1456,10 @@ def _pia_performances(
             performance_id = hashlib.sha256(f"{title}:{starts_at}:{index}".encode()).hexdigest()[
                 :24
             ]
+        # Retain the established upstream/fallback ID, but don't turn an
+        # unspecified opening time into a midnight performance.
+        if not start_match:
+            starts_at = starts_at[:10]
         venue_text = venue_node.get_text(" ", strip=True) if venue_node else ""
         venue_text = re.sub(r"^会場\s*[:：]\s*", "", venue_text)
         prefecture_match = re.search(r"[（(]([^()（）]+?[都道府県])[）)]", venue_text)
@@ -1455,6 +1551,8 @@ class PiaTicketFetcher(FetcherPlugin):
             direct_html = _response_html(response)
             if not selector or BeautifulSoup(direct_html, "lxml").select_one(selector):
                 return direct_html
+        except RateLimitError:
+            raise
         except TransientError:
             if not browser:
                 raise
@@ -1497,6 +1595,8 @@ class PiaTicketFetcher(FetcherPlugin):
         errors: list[str] = []
         discovery_pages = 0
         sale_pages = 0
+        missing_details: list[str] = []
+        missing_sales: list[str] = []
 
         def add_candidate(
             page_id: str,
@@ -1556,6 +1656,8 @@ class PiaTicketFetcher(FetcherPlugin):
         for url, discovery_kind, search_query, trusted_category in discovery_urls:
             try:
                 html = self._html(client, browser, url)
+            except RateLimitError:
+                raise
             except TransientError as exc:
                 errors.append(f"{url}: {exc}")
                 continue
@@ -1591,9 +1693,21 @@ class PiaTicketFetcher(FetcherPlugin):
         event_count = 0
         ticket_count = 0
         tracked_set = dict.fromkeys(tracked)
-        for page_id, detail_url in list(candidates.items())[: config.max_detail_pages]:
+        selected_details, detail_cursor = _select_ticket_details(
+            candidates, discoveries, config.max_detail_pages,
+            int(checkpoint.get("detail_cursor") or 0),
+        )
+        for page_id, detail_url in selected_details:
             try:
                 detail_html = self._html(client, browser, detail_url)
+            except UpstreamHTTPError as exc:
+                if exc.status_code not in {404, 410}:
+                    raise
+                missing_details.append(detail_url)
+                tracked_set.pop(detail_url, None)
+                continue
+            except RateLimitError:
+                raise
             except TransientError as exc:
                 errors.append(f"{detail_url}: {exc}")
                 continue
@@ -1618,6 +1732,13 @@ class PiaTicketFetcher(FetcherPlugin):
                         sale_url,
                         selector=".Y15-regular-section",
                     )
+                except UpstreamHTTPError as exc:
+                    if exc.status_code not in {404, 410}:
+                        raise
+                    missing_sales.append(sale_url)
+                    continue
+                except RateLimitError:
+                    raise
                 except TransientError as exc:
                     errors.append(f"{sale_url}: {exc}")
                     continue
@@ -1688,6 +1809,7 @@ class PiaTicketFetcher(FetcherPlugin):
             {
                 "last_success_at": datetime.now(UTC).isoformat(),
                 "keyword_cursor": keyword_cursor,
+                "detail_cursor": detail_cursor,
                 "tracked_detail_urls": list(tracked_set)[-config.max_tracked_details :],
                 "refresh_cursor": refresh_cursor,
             }
@@ -1697,11 +1819,15 @@ class PiaTicketFetcher(FetcherPlugin):
             details={
                 "discovery_pages": discovery_pages,
                 "candidates": len(candidates),
+                "selected_details": len(selected_details),
                 "details": emitted,
                 "sale_pages": sale_pages,
                 "events": event_count,
                 "ticket_windows": ticket_count,
                 "tracked": min(len(tracked_set), config.max_tracked_details),
+                "missing_details": missing_details,
+                "missing_sales": missing_sales,
+                "page_rate_limit_retries": browser.rate_limit_retries if browser else 0,
                 "errors": errors[:10],
             },
         )
@@ -1759,7 +1885,14 @@ def _lawson_parse_results(
                 for value in str(attrs.get("data-prfdate") or "").split(",")
                 if re.fullmatch(r"20\d{6}", value)
             ]
+            # Search results sometimes describe a period pass, not two shows at
+            # the endpoints. Preserve the range and admission restrictions.
+            explicit_dates = bool(dates)
             dates = list(dict.fromkeys(dates)) or _lawson_dates(info.get("公演日", ""))
+            period_end = None
+            if not explicit_dates and len(dates) == 2 and re.search(r"[～〜~－–—]|から", info.get("公演日", "")):
+                dates, period_end = dates[:1], dates[-1]
+            admission = table.get_text(" ", strip=True)
             label_parts = [
                 node.get_text(" ", strip=True)
                 for node in (
@@ -1774,11 +1907,20 @@ def _lawson_parse_results(
             timestamps = _ticket_timestamps(period)
             if not timestamps:
                 continue
-            window_id = hashlib.sha256(
+            legacy_window_id = hashlib.sha256(
                 f"{lcode}:{_eplus_normalize(label)}:{timestamps[0]}".encode()
             ).hexdigest()[:20]
+            # The same L-code can sell weekday passes and dated tickets with
+            # identical labels/opening times. Lawson's reception schedule is
+            # the identity, not a translated label or a mutable deadline.
+            schedule = str(attrs.get("data-schduleno") or "").strip()
+            reception = str(attrs.get("data-rcptypename") or "").strip()
+            native_round = f"{lcode}:{reception}:{schedule}" if lcode and reception and schedule else None
+            window_id = hashlib.sha256(f"lawson:reception:{native_round}".encode()).hexdigest()[:20] if native_round else legacy_window_id
             window = {
                 "id": window_id,
+                "legacyId": legacy_window_id,
+                "nativeReceptionKey": native_round,
                 "label": label,
                 "phase": _eplus_ticket_phase(label),
                 "opensAt": timestamps[0],
@@ -1786,19 +1928,22 @@ def _lawson_parse_results(
                 "resultAt": None,
                 "status": _eplus_ticket_status(table.get_text(" ", strip=True)),
                 "url": page_url,
+                "notes": admission,
+                "nativePerformanceKeys": str(attrs.get("data-pfkeys") or "").split(","),
             }
             for date in dates:
-                performance_id = hashlib.sha256(
-                    f"{_eplus_normalize(title)}:{date}:{_eplus_normalize(venue_name)}".encode()
-                ).hexdigest()[:24]
+                identity = f"{_eplus_normalize(title)}:{date}:{_eplus_normalize(venue_name)}"
+                if period_end:
+                    identity += ":period"
+                performance_id = hashlib.sha256(identity.encode()).hexdigest()[:24]
                 event = event_map.setdefault(
                     performance_id,
                     {
                         "id": performance_id,
                         "name": title,
                         "url": page_url,
-                        "startsAt": f"{date}T00:00:00+09:00",
-                        "endsAt": None,
+                        "startsAt": date,
+                        "endsAt": period_end,
                         "doorsAt": None,
                         "venue": {
                             "name": venue_name or None,
@@ -1907,6 +2052,8 @@ class LawsonTicketFetcher(FetcherPlugin):
             url = f"https://l-tike.com/search/?{urlencode({'keyword': keyword})}"
             try:
                 html, final_url = browser.render(url, selector="#layout_search_result")
+            except RateLimitError:
+                raise
             except TransientError as exc:
                 errors.append(f"{url}: {exc}")
                 continue
@@ -2016,6 +2163,8 @@ class OfficialSiteConfig(BaseModel):
     title_selector: str | None = "h1"
     content_selector: str = "article"
     published_selector: str | None = "time"
+    published_timezone: str = "Asia/Tokyo"
+    missing_detail_text: str | None = None
     browser: bool = False
     browser_url: str = "http://browser:3003"
     browser_token_secret: str = "BROWSER_API_TOKEN"
@@ -2029,6 +2178,12 @@ class OfficialSiteConfig(BaseModel):
     def require_urls(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         if not value:
             raise ValueError("start_urls cannot be empty")
+        return value
+
+    @field_validator("published_timezone")
+    @classmethod
+    def require_timezone(cls, value: str) -> str:
+        ZoneInfo(value)
         return value
 
 
@@ -2100,17 +2255,42 @@ class OfficialSiteFetcher(FetcherPlugin):
 
         if not detail_urls:
             raise TransientError("official site yielded no matching detail links")
+        missing_details = []
         for detail_url in detail_urls:
-            html, final_url = load(detail_url)
+            try:
+                html, final_url = load(detail_url)
+            except UpstreamHTTPError as exc:
+                known_tombstone = (
+                    exc.status_code == 403 and config.missing_detail_text
+                    and config.missing_detail_text in BeautifulSoup(exc.response_text, "lxml").get_text(" ", strip=True)
+                )
+                if exc.status_code not in {404, 410} and not known_tombstone:
+                    raise
+                missing_details.append({"url": detail_url, "http_status": exc.status_code})
+                continue
             soup = BeautifulSoup(html, "lxml")
-            title = _meta(soup, "og:title", "twitter:title") or _text(soup, config.title_selector)
+            title = _text(soup, config.title_selector) or _meta(soup, "og:title", "twitter:title")
             content = _text(soup, config.content_selector) or _text(soup, "main")
-            if not content:
+            if not title or not content:
                 raise ConfigurationError(f"content selector did not match {final_url}")
-            published_raw = _meta(soup, "article:published_time", "date", "pubdate") or _text(
-                soup, config.published_selector
+            date_node = soup.select_one(config.published_selector) if config.published_selector else None
+            published_raw = (
+                (date_node.get("datetime") or date_node.get_text(" ", strip=True))
+                if date_node else _meta(soup, "article:published_time", "date", "pubdate")
             )
-            published_at = _time(published_raw)
+            published_on = None
+            date_match = re.fullmatch(
+                r"\s*(\d{4})\s*[./-]\s*(\d{1,2})\s*[./-]\s*(\d{1,2})\s*",
+                published_raw or "",
+            )
+            if date_match:
+                published_at = datetime(*map(int, date_match.groups()), tzinfo=ZoneInfo(config.published_timezone))
+                published_on = published_at.date().isoformat()
+            else:
+                published_at = _time(published_raw)
+            # Keep the source heading/date with its own body. Exclude related
+            # articles/navigation via source-specific content selectors.
+            content = "\n".join(value for value in (title, published_on, content) if value)
             if request.window_start and published_at and published_at < request.window_start:
                 continue
             if request.window_end and published_at and published_at >= request.window_end:
@@ -2131,12 +2311,20 @@ class OfficialSiteFetcher(FetcherPlugin):
                     language="ja",
                     published_at=published_at,
                     observed_at=datetime.now(UTC),
-                    attributes={"media": media, "source_type": "official_site"},
+                    attributes={
+                        "media": media,
+                        "source_type": "official_site",
+                        "published_precision": "DATE" if published_on else "TIME" if published_at else "TBD",
+                        "published_on": published_on,
+                    },
                     tags=request.tags,
                 )
             )
         return FetchReport(
-            details={"list_pages": len(visited_pages), "detail_urls": len(detail_urls)}
+            details={
+                "list_pages": len(visited_pages), "detail_urls": len(detail_urls),
+                "missing_details": missing_details,
+            }
         )
 
     def fetch(self, context: FetchContext, request: FetchRequest) -> FetchReport:

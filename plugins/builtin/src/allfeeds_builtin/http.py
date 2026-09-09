@@ -9,7 +9,7 @@ from urllib.parse import urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
 
 import requests
-from allfeeds_sdk import PermanentError, RateLimitError, TransientError
+from allfeeds_sdk import PermanentError, RateLimitError, TransientError, UpstreamHTTPError
 
 UTC = UTC
 
@@ -147,7 +147,7 @@ class SafeHttpClient:
                     time.sleep(min(30, 2**attempt))
                     continue
                 if response.status_code >= 400 and response.status_code != 304:
-                    raise PermanentError(f"upstream returned HTTP {response.status_code}")
+                    raise UpstreamHTTPError(response.status_code, response.url)
                 content_type = response.headers.get("Content-Type", "").split(";", 1)[0].lower()
                 if (
                     allowed_content_types

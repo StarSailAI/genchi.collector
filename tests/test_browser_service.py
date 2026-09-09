@@ -224,6 +224,33 @@ def test_browser_auth_render_contract_and_public_session_isolation(monkeypatch):
         assert len(app["browser"].contexts) == 1 and app["browser"].contexts[0].closed
         assert not app["x_context"].closed
 
+        async def missing_selector(*_args, **_kwargs):
+            raise TimeoutError("requested news list never appeared")
+
+        monkeypatch.setattr(FakePage, "wait_for_selector", missing_selector)
+        async with TestClient(TestServer(app)) as client:
+            response = await client.post(
+                "/fetch", headers=headers,
+                json={"url": "https://example.com/news/", "selector": ".missing-news-list"},
+            )
+            assert response.status == 502
+            assert app["browser"].contexts[-1].closed
+
+        async def rate_limited(page, url, **_):
+            page.url = url
+            return SimpleNamespace(status=429, headers={"retry-after": "90"})
+
+        monkeypatch.setattr(FakePage, "goto", rate_limited)
+        async with TestClient(TestServer(app)) as client:
+            response = await client.post(
+                "/fetch", headers=headers,
+                json={"url": "https://example.com/tickets", "selector": ".not-on-rate-limit-page"},
+            )
+            assert response.status == 200
+            assert response.headers["X-Genchi-Browser-Upstream-Status"] == "429"
+            assert response.headers["Retry-After"] == "90"
+            assert app["browser"].contexts[-1].closed
+
     asyncio.run(run())
 
 
@@ -238,5 +265,33 @@ def test_browser_guard_blocks_private_subresources(monkeypatch):
             route, SimpleNamespace(url="http://127.0.0.1/private")
         )
         route.abort.assert_awaited_once_with("blockedbyclient")
+
+    asyncio.run(run())
+
+
+def test_browser_child_exit_recovers_before_next_public_page(monkeypatch):
+    async def run():
+        app = service.create_app()
+        app["browser"] = SimpleNamespace(is_connected=lambda: False)
+        app["browser_manager"] = object()
+        app["x_context"] = FakeContext()
+        calls = []
+
+        async def stop(current):
+            calls.append("stop")
+            current["browser"] = None
+
+        async def start(current):
+            calls.append("start")
+            current["browser"] = FakeBrowser()
+
+        monkeypatch.setattr(service, "stop_browser", stop)
+        monkeypatch.setattr(service, "start_browser", start)
+        request = SimpleNamespace(app=app)
+        page = await service._new_page(request)
+        assert calls == ["stop", "start"]
+        assert app["browser"].is_connected()
+        await service._close_page(request, page)
+        assert page.context.closed
 
     asyncio.run(run())

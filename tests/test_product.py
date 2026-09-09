@@ -212,6 +212,27 @@ def test_replay_timezone_correction_and_year_identity(catalog):
         assert node["starts_at"] == correction.time.starts_at
 
 
+def test_period_pass_and_first_dated_admission_have_separate_occurrences(catalog):
+    period = activity("lawson:period").model_copy(update={
+        "kind": "EXHIBITION", "time": Moment(precision="DATE", starts_on="2030-06-12", ends_on="2030-06-30"),
+        "milestones": [],
+    })
+    dated = period.model_copy(update={
+        "source_key": "lawson:dated", "occurrence_key": "lawson:dated",
+        "time": Moment(precision="DATE", starts_on="2030-06-12"),
+    })
+    catalog.publish(period)
+    catalog.publish(dated)
+    changed = period.model_copy(update={"time": Moment(precision="DATE", starts_on="2030-06-12", ends_on="2030-07-01")})
+    catalog.publish(changed)
+    catalog.publish(dated)
+    with catalog.connect() as conn:
+        rows = conn.execute("SELECT starts_on,ends_on FROM catalog_occurrences ORDER BY ends_on NULLS LAST").fetchall()
+    assert len(rows) == 2
+    assert str(rows[0]["ends_on"]) == "2030-07-01"
+    assert rows[1]["ends_on"] is None
+
+
 def test_shared_round_multiple_occurrences_and_cross_activity_isolation(catalog):
     first = catalog.publish(activity())
     assert catalog.publish(activity("upstream:2", NOW + timedelta(days=21))) == first
@@ -557,12 +578,57 @@ def test_pending_llm_revision_does_not_change_public_activity(catalog, monkeypat
             ).fetchone()["ends_at"]
             == original.milestones[0].time.ends_at
         )
+        assert conn.execute("SELECT count(*) n FROM catalog_reviews WHERE status='PENDING'").fetchone()["n"] == 1
+
+
+@pytest.mark.parametrize("kind,title,expected", [
+    ("ticket_booth", "公演受付一覧", "DONE"),
+    ("ticket_act", "3公演通し券", "DONE"),
+    ("ticket_reception", "3公演通し券 先行受付", "REVIEW"),
+])
+def test_asobi_containers_are_indexed_and_unmatched_receptions_still_require_review(catalog, monkeypatch, kind, title, expected):
+    with catalog.connect() as conn:
+        conn.execute(
+            """INSERT INTO allfeeds.resources(source_id,external_id,content_hash,kind,title,content,attributes)
+            VALUES('asobi','one','hash',%s,%s,'','{"source_type":"asobi_ticket","asobi_ticket":{}}')""",
+            (kind, title),
+        )
+    monkeypatch.setattr("genchi_product.pipeline.extract_text", lambda *_: pytest.fail("native containers must not use the model"))
+    assert process_one(catalog)
+    with catalog.connect() as conn:
+        assert conn.execute("SELECT status FROM catalog_jobs").fetchone()["status"] == expected
+        assert conn.execute("SELECT count(*) n FROM catalog_activities").fetchone()["n"] == 0
+        assert conn.execute('SELECT count(*) n FROM "SearchDocument" WHERE "entityType"=\'CONTENT\'').fetchone()["n"] == 1
         assert (
             conn.execute(
                 "SELECT count(*) n FROM catalog_reviews WHERE status='PENDING'"
             ).fetchone()["n"]
-            == 1
+            == (1 if expected == "REVIEW" else 0)
         )
+
+
+def test_successful_reprocessing_closes_only_its_failure_and_keeps_candidate_pending(catalog, monkeypatch):
+    with catalog.connect() as conn:
+        conn.execute("INSERT INTO allfeeds.resources(source_id,external_id,content_hash,kind,title,content) VALUES('official','one','hash','official_news','ライブ','原文')")
+
+    def invalid(*_):
+        raise ValueError("invalid evidence")
+
+    monkeypatch.setattr("genchi_product.pipeline.extract_text", invalid)
+    assert process_one(catalog)
+    with catalog.connect() as conn:
+        conn.execute("UPDATE catalog_jobs SET status='PENDING',not_before=NOW()")
+    candidate = activity(verified=False)
+    candidate.publication = "REVIEW"
+    monkeypatch.setattr("genchi_product.pipeline.extract_text", lambda *_: [candidate])
+    assert process_one(catalog)
+    with catalog.connect() as conn:
+        rows = conn.execute("SELECT status,reviewed_by,payload ? 'activity' AS candidate FROM catalog_reviews ORDER BY created_at").fetchall()
+        assert rows == [
+            {"status": "REJECTED", "reviewed_by": "system:normalizer", "candidate": False},
+            {"status": "PENDING", "reviewed_by": None, "candidate": True},
+        ]
+        assert conn.execute("SELECT count(*) n FROM catalog_activities").fetchone()["n"] == 0
 
 
 def test_official_grouping_merges_legacy_sessions_and_keeps_links(catalog):
@@ -1057,3 +1123,41 @@ def test_extraction_injects_shared_glossary_and_keeps_original_names(monkeypatch
     assert items[0].milestones[0].round_key == "アソビストア一般会員先行"
     assert items[0].milestones[0].title == "アソビストア一般会員先行"
     assert items[0].publication == "REVIEW" and not items[0].evidence.verified
+
+
+def test_lawson_round_repair_preserves_legacy_id_and_splits_scopes(catalog, monkeypatch):
+    repair = runpy.run_path('deploy/repair-lawson-rounds.py')['repair']
+    weekday, weekend = activity('weekday'), activity('weekend', start=NOW + timedelta(days=21))
+    old_node = weekday.milestones[0].model_copy(update={
+        'source_key': 'native-ticket:lawson:old', 'platform': 'lawson', 'round_key': 'lawson:old', 'notes': 'weekend',
+    })
+    weekday = weekday.model_copy(update={'milestones': [old_node]})
+    weekend = weekend.model_copy(update={'milestones': [old_node]})
+    catalog.publish(weekday)
+    catalog.publish(weekend)
+    weekday_node = old_node.model_copy(update={
+        'source_key': 'native-ticket:lawson:weekday', 'round_key': 'lawson:weekday', 'notes': 'weekday',
+        'time': Moment(precision='TIME', starts_at=old_node.time.starts_at, ends_at=NOW + timedelta(days=4)),
+    })
+    weekend_node = old_node.model_copy(update={'source_key': 'native-ticket:lawson:weekend', 'round_key': 'lawson:weekend'})
+    items = [weekday.model_copy(update={'milestones': [weekday_node]}), weekend.model_copy(update={'milestones': [weekend_node]})]
+    monkeypatch.setitem(repair.__globals__, 'structured', lambda *_: items)
+    resources = [{'attributes': {'ticket_page': {'events': [{'ticketWindows': [
+        {'id': 'weekday', 'legacyId': 'old'}, {'id': 'weekend', 'legacyId': 'old'},
+    ]}]}}}]
+    with catalog.connect() as conn:
+        old_id = conn.execute("SELECT id FROM catalog_milestones WHERE round_key='lawson:old'").fetchone()['id']
+        plan = repair(conn, resources, [])
+        assert len(plan) == 1 and len(plan[0]['removed_scopes']) == 1
+        assert conn.execute("SELECT count(*) n FROM catalog_milestone_scopes WHERE milestone_id=%s", (old_id,)).fetchone()['n'] == 2
+        old_revision = conn.execute("SELECT revision FROM catalog_milestones WHERE id=%s", (old_id,)).fetchone()['revision']
+        assert repair(conn, resources, [], apply=True) == plan
+    for item in items:
+        catalog.publish(item)
+    with catalog.connect() as conn:
+        rounds = conn.execute("SELECT id,round_key FROM catalog_milestones WHERE kind='TICKET' ORDER BY round_key").fetchall()
+        assert len(rounds) == 2
+        assert next(row['id'] for row in rounds if row['round_key'] == 'lawson:weekend') == old_id
+        assert conn.execute("SELECT revision FROM catalog_milestones WHERE id=%s", (old_id,)).fetchone()['revision'] == old_revision
+        assert conn.execute("SELECT count(*) n FROM catalog_milestone_scopes WHERE milestone_id=%s", (old_id,)).fetchone()['n'] == 1
+        assert repair(conn, resources, [], apply=True) == []

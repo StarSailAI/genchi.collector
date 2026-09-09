@@ -7,20 +7,22 @@
 
 Fetcher 不调用 `/sf/search`。入口是 e+ 的七个公开「アニメ・ゲーム」地域分类页：
 
-- 每轮选择两个地域；
+- 每天一轮，检查全部七个地域；
 - 每个地域固定检查第一页，用于及时发现新条目；
 - 同时沿分页游标向后检查一页，用于逐步完成当前库存回填；
 - 从列表里的带销售条件链接统一还原成 `/sf/detail/<10 位 ID>`，避免把同一活动的
   场次或席种重复下载；
 - 已确认的详情最多跟踪 2,000 个，每轮轮转复查其中 20 个，以更新受付状态。
 
+每轮最多处理 80 个详情，先保留已跟踪页面的复查名额，其余发现结果按持久游标轮转，避免列表尾部长期没有机会被读取。该上限意味着单轮不是全库存快照。
+
 少量人工核验过的公开作品词条可以通过 `seed_urls` 优先发现详情。默认先加入
 `THE IDOLM@STER` 和 `アイドルマスター シャイニーカラーズ` 的 e+ 词条；这些是
 `/sf/word/<数字 ID>` 公开页，不是被 robots.txt 禁止的搜索接口。种子用于提高重点企划的
 时效性，不能替代地域分类的广泛发现。
 
-默认请求间隔为 2.5 秒，并使用域名级单并发资源锁。遇到 e+ 的
-「混雑のお知らせ」、HTTP 5xx 或限流时，本轮保留游标并交给调度器退避重试。
+默认请求间隔为 2.5 秒，并使用域名级单并发资源锁。限流交给调度器退避重试，失败任务不提交新游标。拥堵页或临时 HTTP 错误经有限重试后仍失败时，报告为 `partial` 并列出失败页面；失败的列表分页不推进游标，不能把部分成功当作完整验收。
+已过期详情返回 404/410 时记录到任务报告并退出跟踪，保留已落库历史，继续处理其他详情；403 等访问错误仍会明确失败。分页失效则重置对应地域的分页游标。
 
 分类页本身就是第一层高召回筛选。详情页再根据标题映射已知企划，例如偶像大师、
 Love Live、BanG Dream、世界计划等；无法可靠映射的条目归入 `anime-general`，不会因为
@@ -32,7 +34,7 @@ Love Live、BanG Dream、世界计划等；无法可靠映射的条目归入 `an
 保存的数据限定为：
 
 - JSON-LD `Event` 中的活动名、开演/结束时间和场馆；
-- 公演区块中的开场时间；
+- 公演区块中的开场、开演时间；只公布日期时保留 DATE 精度，不补成 00:00；
 - 受付名称、开始/截止时间、阶段和当前状态；
 - e+ 原始详情链接和 Open Graph 图片链接；
 - 为排查和搜索生成的精简事实文本。
@@ -41,23 +43,26 @@ Love Live、BanG Dream、世界计划等；无法可靠映射的条目归入 `an
 Event；每个受付按“详情页、受付内容、performance”形成稳定 TicketWindow。重复执行只会
 更新已有记录。
 
-## 本地运行
+## 线上运行
 
-配置位于 `config/sources.yaml`。修改插件或配置后重建相关服务：
+所有真实抓取、浏览器探测和上游接口验收均在服务器执行。本机仅编辑代码和运行模拟、隔离数据库测试，保持 worker、normalizer、notifier 和 browser 停止。
+
+配置位于 `config/sources.yaml`。在服务器的两仓库上一级执行：
 
 ```bash
-docker-compose up -d --build control worker normalizer
-docker-compose exec control allfeeds-control task-submit --source eplus-anime-tickets
-docker-compose logs -f worker normalizer
+python3 genchi.collector/deploy/manage.py compose backend build worker normalizer
+python3 genchi.collector/deploy/manage.py apply
+python3 genchi.collector/deploy/manage.py compose backend exec -T control allfeeds-control task-submit --source eplus-anime-tickets
+python3 genchi.collector/deploy/manage.py compose backend logs --tail 100 worker normalizer
 ```
 
 查看落库结果：
 
 ```bash
-docker-compose exec postgres psql -U genchi -d genchi -c \
-  "SELECT count(*) FROM genchi.\"Event\" WHERE \"sourceKey\" LIKE 'eplus:event:%';"
-docker-compose exec postgres psql -U genchi -d genchi -c \
-  "SELECT count(*) FROM genchi.\"TicketWindow\" WHERE \"platform\"='eplus';"
+python3 genchi.collector/deploy/manage.py compose backend exec -T postgres psql -U genchi -d genchi -c \
+  "SELECT final_status,finished_at,result FROM allfeeds.task_runs WHERE source_id='eplus-anime-tickets' ORDER BY finished_at DESC LIMIT 1;"
+python3 genchi.collector/deploy/manage.py compose backend exec -T postgres psql -U genchi -d genchi -c \
+  "SELECT j.status,count(*) FROM genchi.catalog_jobs j JOIN allfeeds.resources r ON r.id=j.resource_id WHERE r.source_id='eplus-anime-tickets' GROUP BY j.status;"
 ```
 
 需要降低压力时，优先减少 `roots_per_run`、`pages_per_root` 和

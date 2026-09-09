@@ -223,7 +223,8 @@ class Catalog:
                 if item.time.starts_at
                 else item.time.anchor()
             )
-            occurrence_key = fingerprint(f"{clock}:{normalize(item.venue or '')}")
+            period = bool(item.time.ends_on and item.time.ends_on != item.time.starts_on)
+            occurrence_key = fingerprint(f"{clock}:{normalize(item.venue or '')}" + (":period" if period else ""))
             occurrence = conn.execute(
                 "SELECT * FROM catalog_occurrences WHERE id=%s"
                 if mapped and mapped["occurrence_id"]

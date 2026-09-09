@@ -7,11 +7,23 @@ import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("genchi_deploy", REPO / "deploy/manage.py")
 deploy = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(deploy)
+
+
+def test_generated_sources_are_not_nested_under_replaceable_repository_mount():
+    base = yaml.safe_load((REPO / "docker-compose.yml").read_text())["services"]["control"]
+    production = yaml.safe_load((REPO / "deploy/compose.production.yml").read_text())["services"]["control"]
+    runtime = production["environment"]["ALLFEEDS_SOURCES"]
+    mounted = [volume.split(":")[1] for volume in production["volumes"]]
+    assert runtime in mounted
+    for volume in base["volumes"]:
+        repository_mount = volume.split(":")[1]
+        assert not runtime.startswith(repository_mount.rstrip("/") + "/")
 
 
 def test_deployment_bootstrap_preserves_secrets_and_pauses_unconfigured_integrations(tmp_path):

@@ -6,6 +6,7 @@ from .exceptions import (
     PermanentError,
     RateLimitError,
     TransientError,
+    UpstreamHTTPError,
 )
 from .plugins import AssetStorePlugin, FetcherManifest, FetcherPlugin, PluginRegistry, SinkPlugin
 
@@ -23,4 +24,5 @@ __all__ = [
     "RateLimitError",
     "SinkPlugin",
     "TransientError",
+    "UpstreamHTTPError",
 ]

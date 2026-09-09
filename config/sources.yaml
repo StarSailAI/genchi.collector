@@ -1,6 +1,6 @@
 version: 1
 
-# V1 intentionally covers official websites and official X accounts only.
+# Official websites, public ticketing platforms and optional official X accounts.
 # Additional projects are present in config/catalog.yaml and are enabled in
 # manually approved waves.
 sources:
@@ -8,15 +8,16 @@ sources:
     enabled: true
     fetcher: genchi.official_site
     sink: postgres
-    schedule: {type: interval, seconds: 900, timezone: Asia/Tokyo}
+    schedule: {type: cron, cron: "0 3 * * *", timezone: Asia/Tokyo}
     config:
       start_urls: [https://bang-dream.com/news/]
       link_pattern: '^https://bang-dream\.com/(news/[0-9]+/|events/[^/]+/)$'
       list_item_selector: .p-news-list__item
       detail_link_selector: a.p-news-list__item-link
-      title_selector: h1, .p-article__title, .p-news-detail__title
-      content_selector: article, main, .p-news-detail
-      published_selector: time, .p-news-detail__date
+      next_selector: a.next.c-pagination-pager__arrow:not(.disabled)
+      title_selector: .p-news-detail__header-title, .p-live-event-detail__header-title
+      content_selector: .p-news-detail__content, .p-live-event-detail__content
+      published_selector: .p-news-detail__header-date
       max_pages: 2
       backfill_max_pages: 20
       max_items: 80
@@ -32,16 +33,16 @@ sources:
     enabled: true
     fetcher: genchi.official_site
     sink: postgres
-    schedule: {type: interval, seconds: 900, timezone: Asia/Tokyo}
+    schedule: {type: cron, cron: "20 3 * * *", timezone: Asia/Tokyo}
     config:
       start_urls: [https://girls-band-cry.com/news/]
       link_pattern: '^https://girls-band-cry\.com/news/post-[0-9]+\.html$'
       list_item_selector: .news-List .item
       detail_link_selector: a[href]
       next_selector: a.next, .wp-pagenavi a.nextpostslink
-      title_selector: h1, .sw-Ttl, .news-Detail_Ttl
-      content_selector: article, main, .news-Detail, .sw-Frame
-      published_selector: time, .time
+      title_selector: .sw-Detail_Header .ttl
+      content_selector: .sw-Detail_Contents
+      published_selector: .sw-Detail_Header time
       max_pages: 2
       backfill_max_pages: 30
       max_items: 100
@@ -57,17 +58,19 @@ sources:
     enabled: true
     fetcher: genchi.official_site
     sink: postgres
-    schedule: {type: interval, seconds: 900, timezone: Asia/Tokyo}
+    schedule: {type: cron, cron: "40 3 * * *", timezone: Asia/Tokyo}
     config:
       start_urls: [https://www.lovelive-anime.jp/news/]
       link_pattern: '^https://www\.lovelive-anime\.jp/news/[^?#]+$'
       detail_link_selector: a[href*="/news/"]
-      title_selector: h1, .p-article__title
-      content_selector: article, .p-article__content, main
-      published_selector: time, .p-article__date
+      next_selector: a.c-pagination__anchor:-soup-contains("次へ"):not(.is-disable)
+      title_selector: .p-article__title
+      content_selector: .p-article__content
+      published_selector: .p-article__info time
+      missing_detail_text: お探しのページは見つかりませんでした
       browser: true
       wait_selector: body
-      max_pages: 1
+      max_pages: 3
       backfill_max_pages: 20
       max_items: 80
     timeout_seconds: 1200
@@ -84,17 +87,21 @@ sources:
     enabled: true
     fetcher: genchi.official_site
     sink: postgres
-    schedule: {type: interval, seconds: 900, timezone: Asia/Tokyo}
+    schedule: {type: cron, cron: "10 4 * * *", timezone: Asia/Tokyo}
     config:
-      start_urls: [https://idolmaster-official.jp/news/]
+      start_urls:
+        - https://idolmaster-official.jp/news/
+        - https://idolmaster-official.jp/news/page/2/
+        - https://idolmaster-official.jp/news/page/3/
       link_pattern: '^https://idolmaster-official\.jp/news/[^?#]+$'
+      list_item_selector: '[class*="style_list__"]'
       detail_link_selector: a[href*="/news/"]
-      title_selector: h1, [class*="article_title__"], [class*="inner_title__"]
-      content_selector: article, [class*="inner_content__"], [class*="style_article__"]
+      title_selector: '[class*="inner_title__"], [class*="article_title__"]'
+      content_selector: '[class*="inner_content__"], [class*="article_content__"]'
       published_selector: time, [class*="article_head_dsdate__"], [class*="inner_date__"]
       browser: true
-      wait_selector: a[href*="/news/"]
-      max_pages: 1
+      wait_selector: '[class*="style_list__"] a[href*="/news/"]'
+      max_pages: 3
       backfill_max_pages: 20
       max_items: 80
     timeout_seconds: 1200
@@ -111,7 +118,7 @@ sources:
     enabled: true
     fetcher: genchi.asobi_ticket
     sink: postgres
-    schedule: {type: interval, seconds: 900, timezone: Asia/Tokyo}
+    schedule: {type: cron, cron: "40 4 * * *", timezone: Asia/Tokyo}
     config:
       api_base_url: https://asobi-ticket.api.app.t-riple.com/api/v1/public
       site_base_url: https://asobiticket2.asobistore.jp
@@ -130,7 +137,7 @@ sources:
     enabled: true
     fetcher: genchi.eplus_ticket
     sink: postgres
-    schedule: {type: interval, seconds: 21600, timezone: Asia/Tokyo}
+    schedule: {type: cron, cron: "10 5 * * *", timezone: Asia/Tokyo}
     config:
       seed_urls:
         - https://eplus.jp/sf/word/0000031068
@@ -143,7 +150,7 @@ sources:
         - https://eplus.jp/sf/anime/kansai
         - https://eplus.jp/sf/anime/chugoku-shikoku
         - https://eplus.jp/sf/anime/kyushu-okinawa
-      roots_per_run: 2
+      roots_per_run: 7
       pages_per_root: 2
       refresh_details_per_run: 20
       max_detail_pages: 80
@@ -162,7 +169,7 @@ sources:
     enabled: true
     fetcher: genchi.pia_ticket
     sink: postgres
-    schedule: {type: interval, seconds: 21600, timezone: Asia/Tokyo}
+    schedule: {type: cron, cron: "20 6 * * *", timezone: Asia/Tokyo}
     config:
       discovery_urls:
         - https://t.pia.jp/anime/
@@ -180,12 +187,12 @@ sources:
         - アイドリッシュセブン
         - ヒプノシスマイク
         - うたの☆プリンスさまっ♪
-      keywords_per_run: 4
+      keywords_per_run: 12
       refresh_details_per_run: 10
-      max_detail_pages: 24
+      max_detail_pages: 48
       max_sales_per_detail: 8
       max_tracked_details: 1500
-      rate_limit_seconds: 2
+      rate_limit_seconds: 4
       browser_fallback: true
     timeout_seconds: 3600
     retry: {max_attempts: 4, backoff: exponential, base_seconds: 300, max_seconds: 7200}
@@ -199,7 +206,7 @@ sources:
     enabled: true
     fetcher: genchi.lawson_ticket
     sink: postgres
-    schedule: {type: interval, seconds: 21600, timezone: Asia/Tokyo}
+    schedule: {type: cron, cron: "30 7 * * *", timezone: Asia/Tokyo}
     config:
       search_keywords:
         - アニメ
@@ -214,7 +221,7 @@ sources:
         - アイドリッシュセブン
         - ヒプノシスマイク
         - うたの☆プリンスさまっ♪
-      queries_per_run: 6
+      queries_per_run: 12
       max_results_per_run: 200
     timeout_seconds: 3600
     retry: {max_attempts: 4, backoff: exponential, base_seconds: 300, max_seconds: 7200}
@@ -228,7 +235,7 @@ sources:
     enabled: true
     fetcher: genchi.x_profile
     sink: postgres
-    schedule: {type: interval, seconds: 300, timezone: Asia/Tokyo}
+    schedule: {type: cron, cron: "0 8 * * *", timezone: Asia/Tokyo}
     config: {handle: bang_dream_info, max_posts: 50, max_scrolls: 8}
     timeout_seconds: 240
     retry: {max_attempts: 5, backoff: exponential, base_seconds: 60, max_seconds: 3600}
@@ -242,7 +249,7 @@ sources:
     enabled: true
     fetcher: genchi.x_profile
     sink: postgres
-    schedule: {type: interval, seconds: 300, timezone: Asia/Tokyo}
+    schedule: {type: cron, cron: "10 8 * * *", timezone: Asia/Tokyo}
     config: {handle: girlsbandcry, max_posts: 50, max_scrolls: 8}
     timeout_seconds: 240
     retry: {max_attempts: 5, backoff: exponential, base_seconds: 60, max_seconds: 3600}
@@ -256,7 +263,7 @@ sources:
     enabled: true
     fetcher: genchi.x_profile
     sink: postgres
-    schedule: {type: interval, seconds: 300, timezone: Asia/Tokyo}
+    schedule: {type: cron, cron: "20 8 * * *", timezone: Asia/Tokyo}
     config: {handle: LoveLive_staff, max_posts: 50, max_scrolls: 8}
     timeout_seconds: 240
     retry: {max_attempts: 5, backoff: exponential, base_seconds: 60, max_seconds: 3600}
@@ -270,7 +277,7 @@ sources:
     enabled: true
     fetcher: genchi.x_profile
     sink: postgres
-    schedule: {type: interval, seconds: 300, timezone: Asia/Tokyo}
+    schedule: {type: cron, cron: "30 8 * * *", timezone: Asia/Tokyo}
     config: {handle: imas_official, max_posts: 50, max_scrolls: 8}
     timeout_seconds: 240
     retry: {max_attempts: 5, backoff: exponential, base_seconds: 60, max_seconds: 3600}

@@ -41,7 +41,7 @@
 
 日历导出支持活动日历和行动日历；行动日历分别导出受付开始与截止。日期未知的节点不伪造日历日期；日期已知、时间未知的节点为全天事件。
 
-## 本地运行
+## 开发与线上运行
 
 在 `.env` 中设置 `PRODUCT_SECRET`、`PRODUCT_ADMIN_TOKEN`（独立随机值），`PUBLIC_SITE_URL` 与网站 `NEXT_PUBLIC_SITE_URL` 必须一致。默认都为 `http://localhost:13000`。管理员邮箱由 `ADMIN_EMAIL` 指定，本地默认 `admin@genchi.local`。
 
@@ -49,13 +49,8 @@
 # 生成两个不同的随机值，分别填入 .env；不要提交 .env
 python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
-docker-compose up -d --build
-
-# 对既有数据库执行一次历史桥接；可重复运行，原始历史不删除
-# 新安装数据库为空时也可执行
-docker-compose exec -T normalizer genchi-product import-legacy
-docker-compose exec -T normalizer genchi-product index-raw
-docker-compose exec -T normalizer genchi-product refresh-structured
+# 本机只启动数据读取所需服务，不启动任何采集或通知进程
+docker-compose up -d --build --no-deps postgres control product
 
 cd ../genchi.news
 docker-compose up -d --build web
@@ -66,7 +61,9 @@ docker-compose up -d --build web
 - Product API：`http://127.0.0.1:18080`（只映射回环地址）。
 - 原有控制台和采集端口由 `.env` 保持配置。
 
-日常修改后可单独构建 `normalizer product notifier`。Next.js Docker 构建限制一个构建 CPU、512 MB Node 堆；若本机容器总内存仍不足，可暂时停止本项目的 `worker browser dashboard`，构建结束后恢复。
+真实采集、浏览器探测、模型抽取和通知只在线上运行，部署步骤见 [单机部署](production.md)。本机保持 worker、browser、normalizer 和 notifier 停止。需要历史桥接时，先在线上备份，再有针对性地运行 `genchi-product import-legacy`、`index-raw` 或 `refresh-structured`；日常修改不重复执行全量回放。
+
+日常修改后可单独构建所需服务。Next.js Docker 构建限制一个构建 CPU、512 MB Node 堆。
 
 上线前需要配置真实 SMTP（远程连接必须 TLS）、发信域名、公共 HTTPS 域名，并整理试点系列的来源与审核积压。默认 Mailpit 仅用于本地验收。
 

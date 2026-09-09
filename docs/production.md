@@ -2,6 +2,8 @@
 
 目录结构为 `genchi/` 下并列放置 `genchi.collector`、`genchi.news`。主机安装 Docker Engine、Compose plugin、Nginx 与 Certbot；部署辅助命令支持 Ubuntu 22.04 自带的 Python 3.10。首次构建需要访问 Docker Hub、PyPI 和 npm registry。
 
+所有真实采集、浏览器探测和上游 API 验收均在服务器执行。本机保留开发与离线测试环境，停止 worker、normalizer、notifier、browser，避免重复采集和通知。本文的部署、手动采集命令均在服务器执行。
+
 ## 共用配置
 
 在两仓库的上一级执行：
@@ -28,7 +30,13 @@ python3 genchi.collector/deploy/manage.py check
 
 Mailpit 仅保留为私网调试工具，不是生产投递的替代入口；既有本地环境仍支持 `MAIL_PROVIDER=smtp`。邮件域名的 SPF、DKIM、DMARC 按 Resend 指引配置。参见 [Resend SMTP 文档](https://resend.com/docs/send-with-smtp)。
 
-`.deploy/effective.env` 与 `.deploy/sources.yaml` 是自动生成的运行文件，不要手工编辑。只修改上一级 `.env`。文件中的密码不要通过 shell `source` 加载；辅助命令按数据解析，保留单引号包裹值中的 `$` 和 `#`。
+`.deploy/effective.env` 与 `.deploy/sources.yaml` 是自动生成的运行文件，不要手工编辑。凭据修改上一级 `.env`，来源和频率修改仓库 `config/sources.yaml`。`check`、`compose`、`apply` 会重新生成运行配置，临时暂停来源时应同步修改来源配置，不能依赖对生成文件的修改。文件中的密码不要通过 shell `source` 加载；辅助命令按数据解析，保留单引号包裹值中的 `$` 和 `#`。
+
+生产 Controller 从独立的 `/app/runtime/sources.yaml` 读取生成配置，不把它嵌套挂载到仓库配置目录中。升级时必须在容器内核对实际读取路径和开关，再检查数据库调度，避免替换代码文件后意外读回未经 `ENABLE_X` 过滤的来源配置。
+
+来源每天运行一次，cron 使用 `Asia/Tokyo`，错开执行以控制单机负载。北京时间的计划为：BanG Dream! 02:00、Girls Band Cry 02:20、Love Live! 02:40、偶像大师 03:10、ASOBI 03:40、e+ 04:10、ぴあ 05:20、Lawson 06:30。四个 X 来源预留 07:00–07:30；只有配置有效 Cookie 并设置 `ENABLE_X=true` 才启用。
+
+验收时逐个使用控制 API/CLI 注册手动任务，检查 `allfeeds.task_runs` 的最终状态和报告，再核对 `resources`、`resource_versions`、`genchi.catalog_jobs` 与审核/目录证据。正常抽取的待审核候选不等于采集失败；模型输出不完整、证据不符或原生场次关系缺失仍必须留在审核队列。
 
 ## 构建与启动
 

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from allfeeds_sdk import FetchContext, FetchRequest
 from genchi_fetchers import (
     AsobiTicketFetcher,
@@ -111,7 +109,9 @@ def test_official_site_discovers_and_parses_detail(monkeypatch):
     )
     assert report.details["detail_urls"] == 1
     assert records[0].title == "公演開催決定"
-    assert records[0].published_at == datetime(2026, 7, 21, tzinfo=UTC)
+    assert records[0].published_at.isoformat() == "2026-07-21T00:00:00+09:00"
+    assert records[0].attributes["published_precision"] == "DATE"
+    assert records[0].attributes["published_on"] == "2026-07-21"
     assert records[0].attributes["media"][0]["url"] == "https://example.com/cover.jpg"
 
 
@@ -317,7 +317,7 @@ def test_eplus_ticket_discovers_parses_and_filters_anime_page(monkeypatch):
         }
     ]
     event = payload["events"][0]
-    assert event["startsAt"] == "2026-09-01T00:00:00+09:00"
+    assert event["startsAt"] == "2026-09-01T17:00:00+09:00"
     assert event["doorsAt"] == "2026-09-01T16:00:00+09:00"
     assert event["venue"]["name"] == "テストホール"
     assert event["ticketWindows"][0] == {
@@ -508,7 +508,7 @@ def test_lawson_ticket_uses_browser_and_deduplicates_same_day(monkeypatch):
     assert payload["discovery"][0]["searchQuery"] == "アイドルマスター"
     assert payload["discovery"][0]["trustedCategory"] is False
     event = payload["events"][0]
-    assert event["startsAt"] == "2026-09-01T00:00:00+09:00"
+    assert event["startsAt"] == "2026-09-01"
     assert event["ticketWindows"][0]["phase"] == "LOTTERY_1"
     assert event["ticketWindows"][0]["status"] == "OPEN"
     assert event["ticketWindows"][0]["opensAt"] == "2026-07-23T12:00:00+09:00"

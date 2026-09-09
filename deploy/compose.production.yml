@@ -6,8 +6,12 @@ services:
   control:
     image: genchi/control:${GENCHI_IMAGE_TAG:-current}
     mem_limit: 384m
+    environment:
+      ALLFEEDS_SOURCES: /app/runtime/sources.yaml
     volumes:
-      - ${GENCHI_ROOT}/.deploy/sources.yaml:/app/config/sources.yaml:ro
+      # Keep the generated file outside the repository config bind mount.
+      # Replacing a tracked file during deployment must not shadow this mount.
+      - ${GENCHI_ROOT}/.deploy/sources.yaml:/app/runtime/sources.yaml:ro
   worker:
     image: genchi/worker:${GENCHI_IMAGE_TAG:-current}
     mem_limit: 512m

@@ -82,8 +82,18 @@ async def health(request: web.Request) -> web.Response:
 
 async def _new_page(request: web.Request, *, authenticated=False):
     browser = request.app.get("browser")
-    if browser is None:
-        raise _json_error(503, "NOT_READY", "browser is not ready")
+    if browser is None or not browser.is_connected():
+        if not request.app.get("browser_manager"):
+            raise _json_error(503, "NOT_READY", "browser is not ready")
+        # A Firefox child can exit while the HTTP adapter stays alive. Recover
+        # under a separate lock so concurrent requests never spawn two engines.
+        async with request.app["browser_restart_lock"]:
+            browser = request.app.get("browser")
+            if browser is None or not browser.is_connected():
+                LOGGER.warning("browser disconnected; restarting the F engine")
+                await stop_browser(request.app)
+                await start_browser(request.app)
+            browser = request.app["browser"]
     context = (
         request.app["x_context"]
         if authenticated
@@ -135,24 +145,28 @@ async def fetch(request: web.Request) -> web.Response:
 
             async def guard(route: Any, navigation_request: Any) -> None:
                 if await _guard_public(route, navigation_request):
-                    await route.continue_()
+                    if _enabled("BROWSER_BLOCK_MEDIA", "1") and navigation_request.resource_type in {"image", "media", "font"}:
+                        await route.abort("blockedbyclient")
+                    else:
+                        await route.continue_()
 
             await page.route("**/*", guard)
             response = await page.goto(
                 url, wait_until="domcontentloaded", timeout=int(timeout_seconds * 1000)
             )
-            if selector:
-                try:
-                    await page.wait_for_selector(selector, timeout=15_000)
-                except Exception:
-                    pass
+            if selector and (response is None or response.status < 400):
+                # The requested content must exist. Navigation/header links are
+                # not evidence that a client-rendered news list is ready.
+                await page.wait_for_selector(selector, state="attached", timeout=15_000)
             if wait_seconds:
                 await page.wait_for_timeout(int(wait_seconds * 1000))
             html = await page.content()
             final_url = page.url
             status = response.status if response else None
+            retry_after = (getattr(response, "headers", {}) or {}).get("retry-after", "") if response else ""
         except Exception as exc:
-            LOGGER.warning("render failed url=%s error=%s", url, type(exc).__name__)
+            error_code = re.search(r"NS_ERROR_[A-Z_]+|net::ERR_[A-Z_]+", str(exc))
+            LOGGER.warning("render failed host=%s error=%s code=%s", urlsplit(url).hostname, type(exc).__name__, error_code.group() if error_code else "unknown")
             raise _json_error(
                 502, "FETCH_FAILED", f"browser fetch failed: {type(exc).__name__}"
             ) from exc
@@ -170,6 +184,7 @@ async def fetch(request: web.Request) -> web.Response:
             "X-Genchi-Browser-Upstream-Status": str(status or ""),
             "X-Genchi-Browser-Final-URL": final_url[:2000],
             "Cache-Control": "no-store",
+            **({"Retry-After": retry_after[:100]} if retry_after and status in {429, 503} else {}),
         },
     )
 
@@ -353,6 +368,7 @@ def create_app() -> web.Application:
     app["browser"] = None
     app["x_context"] = None
     app["browser_semaphore"] = asyncio.Semaphore(concurrency)
+    app["browser_restart_lock"] = asyncio.Lock()
     app.router.add_get("/", health)
     app.router.add_get("/health", health)
     app.router.add_post("/fetch", fetch)
