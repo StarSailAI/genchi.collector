@@ -250,3 +250,61 @@ def test_empty_discovery_is_failure_and_next_page_is_processed(monkeypatch):
     with pytest.raises(TransientError, match='no articles'):
         AggregatorFetcher().fetch(context, request)
     assert AggregatorFetcher.manifest.operations == ('fetch',)
+
+
+@pytest.mark.parametrize('section', ['comic', 'music'])
+def test_natalie_source_keeps_event_evidence_and_excludes_recommendation_dates(section):
+    from pathlib import Path
+
+    import yaml
+    sources = yaml.safe_load((Path(__file__).resolve().parents[1]/'config/sources.yaml').read_text())['sources']
+    source = next(s for s in sources if s['id'] == f'natalie-{section}-news')
+    cfg = AggregatorConfig.model_validate(source['config'])
+    html = '''<article class="NA_article"><div class="NA_article_header">
+    <h1 class="NA_article_title">テスト展覧会 新情報</h1><span class="NA_article_date">2026年9月9日 18:37</span></div>
+    <div class="NA_article_body"><p>テスト展覧会は2026年10月1日から10月12日まで東京都の会場で開催します。</p>
+    <h2>開催概要</h2><p>一般販売は9月15日10:00から受付。最終入場は17:00です。</p>
+    <div class="NA_article_link"><p>リンク</p><a data-gtm-click="external_link" href="https://official.test/expo/">イベント公式</a>
+    <a data-gtm-click="external_link" href="https://l-tike.com/event/mevent/?mid=12345">チケット</a></div>
+    <div class="NA_article_embed_article">古い公演 2024年3月17日</div>
+    <div class="NA_article_link"><p>関連記事</p><a href="/comic/news/123">無関係の展覧会 2024年4月1日</a></div>
+    <div class="NA_article_prefsource">Google登録はこちら</div>
+    <div class="NA_share"><a href="https://twitter.com/intent/tweet">シェア</a></div>
+    <div class="NA_article_social">読者の反応</div></div></article>'''
+    article = parse_article(html, f'https://natalie.mu/{section}/news/456', cfg)
+    assert article['published'].isoformat() == '2026-09-09T18:37:00+09:00'
+    assert article['published_precision'] == 'TIME' and article['updated'] is None
+    assert '2026年10月1日' in article['content'] and '9月15日10:00' in article['content']
+    assert '2024年' not in article['content'] and 'Google' not in article['content']
+    assert 'シェア' not in article['content'] and '読者の反応' not in article['content']
+    assert {x['url'] for x in article['links']} == {'https://official.test/expo/', 'https://l-tike.com/event/mevent/?mid=12345'}
+
+
+def test_access_denial_stops_sweep_preserves_backlog_and_spaces_requests(monkeypatch):
+    from allfeeds_sdk import UpstreamHTTPError
+
+    state, records, requested, moments = {}, [], [], []
+    clock = [0.0]
+    monkeypatch.setattr('genchi_fetchers.aggregators.time.monotonic', lambda: clock[0])
+    monkeypatch.setattr('genchi_fetchers.aggregators.time.sleep', lambda delay: clock.__setitem__(0, clock[0]+delay))
+    monkeypatch.setattr('genchi_fetchers.aggregators.SafeHttpClient.validate_url', lambda *_: None)
+    monkeypatch.setattr('genchi_fetchers.aggregators.SafeHttpClient._allowed_by_robots', lambda *_: True)
+    def render(_, url, **kwargs):
+        requested.append(url)
+        moments.append(clock[0])
+        if url.endswith('list'):
+            return ''.join(f'<a href="/article/{n}">news</a>' for n in (1, 2, 3)), url
+        if url.endswith('/2'):
+            raise UpstreamHTTPError(403, url, response_text='Forbidden')
+        return ARTICLE, url
+    monkeypatch.setattr('genchi_fetchers.aggregators.BrowserClient.render', render)
+    context = FetchContext(emit_record=records.append, emit_asset=lambda *_: None,
+                           load_checkpoint=lambda: state.copy(), save_checkpoint=lambda s: state.update(s),
+                           secret_provider=lambda _: 'test', logger=None)
+    request = FetchRequest(task_id=1, source_id='test', operation='fetch',
+                           config=config(min_page_interval_seconds=15, stop_on_access_denied=True).model_dump(), tags=())
+    report = AggregatorFetcher().fetch(context, request)
+    assert report.status == 'partial' and report.details['page_errors'][0]['http_status'] == 403
+    assert moments == [0, 15, 30] and len(records) == 1
+    assert state['pending'] == ['https://publisher.test/article/2', 'https://publisher.test/article/3']
+    assert not any(u.endswith('/3') for u in requested)

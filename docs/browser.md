@@ -50,6 +50,6 @@ python3 genchi.collector/deploy/manage.py compose backend up -d --no-build --wai
 
 2026-09-09 的迁移验收在本机 Linux ARM64 容器和服务器 Linux x86_64 容器通过：Love Live! 与偶像大师新闻列表均可读取；Lawson「ラブライブ」搜索均解析出 2 个结果页、10 个场次、15 个票务窗口。全量测试 102 项通过。当时 X 尚未验收；后续匿名页面适配和四源验收另见 [X 公开采集验收](x-public-acceptance-2026-09-09.md)。
 
-Natalie 可见验证码的会话保留、私有 `/verification` 接口及真实通过记录，见 [验证中断与恢复](browser-verification.md)。该桥接需要外部 Agent 接手，不会在无人连接时自动解题。
+Natalie 可见验证码的会话保留、私有 `/verification` 接口及真实通过记录，见 [验证中断与恢复](browser-verification.md)。启用常驻 `verification-agent` 后可自动处理已登记的九宫格验证，配置与调用上限见 [Natalie 采集](natalie-collection.md)。
 
 参考：[Camoufox 使用说明](https://camoufox.com/python/usage/)、[安装说明](https://camoufox.com/python/installation/)。

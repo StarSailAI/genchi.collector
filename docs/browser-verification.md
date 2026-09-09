@@ -8,7 +8,7 @@ Genchi 将 SkillHub 的 `browser-verification-interrupt`、`browser-slider-verif
 
 普通 `/fetch` 遇到验证会返回 `409 VERIFICATION_REQUIRED` 和中断 ID。`BrowserClient` 在原调用中轮询该 ID 的结果，最多等待 600 秒；不会把挑战页交给正文提取，也不会因轮询网络超时重新提交导航。同 URL 的重复等待者共用原中断，不同 URL 在此期间收到明确的忙状态。
 
-当前交付的是中断桥接、受限操作工具和客户端恢复。**服务没有常驻的视觉 Agent，也没有自动调起模型的守护进程。** 没有操作者连接时等待会超时失败。Natalie 的来源解析、入库和无人值守日调度仍未完成，不能将访问测试算作采集接入完成。其他八个聚合来源的日调度继续运行。
+后续已加入独立的常驻 `verification-agent`，启用后自动接手登记的九宫格图片验证；手动桥接仍保留。配置、模型调用账本与采集接入说明见 [Natalie 常驻验证与日采集](natalie-collection.md)。下文的七次点击记录是早期外部 Agent 验收，不能与后续无人值守验收混淆。
 
 ## 会话与操作约束
 

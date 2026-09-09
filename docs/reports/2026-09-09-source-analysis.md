@@ -4,7 +4,7 @@
 
 ## 结论与取舍
 
-已接入 8 个来源，采集 111 个不同原始页面，并启用每天错峰采集。本轮统计时 Comic Natalie、Music Natalie 返回 `405 Human Verification`，没有入库样本。随后已通过 Camoufox 图片验证并读取两个列表及各一篇详情（[访问验收](../browser-verification.md)）；来源解析与日调度尚未接入，原统计快照保持不变。
+已接入 8 个来源，采集 111 个不同原始页面，并启用每天错峰采集。本轮统计时 Comic Natalie、Music Natalie 返回 `405 Human Verification`，没有入库样本。随后已通过 Camoufox 图片验证并读取两个列表及各一篇详情（[访问验收](../browser-verification.md)）；后续已接入解析与入库（[新增 9 篇样本](../natalie-collection.md)），日调度仍关闭；本报告与原统计快照保持原观测口径。
 
 首轮更支持“聚合站发现活动、官方页面核对变化、票务站补充申请流程、官推补充现场通知”的组合。没有证据表明其中一种渠道可以完全替代其他渠道。本轮没有因样本少或暂时未匹配到重复记录而关闭来源；保留有限日采集继续观察，优先审核核心来源。
 
@@ -20,7 +20,7 @@
 | [LiveFans](https://www.livefans.jp/news) | 12 | 25 | 本轮仅接新闻栏目。人工核对转载标识：10 篇 SPICE、1 篇 DISK GARAGE、1 篇 WWS。冗余较高，保留低频观察，尚不能判定完全被 SPICE 覆盖 |
 | [animate cafe](https://cafe.animate.co.jp/) | 19 | 25 | 官方运营方，联动期间、门店和入场说明价值高；19 页均有未识别图片，菜单、特典和预约图仍需核对 |
 | [丸井动漫](https://www.0101.co.jp/405/) | 12 | 12 | 官方运营方，期间、入场方式、变更与商品信息丰富，列为核心观察来源 |
-| [Comic Natalie](https://natalie.mu/comic) / [Music Natalie](https://natalie.mu/music) | 0 | 0 | 统计时无入库样本；后续列表与详情访问通过，采集保持未接入 |
+| [Comic Natalie](https://natalie.mu/comic) / [Music Natalie](https://natalie.mu/music) | 0 | 0 | 本统计快照时无入库样本；后续接入状态见 Natalie 独立验收记录 |
 
 候选合计 **145**，含一文多场、多店和跨站重复，并非 145 个独立活动。111 个原始页面中，110 个提取任务为 DONE，1 个 SPICE 页面因日期结构校验失败进入 REVIEW。DONE 只表示处理结束，不表示内容已人工核实；本轮聚合来源已发布活动数为 **0**。
 

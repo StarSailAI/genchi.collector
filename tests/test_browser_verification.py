@@ -251,3 +251,102 @@ def test_drag_attempts_have_separate_three_round_budget(monkeypatch):
                     assert reply['code'] == 'DRAG_BUDGET_EXHAUSTED'
             assert page.mouse.up.await_count == 3
     asyncio.run(run())
+
+
+def test_cropped_observation_binds_same_clip_and_keeps_global_pointer_coordinates():
+    async def run():
+        page = Page()
+        await page.set_viewport_size({'width': 800, 'height': 600})
+        page.screenshot = AsyncMock(return_value=b'panel-image')
+        pointer = VerificationPointer(page)
+        obs = await pointer.observe(panel_only=True)
+        assert obs['imageOrigin'] == {'x': 20, 'y': 20}
+        assert page.screenshot.call_args.kwargs['clip'] == obs['actionScope']
+        assert (await pointer.perform({'observationId': obs['observationId'], 'kind': 'click', 'x': 40, 'y': 40}))['performed']
+        assert page.screenshot.call_args_list[0].kwargs == page.screenshot.call_args_list[1].kwargs
+        page.mouse.click.assert_awaited_once_with(40, 40)
+    asyncio.run(run())
+
+
+def test_registered_grid_geometry_uses_only_visible_elements():
+    async def run():
+        page = Page()
+        await page.set_viewport_size({'width': 800, 'height': 600})
+        class Elements:
+            def __init__(self, values): self.values = values
+            def filter(self, **kwargs): return self
+            async def count(self): return len(self.values)
+            def nth(self, i): return self.values[i]
+        class Element:
+            def __init__(self, box, text=''): self.box, self.text = box, text
+            async def bounding_box(self): return self.box
+            async def inner_text(self): return self.text
+        grid = Element({'x': 30, 'y': 30, 'width': 270, 'height': 270})
+        button = Element({'x': 310, 'y': 260, 'width': 60, 'height': 30}, 'Confirm')
+        original = page.locator
+        def locator(selector):
+            panel = original(selector)
+            panel.locator = lambda child: Elements([grid] if 'canvas' in child else [button])
+            return panel
+        page.locator = locator
+        controls = await VerificationPointer(page).image_controls()
+        assert len(controls['imageTiles']) == 9
+        assert controls['imageTiles'][4] == {'x': 120, 'y': 120, 'width': 90, 'height': 90}
+        assert controls['registeredControls']['confirm'] == button.box
+    asyncio.run(run())
+
+
+def test_browser_loss_after_resolved_request_can_recover_without_replaying_that_result(monkeypatch):
+    async def run():
+        monkeypatch.setenv('BROWSER_API_TOKEN', 'test')
+        monkeypatch.setattr(service, '_validate_public_url', AsyncMock())
+        first, replacement = Page(), Page()
+        first.challenged = replacement.challenged = False
+        monkeypatch.setattr(service, '_new_page', AsyncMock(side_effect=[first, replacement]))
+        app = service.create_app()
+        app.on_startup.remove(service.start_browser)
+        app.on_cleanup.remove(service.stop_browser)
+        headers = {'Authorization': 'Bearer test'}
+        async with TestClient(TestServer(app)) as client:
+            assert (await client.post('/fetch', headers=headers, json={'url': first.url})).status == 200
+            manager = app['verification']
+            rid = manager.run['id']
+            manager.results[rid] = ('original recovered HTML', first.url, 200, 10**12)
+            first.closed = True
+            assert (await client.post('/fetch', headers=headers, json={'url': 'https://natalie.mu/music'})).status == 200
+            assert replacement.navigations == 1
+            old = await client.get('/verification/'+rid+'/result', headers=headers)
+            assert await old.text() == 'original recovered HTML'
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('terminal', [False, True])
+def test_idle_expiry_can_reopen_but_failed_intervention_requires_cooldown(monkeypatch, terminal):
+    async def run():
+        import time
+
+        from verification import FAILED_COOLDOWN_SECONDS, SESSION_SECONDS
+        monkeypatch.setenv('BROWSER_API_TOKEN', 'test')
+        monkeypatch.setattr(service, '_validate_public_url', AsyncMock())
+        first, replacement = Page(), Page()
+        first.challenged = replacement.challenged = False
+        new_page = AsyncMock(side_effect=[first, replacement])
+        monkeypatch.setattr(service, '_new_page', new_page)
+        app = service.create_app()
+        app.on_startup.remove(service.start_browser)
+        app.on_cleanup.remove(service.stop_browser)
+        headers = {'Authorization': 'Bearer test'}
+        async with TestClient(TestServer(app)) as client:
+            assert (await client.post('/fetch', headers=headers, json={'url': first.url})).status == 200
+            manager = app['verification']
+            if terminal:
+                await manager.close('CANCELED', 'operator_canceled')
+                assert (await client.post('/fetch', headers=headers, json={'url': first.url})).status == 409
+                assert new_page.await_count == 1
+                manager.run['closed_at'] = time.monotonic()-FAILED_COOLDOWN_SECONDS-1
+            else:
+                manager.run['created'] = time.monotonic()-SESSION_SECONDS-1
+            assert (await client.post('/fetch', headers=headers, json={'url': first.url})).status == 200
+            assert new_page.await_count == 2
+            assert first.closed and replacement.navigations == 1
+    asyncio.run(run())

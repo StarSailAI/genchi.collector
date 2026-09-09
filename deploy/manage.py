@@ -128,6 +128,19 @@ def prepare(root: Path) -> dict[str, str]:
             "Fill LLM_BASE_URL, LLM_API_KEY and LLM_MODEL together, or leave all empty"
         )
     values["CATALOG_WORKER_MODE"] = "catalog" if all(llm) else "idle"
+    verification_enabled = values.get("VERIFICATION_AGENT_ENABLED", "false").lower() == "true"
+    visual_base = values.get("VERIFICATION_LLM_BASE_URL", "").rstrip("/")
+    if (verification_enabled and visual_base and visual_base != values.get("LLM_BASE_URL", "").rstrip("/")
+            and not values.get("VERIFICATION_LLM_API_KEY")):
+        raise ValueError("A separate verification endpoint requires its own API key")
+    for target, fallback in [("VERIFICATION_LLM_BASE_URL", "LLM_BASE_URL"), ("VERIFICATION_LLM_API_KEY", "LLM_API_KEY")]:
+        values[target] = values.get(target) or values.get(fallback, "")
+    if verification_enabled and not all(values.get(k) for k in ("VERIFICATION_LLM_BASE_URL", "VERIFICATION_LLM_API_KEY", "VERIFICATION_LLM_MODEL")):
+        raise ValueError("Enabled verification agent requires a vision model and API credentials")
+    if verification_enabled:
+        endpoint = urlsplit(values["VERIFICATION_LLM_BASE_URL"])
+        if endpoint.scheme != "https" or not endpoint.hostname or endpoint.username or endpoint.password or endpoint.query or endpoint.fragment:
+            raise ValueError("Verification model endpoint must be a trusted HTTPS URL")
     provider = values.get("MAIL_PROVIDER", "resend")
     if provider not in {"resend", "smtp"}:
         raise ValueError("MAIL_PROVIDER must be resend or smtp")
@@ -190,6 +203,13 @@ def prepare(root: Path) -> dict[str, str]:
             re.sub(r"(?m)^    enabled: true$", "    enabled: false", part)
             if "\n    fetcher: genchi.x_profile\n" in part
             else part
+            for part in parts
+        )
+    if not verification_enabled:
+        parts = re.split(r"(?m)(?=^  - id: )", source)
+        source = "".join(
+            re.sub(r"(?m)^    enabled: true$", "    enabled: false", part)
+            if part.startswith(("  - id: natalie-comic-news\n", "  - id: natalie-music-news\n")) else part
             for part in parts
         )
     private_write(runtime / "sources.yaml", source)

@@ -18,6 +18,7 @@ dev = [
   "aiohttp>=3.12,<4",
   "camoufox==0.5.6",
   "playwright==1.62.0",
+  "Pillow>=11,<13",
 ]
 
 [tool.setuptools]

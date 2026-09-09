@@ -24,6 +24,7 @@ MAX_POINTERS = 12
 LEASE_SECONDS = 120
 WAIT_SECONDS = 600
 SESSION_SECONDS = 1800
+FAILED_COOLDOWN_SECONDS = 6 * 3600
 
 
 def supported_url(url):
@@ -55,18 +56,56 @@ class VerificationPointer:
         right, bottom = min(viewport['width'], box['x'] + box['width']), min(viewport['height'], box['y'] + box['height'])
         return {'x': x, 'y': y, 'width': right-x, 'height': bottom-y} if right > x and bottom > y else None
 
-    async def observe(self):
+    async def observe(self, *, panel_only=False):
         self.observation = None
         box = await self.scope()
         # Bind the command to the actual returned screenshot, including the
         # puzzle contents: a new puzzle can occupy exactly the same rectangle.
-        self.picture = await self.page.screenshot(type='jpeg', quality=80, scale='css', timeout=5000)
+        options = {'type': 'jpeg', 'quality': 80, 'scale': 'css', 'timeout': 5000}
+        if panel_only and box:
+            options['clip'] = box
+        self.picture = await self.page.screenshot(**options)
         if not box:
             return {}
         oid = secrets.token_urlsafe(18)
         digest = hashlib.sha256(self.picture).digest()
-        self.observation = (oid, time.monotonic(), self.page.url, box, digest)
-        return {'observationId': oid, 'actionScope': box, 'viewport': self.page.viewport_size}
+        self.observation = (oid, time.monotonic(), self.page.url, box, digest, options)
+        return {'observationId': oid, 'actionScope': box, 'viewport': self.page.viewport_size,
+                **({'imageOrigin': {'x': box['x'], 'y': box['y']}} if panel_only else {})}
+
+    async def image_controls(self):
+        """Geometry of public, rendered controls; no scripts or hidden answers."""
+        panel = self.page.locator(PANEL).filter(visible=True)
+        if await panel.count() != 1:
+            return {}
+        scope = await self.scope()
+        def inside(box):
+            return box and scope and box['x'] >= scope['x'] and box['y'] >= scope['y'] and (
+                box['x']+box['width'] <= scope['x']+scope['width']+1 and
+                box['y']+box['height'] <= scope['y']+scope['height']+1)
+        boxes = []
+        elements = panel.locator('canvas,img,svg,[style*="background-image"]').filter(visible=True)
+        for i in range(min(await elements.count(), 40)):
+            box = await elements.nth(i).bounding_box()
+            if inside(box) and min(box['width'], box['height']) >= 75 and abs(box['width']-box['height']) < 3 and box not in boxes:
+                boxes.append(box)
+        tiles = []
+        if len(boxes) == 9:
+            tiles = sorted(boxes, key=lambda b: (round((b['y']+b['height']/2)/30), b['x']+b['width']/2))
+        elif len(boxes) == 1 and boxes[0]['width'] >= 240:
+            grid = boxes[0]
+            tiles = [{'x': grid['x']+col*grid['width']/3, 'y': grid['y']+row*grid['height']/3,
+                      'width': grid['width']/3, 'height': grid['height']/3} for row in range(3) for col in range(3)]
+        controls = {}
+        buttons = panel.locator('button,[role="button"],input[type="button"],input[type="submit"]').filter(visible=True)
+        for i in range(min(await buttons.count(), 20)):
+            button = buttons.nth(i)
+            label = ''.join((await button.inner_text() or await button.get_attribute('value') or '').split())
+            name = {'開始': 'start', '確認': 'confirm', 'Start': 'start', 'Confirm': 'confirm'}.get(label)
+            box = await button.bounding_box()
+            if name and inside(box):
+                controls[name] = box
+        return {'imageTiles': tiles, 'registeredControls': controls}
 
     async def perform(self, data):
         old, self.observation = self.observation, None
@@ -89,7 +128,7 @@ class VerificationPointer:
             return {'performed': False, 'reason': 'outside_panel'}
         if kind == 'drag' and (not inside(data['toX'], data['toY']) or not 100 <= data['durationMs'] <= 3000):
             return {'performed': False, 'reason': 'invalid_drag'}
-        picture = await self.page.screenshot(type='jpeg', quality=80, scale='css', timeout=5000)
+        picture = await self.page.screenshot(**old[5])
         if hashlib.sha256(picture).digest() != old[4]:
             return {'performed': False, 'reason': 'observation_changed'}
         mouse = self.page.mouse
@@ -136,6 +175,7 @@ class VerificationManager:
         r = self.run
         if r:
             r.update(state=state, reason=reason, lease=None)
+            r.setdefault('closed_at', time.monotonic())
             r['pointer'].observation = None
             try:
                 if not r['page'].is_closed():
@@ -152,6 +192,9 @@ class VerificationManager:
         now = time.monotonic()
         if r['page'].is_closed():
             await self.close('FAILED', 'browser_closed')
+            return
+        if r['state'] == 'READY' and now > r['created']+SESSION_SECONDS:
+            await self.close('EXPIRED', 'idle_session_expired')
             return
         if (now > r['created']+SESSION_SECONDS
                 or (r['state'] == 'WAITING' and now > r['waiting_since']+WAIT_SECONDS)
@@ -180,6 +223,18 @@ class VerificationManager:
         """A repeated pending fetch returns the same run, without replaying navigation."""
         async with self.lock:
             await self.expire()
+            if (self.run and self.run['state'] in {'FAILED', 'CANCELED', 'EXPIRED'} and
+                    (self.run['reason'] == 'idle_session_expired' or
+                     time.monotonic()-self.run.get('closed_at', time.monotonic()) >= FAILED_COOLDOWN_SECONDS)):
+                # A later daily task may start its own session after the fixed
+                # failure cooldown. Never immediately replay the failed run.
+                self.run = None
+            if (self.run and self.run['id'] in self.results and self.run['page'].is_closed()
+                    and self.run['reason'] in {'browser_closed', 'browser_navigation_failed'}):
+                # The original challenge already resolved. A later read-only
+                # navigation lost its browser, so _new_page may recover it.
+                # Unresolved/canceled/exhausted interventions never take this path.
+                self.run = None
             if self.run and self.run['state'] not in {'READY'}:
                 if url != self.run['url']:
                     return fail('VERIFICATION_IN_PROGRESS')
@@ -219,9 +274,17 @@ class VerificationManager:
                     if nav.is_navigation_request() and nav.frame == page.main_frame and not supported_url(nav.url):
                         await route.abort('blockedbyclient')
                     elif await self.guard_public(route, nav):
-                        # CAPTCHA images/fonts must load. Public-address and TLS
-                        # protections still apply to every resource.
-                        await route.continue_()
+                        # Natalie news text is server-rendered. Once a normal
+                        # document arrives, do not execute ads or load media.
+                        # The 405 verification document retains its required
+                        # scripts, images and API calls in this same context.
+                        normal = 200 <= self.run['status'] < 300
+                        auxiliary = nav.resource_type in {'image', 'font', 'media', 'stylesheet', 'script', 'xhr', 'fetch', 'other'}
+                        subframe = nav.is_navigation_request() and nav.frame != page.main_frame
+                        if normal and (auxiliary or subframe):
+                            await route.abort('blockedbyclient')
+                        else:
+                            await route.continue_()
 
                 try:
                     await page.route('**/*', guard)
@@ -247,7 +310,10 @@ class VerificationManager:
                     return web.json_response({'code': 'VERIFICATION_REQUIRED', 'verification': self.public()}, status=409)
                 if selector and r['status'] < 400:
                     await r['page'].wait_for_selector(selector, state='attached', timeout=15_000)
-                if r['status'] >= 400 or not await self.ready(r['page']):
+                if r['status'] >= 400:
+                    r['state'] = 'READY'
+                    return await self.html()  # Preserve real 404/410/429 semantics.
+                if not await self.ready(r['page']):
                     await self.close('FAILED', 'upstream_error_or_content_not_ready')
                     return fail('CONTENT_NOT_READY', 502)
                 r['state'] = 'READY'
@@ -289,9 +355,10 @@ class VerificationManager:
                 if p.is_closed():
                     await self.close('FAILED', 'browser_closed')
                     return fail('BROWSER_CLOSED')
-                capability = await r['pointer'].observe()
+                capability = await r['pointer'].observe(panel_only=data.get('imageMode') == 'panel')
                 picture = r['pointer'].picture
-                return web.json_response({**self.public(), **capability, 'pageUrl': p.url,
+                controls = await r['pointer'].image_controls() if data.get('imageMode') == 'panel' and capability else {}
+                return web.json_response({**self.public(), **capability, **controls, 'pageUrl': p.url,
                     'title': await p.title(), 'text': (await p.locator('body').inner_text())[:2500],
                     'actions': ['pointer'] if capability and r['pointerActions'] < r.get('pointerLimit', MAX_POINTERS) else [],
                     'image': base64.b64encode(picture).decode(), 'mimeType': 'image/jpeg'})

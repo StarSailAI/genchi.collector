@@ -30,6 +30,12 @@ def test_deployment_bootstrap_preserves_secrets_and_pauses_unconfigured_integrat
     config = tmp_path / "genchi.collector/config"
     config.mkdir(parents=True)
     shutil.copy2(REPO / "config/sources.yaml", config / "sources.yaml")
+    # Exercise gating even if an operator enabled Natalie in the source file.
+    source_path = config / "sources.yaml"
+    source_text = source_path.read_text()
+    for source_id in ("natalie-comic-news", "natalie-music-news"):
+        source_text = source_text.replace(f"  - id: {source_id}\n    enabled: false", f"  - id: {source_id}\n    enabled: true")
+    source_path.write_text(source_text)
     deploy.init_env(tmp_path, "http://192.0.2.10")
     env = tmp_path / ".env"
     original = env.read_bytes()
@@ -43,7 +49,7 @@ def test_deployment_bootstrap_preserves_secrets_and_pauses_unconfigured_integrat
     sources = (tmp_path / ".deploy/sources.yaml").read_text()
     original_sources = {s["id"]: s for s in yaml.safe_load((config / "sources.yaml").read_text())["sources"]}
     for source in yaml.safe_load(sources)["sources"]:
-        if source["fetcher"] == "genchi.x_profile":
+        if source["fetcher"] == "genchi.x_profile" or source["id"] in {"natalie-comic-news", "natalie-music-news"}:
             assert source["enabled"] is False
         else:
             assert source["enabled"] == original_sources[source["id"]]["enabled"]
@@ -130,3 +136,37 @@ def test_x_anonymous_enable_needs_no_cookie_but_cookie_mode_is_explicit(tmp_path
     env.write_text(enabled.replace("X_AUTH_MODE=anonymous", "X_AUTH_MODE=unknown"))
     with pytest.raises(ValueError, match="X_AUTH_MODE"):
         deploy.prepare(tmp_path)
+
+
+def test_visual_agent_requires_model_and_resolves_separate_credential_settings(tmp_path):
+    config = tmp_path / 'genchi.collector/config'
+    config.mkdir(parents=True)
+    shutil.copy2(REPO / 'config/sources.yaml', config / 'sources.yaml')
+    deploy.init_env(tmp_path, 'https://events.example.test')
+    path = tmp_path / '.env'
+    original = path.read_text()
+    enabled = original.replace('VERIFICATION_AGENT_ENABLED=false', 'VERIFICATION_AGENT_ENABLED=true')
+    path.write_text(enabled)
+    with pytest.raises(ValueError, match='vision model'):
+        deploy.prepare(tmp_path)
+    configured = enabled.replace('\nLLM_API_KEY=\n', '\nLLM_API_KEY=test-private-key\n').replace(
+        '\nLLM_BASE_URL=\n', '\nLLM_BASE_URL=https://provider.example.test\n').replace('\nLLM_MODEL=\n', '\nLLM_MODEL=text-only\n').replace(
+        '\nVERIFICATION_LLM_MODEL=\n', '\nVERIFICATION_LLM_MODEL=vision-only\n')
+    path.write_text(configured)
+    values = deploy.prepare(tmp_path)
+    assert values['VERIFICATION_LLM_API_KEY'] == 'test-private-key'
+    assert values['VERIFICATION_LLM_BASE_URL'] == 'https://provider.example.test'
+    assert values['VERIFICATION_LLM_MODEL'] == 'vision-only'
+    assert values['LLM_MODEL'] == 'text-only'
+    assert path.read_text() == configured
+    separate = configured.replace('\nVERIFICATION_LLM_BASE_URL=\n', '\nVERIFICATION_LLM_BASE_URL=https://vision.example.test\n')
+    path.write_text(separate)
+    with pytest.raises(ValueError, match='own API key'):
+        deploy.prepare(tmp_path)
+    path.write_text(separate.replace('\nVERIFICATION_LLM_API_KEY=\n', '\nVERIFICATION_LLM_API_KEY=vision-test-key\n'))
+    assert deploy.prepare(tmp_path)['VERIFICATION_LLM_API_KEY'] == 'vision-test-key'
+    # Model credentials stay in the operator container, never browser children.
+    compose = yaml.safe_load((REPO / 'docker-compose.yml').read_text())['services']
+    assert 'VERIFICATION_LLM_API_KEY' not in compose['browser']['environment']
+    assert 'VERIFICATION_LLM_API_KEY' in compose['verification-agent']['environment']
+    assert 'ports' not in compose['verification-agent']

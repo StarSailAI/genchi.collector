@@ -15,6 +15,8 @@ services:
   worker:
     image: genchi/worker:${GENCHI_IMAGE_TAG:-current}
     mem_limit: 512m
+  verification-agent:
+    mem_limit: 128m
   browser:
     mem_limit: 1400m
     environment:

@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from datetime import UTC, datetime
 from itertools import zip_longest
 from typing import Literal
@@ -77,6 +78,8 @@ class AggregatorConfig(BaseModel):
     pages_per_root: int = Field(default=1, ge=1, le=5)
     max_detail_pages: int = Field(default=24, ge=1, le=100)
     refresh_details_per_run: int = Field(default=6, ge=0, le=50)
+    min_page_interval_seconds: int = Field(default=0, ge=0, le=60)
+    stop_on_access_denied: bool = False
     max_tracked_details: int = Field(default=1000, ge=10, le=5000)
     browser_url: str = "http://browser:3003"
     browser_token_secret: str = "BROWSER_API_TOKEN"
@@ -232,13 +235,21 @@ class AggregatorFetcher(FetcherPlugin):
         http = SafeHttpClient(user_agent="GenchiCollector/0.1 (+https://genchi.news)", timeout_seconds=30,
                               retries=1, max_response_bytes=1000000, obey_robots=True,
                               allow_private_network=False, allowed_hosts=(), rate_limit_seconds=2)
+        last_navigation = None
+        # Existing immutable Natalie task snapshots also need the slower pace.
+        interval = max(config.min_page_interval_seconds, 30 if 'natalie.mu' in hosts else 0)
+        stop_on_denied = config.stop_on_access_denied or 'natalie.mu' in hosts
 
         def load(url, selector):
+            nonlocal last_navigation
             if urlsplit(url).hostname not in hosts:
                 raise PermanentError("Aggregator navigation left its configured host scope")
             http.validate_url(url)
             if not http._allowed_by_robots(url):
                 raise PermanentError("Publisher robots policy excludes this aggregator URL")
+            if last_navigation is not None:
+                time.sleep(max(0, interval-(time.monotonic()-last_navigation)))
+            last_navigation = time.monotonic()
             html, final = browser.render(url, selector=selector)
             if urlsplit(final).hostname not in hosts:
                 raise PermanentError("Aggregator redirected outside configured host scope")
@@ -300,6 +311,8 @@ class AggregatorFetcher(FetcherPlugin):
             except UpstreamHTTPError as exc:
                 if exc.status_code not in {404, 410}:
                     errors.append({"url": url, "stage": "article", "error": type(exc).__name__, "http_status": exc.status_code})
+                    if stop_on_denied and exc.status_code in {401, 403}:
+                        break  # Preserve the remaining backlog; no block-page sweep.
                     continue
                 missing.append(url)
                 continue

@@ -16,3 +16,47 @@ sources:
       refresh_details_per_run: 4
     routing: {queue: browser, capabilities: [browser_api], resources: {browser_api: 1}}
     tags: [scope:anime-offline, country:JP, timezone:Asia/Tokyo, source:editorial-aggregator]
+
+  - id: example-natalie-comic-news
+    enabled: false
+    fetcher: genchi.aggregator
+    sink: postgres
+    schedule: {type: cron, cron: "0 13 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://natalie.mu/comic]
+      detail_pattern: '^https://natalie\.mu/comic/news/[0-9]+$'
+      list_selector: main .NA_section-list .NA_card a[href]
+      title_selector: h1.NA_article_title
+      content_selector: .NA_article_body
+      remove_selector: 'script,style,nav,aside,form,iframe,.NA_share,.NA_article_prefsource,.NA_article_tag,.NA_article_social,.NA_article_embed_article,.NA_article_gallery,.NA_article_tagad-comic,.NA_article_youtube,.GAE_article_milestone,.NA_article_link:not(:has(a[data-gtm-click="external_link"])),a[href*="/gallery/news/"]'
+      published_selector: .NA_article_header .NA_article_date
+      min_page_interval_seconds: 30
+      stop_on_access_denied: true
+      max_detail_pages: 12
+      refresh_details_per_run: 4
+    timeout_seconds: 3600
+    retry: {max_attempts: 2, backoff: exponential, base_seconds: 1800, max_seconds: 7200}
+    routing: {queue: browser, capabilities: [browser_api], resources: {browser_api: 1, domain:natalie.mu: 1}}
+    tags: [scope:anime-offline, country:JP, timezone:Asia/Tokyo, source:editorial-aggregator]
+
+  - id: example-natalie-music-news
+    enabled: false
+    fetcher: genchi.aggregator
+    sink: postgres
+    schedule: {type: cron, cron: "10 13 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://natalie.mu/music]
+      detail_pattern: '^https://natalie\.mu/music/news/[0-9]+$'
+      list_selector: main .NA_section-list .NA_card a[href]
+      title_selector: h1.NA_article_title
+      content_selector: .NA_article_body
+      remove_selector: 'script,style,nav,aside,form,iframe,.NA_share,.NA_article_prefsource,.NA_article_tag,.NA_article_social,.NA_article_embed_article,.NA_article_gallery,.NA_article_tagad-comic,.NA_article_youtube,.GAE_article_milestone,.NA_article_link:not(:has(a[data-gtm-click="external_link"])),a[href*="/gallery/news/"]'
+      published_selector: .NA_article_header .NA_article_date
+      min_page_interval_seconds: 30
+      stop_on_access_denied: true
+      max_detail_pages: 12
+      refresh_details_per_run: 4
+    timeout_seconds: 3600
+    retry: {max_attempts: 2, backoff: exponential, base_seconds: 1800, max_seconds: 7200}
+    routing: {queue: browser, capabilities: [browser_api], resources: {browser_api: 1, domain:natalie.mu: 1}}
+    tags: [scope:music-offline, country:JP, timezone:Asia/Tokyo, source:editorial-aggregator]
