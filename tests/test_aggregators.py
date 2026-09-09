@@ -173,6 +173,42 @@ def test_single_real_ticket_link_is_used_when_article_has_no_event_homepage():
     assert _text_candidates(json.dumps(value), resource, [])[0].url == 'https://eplus.jp/sf/detail/123'
 
 
+@pytest.mark.parametrize('proof', [
+    '受付期間：9/9(水) 12:00 ～ 9/23(水・祝) 23:59まで',
+    '最速先行 2026年9月9日（水）12:00～9月23日（水）23:59',
+])
+def test_known_ticket_clocks_are_not_silently_downgraded_to_dates(proof):
+    resource = {"id": 1, "source_id": "publisher", "external_id": "1", "content_hash": "v1",
+                "url": "https://publisher.test/article/123", "content": proof,
+                "attributes": {"source_type": "aggregator"}}
+    node = {"kind": "TICKET", "title": "最速先行", "evidence_id": "B1",
+            "time": {"precision": "DATE", "starts_on": "2026-09-09", "ends_on": "2026-09-23"}}
+    value = {"activities": [{"title": "公演", "evidence_id": "B1", "milestones": [node]}]}
+    with pytest.raises(ValueError, match='不可降为 DATE'):
+        _text_candidates(json.dumps(value), resource, [])
+    node['time'] = {'precision': 'TIME', 'starts_at': '2026-09-09T12:00:00+09:00', 'ends_at': '2026-09-23T23:59:00+09:00'}
+    item = _text_candidates(json.dumps(value), resource, [])[0]
+    assert item.milestones[0].time.starts_at.hour == 12
+    assert item.milestones[0].time.ends_at.minute == 59
+    assert item.publication == 'REVIEW' and not item.milestones[0].evidence.verified
+
+
+@pytest.mark.parametrize('proof', [
+    '受付期間 9/9～9/23、開演 19:00',  # Performance clock is not a ticket clock.
+    '先行受付 9/9～9/23。別の受付 9/10 12:00～9/22 23:59',
+    '前年の受付 2025年9月9日12:00～2025年9月23日23:59',
+    '受付 9/9 12:00～9/23 時刻未定',  # Partial clock precision cannot fill an unknown end.
+])
+def test_date_only_window_does_not_borrow_other_dates_or_clocks(proof):
+    resource = {"id": 1, "source_id": "publisher", "external_id": "1", "content_hash": "v1",
+                "url": "https://publisher.test/article/123", "content": proof,
+                "attributes": {"source_type": "aggregator"}}
+    value = {"activities": [{"title": "公演", "evidence_id": "B1", "milestones": [
+        {"kind": "TICKET", "title": "先行", "evidence_id": "B1",
+         "time": {"precision": "DATE", "starts_on": "2026-09-09", "ends_on": "2026-09-23"}}]}]}
+    assert _text_candidates(json.dumps(value), resource, [])[0].milestones[0].time.precision == 'DATE'
+
+
 def test_explicit_performance_rows_cannot_be_lost_as_tbd():
     resource = {"id": 1, "source_id": "spice-news", "external_id": "1", "content_hash": "v1",
                 "url": "https://spice.eplus.jp/articles/123", "content": "開催日時\n2026年11月20日(金) 17時開場 / 19時開演\n2026年11月21日(土) 16時開場 / 18時開演",

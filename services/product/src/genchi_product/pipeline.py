@@ -28,7 +28,7 @@ from .matching import event_reference, find_activity_matches
 from .store import Catalog
 
 LOGGER = logging.getLogger(__name__)
-PROMPT_VERSION = "catalog-v2.8-calendar-completeness"
+PROMPT_VERSION = "catalog-v2.9-ticket-precision"
 
 
 def precise(value, end=None) -> Moment:
@@ -230,6 +230,7 @@ def extract_text(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
         "Never replace known performance dates with TBD because there are several dates. "
         "For DATE, put YYYY-MM-DD in starts_on/ends_on and leave starts_at/ends_at null; never invent midnight. "
         "For TIME, use starts_at/ends_at with timezone offsets and leave starts_on/ends_on null. "
+        "When an application window explicitly gives both clock times, keep both in TIME; do not downgrade it to DATE. "
         "For TBD leave all four date/time fields null. "
         "If only a deadline is known, use an instant milestone whose starts_at (or starts_on) is that deadline; "
         "never supply ends_at alone or invent when the application window began. "
@@ -466,6 +467,8 @@ def _text_candidates(content: str, resource: dict, subjects: list[dict]) -> list
                     ),
                 )
             )
+            if aggregate:
+                validate_ticket_precision(milestones[-1], proof)
         result.append(
             ActivityInput(
                 activity_key=f"document:{resource['id']}:series:{normalize(raw['title'])}"
@@ -523,6 +526,23 @@ def _text_candidates(content: str, resource: dict, subjects: list[dict]) -> list
         if missing_clocks:
             raise ValueError("原文已明确开演时刻，活动不能降为 DATE；使用完整 TIME starts_at: " + ", ".join(t.isoformat() for t in sorted(missing_clocks)))
     return result
+
+
+def validate_ticket_precision(node: MilestoneInput, proof: str) -> None:
+    """Reject a known loss of precision, without guessing or rewriting source facts."""
+    if node.kind not in {"TICKET", "RESERVATION", "PAYMENT"} or node.time.precision != "DATE" or not node.time.ends_on:
+        return
+    # Require a complete date-and-clock interval. A performance's opening time,
+    # an isolated deadline or a different round's dates do not establish this window.
+    bound = r"(?:(20\d{2})[年/])?(\d{1,2})[月/](\d{1,2})日?\s*(?:[（(][^）)\n]{0,8}[）)])?\s*([0-2]?\d):([0-5]\d)"
+    for match in re.finditer(bound + r"\s*[～〜~–—-]\s*" + bound, proof):
+        sy, sm, sd, sh, _sn, ey, em, ed, eh, _en = match.groups()
+        start, end = node.time.starts_on, node.time.ends_on
+        if (int(sm), int(sd)) != (start.month, start.day) or (int(em), int(ed)) != (end.month, end.day):
+            continue
+        if (sy and int(sy) != start.year) or (ey and int(ey) != end.year) or int(sh) > 23 or int(eh) > 23:
+            continue
+        raise ValueError("节点受付期间已明确开始和截止时刻，不可降为 DATE；核对原文并使用 TIME: " + match[0])
 
 
 def index_raw(conn, resource):
