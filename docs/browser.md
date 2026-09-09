@@ -7,9 +7,9 @@ SkillHub 的其他路线是 S（SeleniumBase / Chrome）和 C（CloakBrowser / C
 ## 服务边界
 
 - `browser` 是非 root 容器，默认后台运行、并发 1。生产内存上限 1400MB，共享内存 512MB。
-- 只提供受令牌保护的 `/fetch` 和 `/extract/x-profile`，不开放任意脚本、CDP 或宿主机端口。`/health` 可检查实际引擎、版本和连接状态。
-- 每次公共网页抓取创建并关闭独立 context；X 默认也使用匿名 context，同一轮的列表与详情复用该匿名会话。仅显式选择 cookies 模式时使用独立账号 context，公共网页不会复用官推登录状态。
-- 正文采集默认不下载图片、视频和字体文件，页面中的媒体链接仍可提取。Firefox 子进程断开后，下一个请求会在互斥锁下重新启动 F 引擎，避免接口存活但浏览器永久失效。
+- 提供受令牌保护的 `/fetch`、`/extract/x-profile` 和限定 Natalie 的 `/verification`，不开放任意脚本、CDP 或宿主机端口。`/health` 可检查实际引擎、版本和连接状态。
+- 普通公共网页抓取创建并关闭独立 context；Natalie 保留最长 30 分钟的独立验证上下文。X 默认使用匿名 context，同一轮的列表与详情复用该匿名会话。仅显式选择 cookies 模式时使用独立账号 context，公共网页不会复用官推登录状态。
+- 正文采集默认不下载图片、视频和字体文件，Natalie 验证上下文允许加载图片与字体。页面中的媒体链接仍可提取。Firefox 子进程断开后，下一个请求会在互斥锁下重新启动 F 引擎，避免接口存活但浏览器永久失效。
 - 页面请求、跳转和子资源都检查目标地址。容器内的回环 HTTP/CONNECT 代理解析公网 IPv4 后直接连接该 IP，避免检查后由浏览器再次解析 DNS。
 - 只允许 HTTP(S) 与 80/443 端口；拒绝内网、回环、链路本地和保留地址。仅遇到本地 VPN 的 `198.18.0.0/15` 假 DNS 时，通过校验证书的 Cloudflare DoH 获取真实 A 记录并再次验证。
 - 保留 HTTPS 证书验证，关闭下载、WebSocket、Service Worker、WebRTC 和 HTTP/3；限制请求、连接、页面时间及响应体大小。
@@ -49,5 +49,7 @@ python3 genchi.collector/deploy/manage.py compose backend up -d --no-build --wai
 今后的真实浏览器探测和采集验收只在部署服务器执行，本地使用模拟测试。浏览器客户端对临时页面失败最多尝试 3 次。上游短期限流先按 Retry-After 等待，至少 60 秒，再重试当前页面；长时间或持续限流交回调度器退避，认证错误不会反复重试。来源可显式配置已核对的页面删除提示，但普通 403 拒绝不会被当成删除成功跳过。
 
 2026-09-09 的迁移验收在本机 Linux ARM64 容器和服务器 Linux x86_64 容器通过：Love Live! 与偶像大师新闻列表均可读取；Lawson「ラブライブ」搜索均解析出 2 个结果页、10 个场次、15 个票务窗口。全量测试 102 项通过。当时 X 尚未验收；后续匿名页面适配和四源验收另见 [X 公开采集验收](x-public-acceptance-2026-09-09.md)。
+
+Natalie 可见验证码的会话保留、私有 `/verification` 接口及真实通过记录，见 [验证中断与恢复](browser-verification.md)。该桥接需要外部 Agent 接手，不会在无人连接时自动解题。
 
 参考：[Camoufox 使用说明](https://camoufox.com/python/usage/)、[安装说明](https://camoufox.com/python/installation/)。
