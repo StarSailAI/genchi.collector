@@ -10,6 +10,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from .domain import ActivityInput, EvidenceInput, MilestoneInput, Moment, fingerprint, normalize
+from .matching import event_reference, find_activity_matches, same_milestone_fact
 from .naming import sync_name
 
 
@@ -109,6 +110,19 @@ class Catalog:
         # A title is a candidate match, scoped to an edition. A persistent source mapping wins on updates.
         year = item.time.anchor()[:4]
         key = fingerprint(f"{normalize(item.title)}:{year}:{item.attendance}")
+        origin = conn.execute(
+            "SELECT attributes->>'source_type' source_type FROM allfeeds.resources WHERE source_id=%s AND external_id=%s",
+            (item.evidence.source_id, item.evidence.external_id),
+        ).fetchone()
+        if origin and origin["source_type"] == "aggregator":
+            # Broad publishers reuse generic event titles. They must pass the
+            # cross-source evidence/date match, never the legacy title/year key.
+            key = fingerprint("aggregator:" + item.source_key)
+        reference = event_reference(item.url)
+        if reference:
+            # Serialize different publishers of the same event before looking up
+            # titles, so simultaneous approved records cannot create duplicates.
+            conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("event-ref:" + reference,))
         conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (key,))
         mapped = conn.execute(
             "SELECT * FROM catalog_external_ids WHERE key=%s", (item.source_key,)
@@ -137,6 +151,14 @@ class Catalog:
                     mapped = conn.execute(
                         "SELECT * FROM catalog_external_ids WHERE key=%s", (item.source_key,)
                     ).fetchone()
+        if not activity and not mapped:
+            exact = [m for m in find_activity_matches(conn, item) if m["strength"] == "exact_event_and_dates"]
+            if len(exact) == 1:
+                activity = conn.execute("SELECT * FROM catalog_activities WHERE id=%s FOR UPDATE", (exact[0]["activity_id"],)).fetchone()
+            elif len(exact) > 1:
+                # The calling extraction/review transaction retains the input;
+                # never guess among multiple matching activities.
+                raise ValueError("Ambiguous cross-source activity identity; set an explicit reviewed activity_key")
         created = activity is None
         if created:
             activity_id = uid()
@@ -318,6 +340,22 @@ class Catalog:
             if mapped and mapped["milestone_id"]
             else (activity_id, semantic),
         ).fetchone()
+        if current is None and not mapped:
+            alternatives = conn.execute(
+                """SELECT m.*,EXISTS(SELECT 1 FROM catalog_milestone_scopes s
+                WHERE s.milestone_id=m.id AND s.occurrence_id=%s) same_occurrence
+                FROM catalog_milestones m WHERE m.activity_id=%s AND m.kind=%s""",
+                (occurrence_id, activity_id, item.kind),
+            ).fetchall()
+            identical = [r for r in alternatives if same_milestone_fact(item, r, same_occurrence=r["same_occurrence"])]
+            if len(identical) == 1:
+                milestone_id = identical[0]["id"]
+                conn.execute("INSERT INTO catalog_external_ids(key,activity_id,milestone_id) VALUES(%s,%s,%s) ON CONFLICT DO NOTHING",
+                             (source_key, activity_id, milestone_id))
+                if occurrence_id:
+                    conn.execute("INSERT INTO catalog_milestone_scopes VALUES(%s,%s) ON CONFLICT DO NOTHING", (milestone_id, occurrence_id))
+                self.evidence(conn, activity_id, item.evidence, milestone_id)
+                return
         fields = dict(
             title=item.title,
             kind=item.kind,

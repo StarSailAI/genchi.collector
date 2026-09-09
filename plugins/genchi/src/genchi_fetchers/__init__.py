@@ -1,3 +1,4 @@
+from .aggregators import AggregatorFetcher
 from .fetchers import (
     AsobiTicketFetcher,
     EplusTicketFetcher,
@@ -8,6 +9,7 @@ from .fetchers import (
 )
 
 __all__ = [
+    "AggregatorFetcher",
     "AsobiTicketFetcher",
     "EplusTicketFetcher",
     "LawsonTicketFetcher",

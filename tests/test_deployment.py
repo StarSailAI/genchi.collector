@@ -41,8 +41,12 @@ def test_deployment_bootstrap_preserves_secrets_and_pauses_unconfigured_integrat
     assert env.stat().st_mode & 0o777 == 0o600
     assert (tmp_path / ".deploy/effective.env").stat().st_mode & 0o777 == 0o600
     sources = (tmp_path / ".deploy/sources.yaml").read_text()
-    assert sources.splitlines().count("    enabled: false") == 4
-    assert sources.splitlines().count("    enabled: true") == 8
+    original_sources = {s["id"]: s for s in yaml.safe_load((config / "sources.yaml").read_text())["sources"]}
+    for source in yaml.safe_load(sources)["sources"]:
+        if source["fetcher"] == "genchi.x_profile":
+            assert source["enabled"] is False
+        else:
+            assert source["enabled"] == original_sources[source["id"]]["enabled"]
     with pytest.raises(ValueError, match="Already exists"):
         deploy.init_env(tmp_path, "http://192.0.2.11")
     assert env.read_bytes() == original
@@ -118,7 +122,8 @@ def test_x_anonymous_enable_needs_no_cookie_but_cookie_mode_is_explicit(tmp_path
     env.write_text(enabled)
     assert deploy.prepare(tmp_path)["X_AUTH_MODE"] == "anonymous"
     sources = yaml.safe_load((tmp_path / ".deploy/sources.yaml").read_text())["sources"]
-    assert sum(s["enabled"] for s in sources) == 12
+    originals = {s["id"]: s for s in yaml.safe_load((REPO / "config/sources.yaml").read_text())["sources"]}
+    assert all(s["enabled"] == originals[s["id"]]["enabled"] for s in sources)
     env.write_text(enabled.replace("X_AUTH_MODE=anonymous", "X_AUTH_MODE=cookies"))
     with pytest.raises(ValueError, match="Cookie JSON"):
         deploy.prepare(tmp_path)

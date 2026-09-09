@@ -290,8 +290,10 @@ python -m build dashboard
 - Put architecture and operations detail under `docs/`.
 - Put instructions intended primarily for coding agents in this file.
 - Never add real credentials, internal hostnames or production screenshots.
-- Enabled Sources must be official public endpoints, carry project/country/timezone
-  tags and have a tested stable external-ID strategy.
+- Enabled Sources must be public official endpoints or explicitly approved
+  editorial/community aggregators, carry scope/country/timezone tags and have a
+  tested stable external-ID strategy. Aggregators retain their source role and
+  outbound evidence; community/editable content is never marked official.
 
 ## Definition of Done
 

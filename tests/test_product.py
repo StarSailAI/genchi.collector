@@ -190,6 +190,68 @@ def test_date_precision_rejects_invented_clock_and_naive_times():
     assert EvidenceInput(excerpt="source", url="javascript:alert(1)").url is None
 
 
+def test_cross_publisher_activity_and_round_merge_preserves_evidence(catalog):
+    first = activity("official:event")
+    first.url = "https://official.test/live/2030"
+    first.milestones[0].url = "https://tickets.test/2030"
+    first.milestones[0].title = "最速先行受付（抽選）"
+    original = catalog.publish(first, historical=True)
+    second = first.model_copy(deep=True)
+    second.source_key = "publisher:article"
+    second.title = "学園アイドルマスター TEST LIVE チケット情報"
+    second.url += "?utm_source=publisher"
+    second.evidence.source_id = "publisher"
+    second.milestones[0].source_key = "article:round"
+    second.milestones[0].round_key = "先行抽选"
+    second.milestones[0].title = "チケット最速先行受付（抽選）"
+    second.milestones[0].evidence.source_id = "publisher"
+    assert catalog.publish(second, historical=True) == original
+    assert catalog.publish(second, historical=True) == original
+    with catalog.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) n FROM catalog_activities").fetchone()["n"] == 1
+        assert conn.execute("SELECT COUNT(*) n FROM catalog_occurrences").fetchone()["n"] == 1
+        assert conn.execute("SELECT COUNT(*) n FROM catalog_milestones").fetchone()["n"] == 2
+        assert conn.execute("SELECT COUNT(DISTINCT source_id) n FROM catalog_evidence").fetchone()["n"] == 2
+        assert conn.execute("SELECT COUNT(*) n FROM catalog_external_ids WHERE key LIKE '%article:round'").fetchone()["n"] == 1
+
+
+def test_reused_official_url_does_not_merge_another_edition_or_ticket_product(catalog):
+    first = activity("official:one")
+    first.url = "https://official.test/live/tour"
+    first.milestones[0].url = "https://tickets.test/round"
+    first.milestones[0].details = {"price_jpy": 10000}
+    original = catalog.publish(first, historical=True)
+    second = first.model_copy(deep=True)
+    second.source_key = "publisher:two"
+    second.title = "学園アイドルマスター ANOTHER LIVE"
+    second.time.starts_at += timedelta(days=120)
+    assert catalog.publish(second, historical=True) != original
+    third = first.model_copy(deep=True)
+    third.source_key = "publisher:three"
+    third.milestones[0].source_key = "vip-round"
+    third.milestones[0].round_key = "VIP"
+    third.milestones[0].details = {"price_jpy": 20000}
+    assert catalog.publish(third, historical=True) == original
+    with catalog.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) n FROM catalog_milestones WHERE activity_id=%s AND kind='TICKET'", (original,)).fetchone()["n"] == 2
+
+
+def test_aggregator_generic_title_does_not_bypass_evidence_match(catalog):
+    with catalog.connect() as conn:
+        conn.execute("""INSERT INTO allfeeds.resources(source_id,external_id,content_hash,kind,title,content,attributes)
+            VALUES('publisher','one','v1','aggregate_article','カフェ','原文','{"source_type":"aggregator"}'),
+                  ('publisher','two','v1','aggregate_article','カフェ','原文','{"source_type":"aggregator"}')""")
+    first = activity('document:one')
+    first.url = 'https://official.test/cafe'
+    first.evidence = first.evidence.model_copy(update={'source_id': 'publisher', 'external_id': 'one'})
+    original = catalog.publish(first, historical=True)
+    later = first.model_copy(deep=True)
+    later.source_key = 'document:two'
+    later.evidence.external_id = 'two'
+    later.time.starts_at += timedelta(days=120)
+    assert catalog.publish(later, historical=True) != original
+
+
 def test_replay_timezone_correction_and_year_identity(catalog):
     item = activity()
     first = catalog.publish(item)
@@ -628,6 +690,24 @@ def test_successful_reprocessing_closes_only_its_failure_and_keeps_candidate_pen
             {"status": "REJECTED", "reviewed_by": "system:normalizer", "candidate": False},
             {"status": "PENDING", "reviewed_by": None, "candidate": True},
         ]
+        assert conn.execute("SELECT count(*) n FROM catalog_activities").fetchone()["n"] == 0
+
+
+def test_reprocessing_supersedes_obsolete_candidates_without_publishing(catalog, monkeypatch):
+    with catalog.connect() as conn:
+        conn.execute("INSERT INTO allfeeds.resources(source_id,external_id,content_hash,kind,title,content) VALUES('official','one','hash','official_news','ライブ','原文')")
+    candidate = activity(verified=False)
+    candidate.publication = "REVIEW"
+    candidate.evidence = candidate.evidence.model_copy(update={"version_hash": "hash", "method": "llm:old"})
+    monkeypatch.setattr("genchi_product.pipeline.extract_text", lambda *_: [candidate])
+    assert process_one(catalog)
+    candidate = candidate.model_copy(update={"source_key": "corrected:session"})
+    with catalog.connect() as conn:
+        conn.execute("UPDATE catalog_jobs SET status='PENDING',not_before=NOW()")
+    assert process_one(catalog)
+    with catalog.connect() as conn:
+        rows = conn.execute("SELECT status,reviewed_by FROM catalog_reviews ORDER BY created_at").fetchall()
+        assert rows == [{"status": "REJECTED", "reviewed_by": "system:normalizer"}, {"status": "PENDING", "reviewed_by": None}]
         assert conn.execute("SELECT count(*) n FROM catalog_activities").fetchone()["n"] == 0
 
 

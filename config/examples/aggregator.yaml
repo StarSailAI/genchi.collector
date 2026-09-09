@@ -1,0 +1,18 @@
+version: 1
+sources:
+  - id: example-collabo-cafe
+    enabled: false
+    fetcher: genchi.aggregator
+    sink: postgres
+    schedule: {type: cron, cron: "0 9 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://collabo-cafe.com/events/category/cafe/]
+      detail_pattern: '^https://collabo-cafe\.com/events/collabo/[^/?]+/$'
+      list_selector: article.post-list a[href]
+      title_selector: h1.single-title
+      content_selector: article > section.entry-content
+      published_selector: time.published
+      max_detail_pages: 12
+      refresh_details_per_run: 4
+    routing: {queue: browser, capabilities: [browser_api], resources: {browser_api: 1}}
+    tags: [scope:anime-offline, country:JP, timezone:Asia/Tokyo, source:editorial-aggregator]

@@ -1,0 +1,1440 @@
+{
+  "observed_since": "2026-09-09 00:00:00+00:00",
+  "sources": {
+    "animate-cafe-events": {
+      "observed_resources": 19,
+      "job_status": {
+        "DONE": 19
+      },
+      "publication_date_precision": {
+        "TBD": 19
+      },
+      "oldest_publication": null,
+      "newest_publication": null,
+      "resources_with_activity_facts": 19,
+      "activity_candidates": 25,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "CAFE": 21,
+        "POPUP": 3,
+        "EXHIBITION": 1
+      },
+      "milestone_kinds": {
+        "DOORS": 6,
+        "RESERVATION": 14,
+        "GOODS": 1,
+        "PERIOD": 11,
+        "TICKET": 2
+      },
+      "facts_without_event_date": 0,
+      "facts_with_specific_event_link": 25,
+      "facts_ended_before_report_date": 0,
+      "resources_with_image_details_pending": 19,
+      "original_publishers": {
+        "UNSPECIFIED": 19
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "anime-hack-events": {
+      "observed_resources": 19,
+      "job_status": {
+        "DONE": 19
+      },
+      "publication_date_precision": {
+        "TBD": 19
+      },
+      "oldest_publication": null,
+      "newest_publication": null,
+      "resources_with_activity_facts": 19,
+      "activity_candidates": 19,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "LIVE": 10,
+        "MEETUP": 7,
+        "OTHER": 2
+      },
+      "milestone_kinds": {
+        "TICKET": 34,
+        "RESULT": 16,
+        "START": 16,
+        "ANNOUNCEMENT": 2,
+        "DOORS": 7,
+        "GOODS": 1,
+        "PAYMENT": 1
+      },
+      "facts_without_event_date": 0,
+      "facts_with_specific_event_link": 19,
+      "facts_ended_before_report_date": 17,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 19
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "asobi-ticket-booths": {
+      "observed_resources": 59,
+      "job_status": {
+        "DONE": 46,
+        "REVIEW": 13
+      },
+      "publication_date_precision": {
+        "TBD": 59
+      },
+      "oldest_publication": null,
+      "newest_publication": null,
+      "resources_with_activity_facts": 35,
+      "activity_candidates": 0,
+      "native_ticket_activity_facts": 54,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "LIVE": 38,
+        "OTHER": 16
+      },
+      "milestone_kinds": {
+        "TICKET": 46,
+        "RESULT": 30,
+        "PAYMENT": 30,
+        "DOORS": 54
+      },
+      "facts_without_event_date": 0,
+      "facts_with_specific_event_link": 54,
+      "facts_ended_before_report_date": 0,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 59
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 4
+    },
+    "bang-dream-news": {
+      "observed_resources": 32,
+      "job_status": {
+        "DONE": 31,
+        "REVIEW": 1
+      },
+      "publication_date_precision": {
+        "DATE": 31,
+        "TBD": 1
+      },
+      "oldest_publication": "2026-07-07 15:00:00+00:00",
+      "newest_publication": "2026-09-03 15:00:00+00:00",
+      "resources_with_activity_facts": 4,
+      "activity_candidates": 4,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "LIVE": 1,
+        "OTHER": 2,
+        "GOODS": 1
+      },
+      "milestone_kinds": {
+        "START": 2,
+        "PERIOD": 2,
+        "ANNOUNCEMENT": 1
+      },
+      "facts_without_event_date": 1,
+      "facts_with_specific_event_link": 4,
+      "facts_ended_before_report_date": 3,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 32
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "bang-dream-x": {
+      "observed_resources": 5,
+      "job_status": {
+        "DONE": 4,
+        "REVIEW": 1
+      },
+      "publication_date_precision": {
+        "UNSPECIFIED": 5
+      },
+      "oldest_publication": "2026-08-20 14:33:08+00:00",
+      "newest_publication": "2026-09-09 03:30:00+00:00",
+      "resources_with_activity_facts": 0,
+      "activity_candidates": 0,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {},
+      "milestone_kinds": {},
+      "facts_without_event_date": 0,
+      "facts_with_specific_event_link": 0,
+      "facts_ended_before_report_date": 0,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 5
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "collabo-cafe-news": {
+      "observed_resources": 14,
+      "job_status": {
+        "DONE": 14
+      },
+      "publication_date_precision": {
+        "DATE": 14
+      },
+      "oldest_publication": "2025-08-03 15:00:00+00:00",
+      "newest_publication": "2026-09-08 15:00:00+00:00",
+      "resources_with_activity_facts": 14,
+      "activity_candidates": 32,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "POPUP": 14,
+        "EXHIBITION": 7,
+        "FESTIVAL": 3,
+        "CAFE": 6,
+        "MEETUP": 2
+      },
+      "milestone_kinds": {
+        "RESERVATION": 10,
+        "RESULT": 5,
+        "START": 9,
+        "GOODS": 39,
+        "TICKET": 10,
+        "DOORS": 14,
+        "PERIOD": 5,
+        "ANNOUNCEMENT": 5
+      },
+      "facts_without_event_date": 3,
+      "facts_with_specific_event_link": 20,
+      "facts_ended_before_report_date": 7,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 14
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "eplus-anime-tickets": {
+      "observed_resources": 78,
+      "job_status": {
+        "DONE": 78
+      },
+      "publication_date_precision": {
+        "TBD": 78
+      },
+      "oldest_publication": null,
+      "newest_publication": null,
+      "resources_with_activity_facts": 78,
+      "activity_candidates": 0,
+      "native_ticket_activity_facts": 239,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "OTHER": 177,
+        "LIVE": 34,
+        "FESTIVAL": 5,
+        "EXHIBITION": 17,
+        "CAFE": 5,
+        "MEETUP": 1
+      },
+      "milestone_kinds": {
+        "TICKET": 568,
+        "DOORS": 155
+      },
+      "facts_without_event_date": 0,
+      "facts_with_specific_event_link": 239,
+      "facts_ended_before_report_date": 8,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 78
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 2
+    },
+    "eventernote-events": {
+      "observed_resources": 12,
+      "job_status": {
+        "DONE": 12
+      },
+      "publication_date_precision": {
+        "TBD": 12
+      },
+      "oldest_publication": null,
+      "newest_publication": null,
+      "resources_with_activity_facts": 12,
+      "activity_candidates": 12,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "LIVE": 8,
+        "MEETUP": 4
+      },
+      "milestone_kinds": {
+        "DOORS": 10,
+        "GOODS": 2,
+        "START": 11,
+        "TICKET": 1
+      },
+      "facts_without_event_date": 0,
+      "facts_with_specific_event_link": 7,
+      "facts_ended_before_report_date": 0,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 12
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "girls-band-cry-news": {
+      "observed_resources": 24,
+      "job_status": {
+        "DONE": 24
+      },
+      "publication_date_precision": {
+        "DATE": 24
+      },
+      "oldest_publication": "2026-04-07 15:00:00+00:00",
+      "newest_publication": "2026-09-01 15:00:00+00:00",
+      "resources_with_activity_facts": 20,
+      "activity_candidates": 25,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "GOODS": 11,
+        "CAFE": 1,
+        "LIVE": 8,
+        "FESTIVAL": 4,
+        "OTHER": 1
+      },
+      "milestone_kinds": {
+        "GOODS": 12,
+        "PERIOD": 2,
+        "RESERVATION": 8,
+        "TICKET": 9,
+        "DOORS": 4,
+        "START": 10,
+        "ANNOUNCEMENT": 3,
+        "UPDATE": 1
+      },
+      "facts_without_event_date": 5,
+      "facts_with_specific_event_link": 24,
+      "facts_ended_before_report_date": 14,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 24
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "girls-band-cry-x": {
+      "observed_resources": 5,
+      "job_status": {
+        "DONE": 4,
+        "REVIEW": 1
+      },
+      "publication_date_precision": {
+        "UNSPECIFIED": 5
+      },
+      "oldest_publication": "2025-09-23 12:00:00+00:00",
+      "newest_publication": "2026-09-08 03:00:03+00:00",
+      "resources_with_activity_facts": 1,
+      "activity_candidates": 1,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "FESTIVAL": 1
+      },
+      "milestone_kinds": {
+        "GOODS": 1
+      },
+      "facts_without_event_date": 1,
+      "facts_with_specific_event_link": 0,
+      "facts_ended_before_report_date": 0,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 5
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "idolmaster-news": {
+      "observed_resources": 37,
+      "job_status": {
+        "IMPORTED": 1,
+        "DONE": 26,
+        "REVIEW": 10
+      },
+      "publication_date_precision": {
+        "UNSPECIFIED": 1,
+        "DATE": 36
+      },
+      "oldest_publication": "2023-02-08 00:00:00+00:00",
+      "newest_publication": "2026-09-08 15:00:00+00:00",
+      "resources_with_activity_facts": 22,
+      "activity_candidates": 24,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "LIVE": 10,
+        "GOODS": 11,
+        "CAFE": 1,
+        "POPUP": 1,
+        "OTHER": 1
+      },
+      "milestone_kinds": {
+        "TICKET": 9,
+        "GOODS": 20,
+        "PERIOD": 10,
+        "RESULT": 3,
+        "PAYMENT": 1,
+        "START": 21,
+        "DOORS": 6,
+        "RESERVATION": 7,
+        "ANNOUNCEMENT": 1
+      },
+      "facts_without_event_date": 13,
+      "facts_with_specific_event_link": 24,
+      "facts_ended_before_report_date": 0,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 37
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "idolmaster-x": {
+      "observed_resources": 5,
+      "job_status": {
+        "DONE": 5
+      },
+      "publication_date_precision": {
+        "UNSPECIFIED": 5
+      },
+      "oldest_publication": "2026-09-06 03:00:02+00:00",
+      "newest_publication": "2026-09-09 03:00:04+00:00",
+      "resources_with_activity_facts": 3,
+      "activity_candidates": 3,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "LIVE": 2,
+        "OTHER": 1
+      },
+      "milestone_kinds": {
+        "TICKET": 1
+      },
+      "facts_without_event_date": 1,
+      "facts_with_specific_event_link": 0,
+      "facts_ended_before_report_date": 0,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 5
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "lawson-anime-tickets": {
+      "observed_resources": 52,
+      "job_status": {
+        "DONE": 52
+      },
+      "publication_date_precision": {
+        "TBD": 52
+      },
+      "oldest_publication": null,
+      "newest_publication": null,
+      "resources_with_activity_facts": 52,
+      "activity_candidates": 0,
+      "native_ticket_activity_facts": 211,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "OTHER": 178,
+        "MEETUP": 1,
+        "LIVE": 26,
+        "FESTIVAL": 3,
+        "EXHIBITION": 3
+      },
+      "milestone_kinds": {
+        "TICKET": 274
+      },
+      "facts_without_event_date": 0,
+      "facts_with_specific_event_link": 0,
+      "facts_ended_before_report_date": 1,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 52
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 3
+    },
+    "livefans-news": {
+      "observed_resources": 12,
+      "job_status": {
+        "DONE": 12
+      },
+      "publication_date_precision": {
+        "DATE": 12
+      },
+      "oldest_publication": "2026-09-06 15:00:00+00:00",
+      "newest_publication": "2026-09-08 15:00:00+00:00",
+      "resources_with_activity_facts": 12,
+      "activity_candidates": 25,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "LIVE": 19,
+        "FESTIVAL": 6
+      },
+      "milestone_kinds": {
+        "TICKET": 17,
+        "DOORS": 12,
+        "GOODS": 1,
+        "ANNOUNCEMENT": 2,
+        "START": 2,
+        "RESULT": 2
+      },
+      "facts_without_event_date": 2,
+      "facts_with_specific_event_link": 16,
+      "facts_ended_before_report_date": 0,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 12
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "love-live-news": {
+      "observed_resources": 27,
+      "job_status": {
+        "DONE": 24,
+        "REVIEW": 3
+      },
+      "publication_date_precision": {
+        "DATE": 27
+      },
+      "oldest_publication": "2026-08-31 15:00:00+00:00",
+      "newest_publication": "2026-09-08 15:00:00+00:00",
+      "resources_with_activity_facts": 20,
+      "activity_candidates": 24,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "LIVE": 14,
+        "OTHER": 3,
+        "CAFE": 1,
+        "POPUP": 4,
+        "GOODS": 2
+      },
+      "milestone_kinds": {
+        "DOORS": 1,
+        "PERIOD": 17,
+        "GOODS": 12,
+        "RESERVATION": 3,
+        "TICKET": 4,
+        "RESULT": 4,
+        "ANNOUNCEMENT": 1
+      },
+      "facts_without_event_date": 5,
+      "facts_with_specific_event_link": 24,
+      "facts_ended_before_report_date": 3,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 27
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "love-live-x": {
+      "observed_resources": 5,
+      "job_status": {
+        "REVIEW": 2,
+        "DONE": 3
+      },
+      "publication_date_precision": {
+        "UNSPECIFIED": 5
+      },
+      "oldest_publication": "2026-09-07 04:10:00+00:00",
+      "newest_publication": "2026-09-09 04:30:00+00:00",
+      "resources_with_activity_facts": 2,
+      "activity_candidates": 2,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "OTHER": 1,
+        "CAFE": 1
+      },
+      "milestone_kinds": {
+        "ANNOUNCEMENT": 1
+      },
+      "facts_without_event_date": 2,
+      "facts_with_specific_event_link": 0,
+      "facts_ended_before_report_date": 0,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 5
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "marui-anime-events": {
+      "observed_resources": 12,
+      "job_status": {
+        "DONE": 12
+      },
+      "publication_date_precision": {
+        "TBD": 12
+      },
+      "oldest_publication": null,
+      "newest_publication": null,
+      "resources_with_activity_facts": 12,
+      "activity_candidates": 12,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "POPUP": 8,
+        "EXHIBITION": 4
+      },
+      "milestone_kinds": {
+        "RESERVATION": 5,
+        "DOORS": 13,
+        "GOODS": 18,
+        "PERIOD": 6,
+        "TICKET": 2,
+        "RESULT": 1,
+        "START": 2,
+        "ANNOUNCEMENT": 1,
+        "UPDATE": 1
+      },
+      "facts_without_event_date": 0,
+      "facts_with_specific_event_link": 11,
+      "facts_ended_before_report_date": 1,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 12
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "nijimen-news": {
+      "observed_resources": 11,
+      "job_status": {
+        "DONE": 11
+      },
+      "publication_date_precision": {
+        "TIME": 11
+      },
+      "oldest_publication": "2026-09-08 06:56:03+00:00",
+      "newest_publication": "2026-09-09 07:58:34+00:00",
+      "resources_with_activity_facts": 9,
+      "activity_candidates": 10,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "GOODS": 4,
+        "POPUP": 3,
+        "OTHER": 1,
+        "LIVE": 1,
+        "EXHIBITION": 1
+      },
+      "milestone_kinds": {
+        "PERIOD": 3,
+        "GOODS": 8,
+        "TICKET": 6,
+        "RESERVATION": 2,
+        "RESULT": 1,
+        "DOORS": 2,
+        "START": 3
+      },
+      "facts_without_event_date": 3,
+      "facts_with_specific_event_link": 5,
+      "facts_ended_before_report_date": 2,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 11
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "pia-anime-tickets": {
+      "observed_resources": 58,
+      "job_status": {
+        "DONE": 58
+      },
+      "publication_date_precision": {
+        "TBD": 58
+      },
+      "oldest_publication": null,
+      "newest_publication": null,
+      "resources_with_activity_facts": 58,
+      "activity_candidates": 0,
+      "native_ticket_activity_facts": 2221,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "FESTIVAL": 16,
+        "LIVE": 393,
+        "OTHER": 1740,
+        "EXHIBITION": 68,
+        "MEETUP": 4
+      },
+      "milestone_kinds": {
+        "TICKET": 2957,
+        "RESULT": 963,
+        "DOORS": 469
+      },
+      "facts_without_event_date": 0,
+      "facts_with_specific_event_link": 2221,
+      "facts_ended_before_report_date": 534,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 58
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 5
+    },
+    "spice-news": {
+      "observed_resources": 12,
+      "job_status": {
+        "DONE": 11,
+        "REVIEW": 1
+      },
+      "publication_date_precision": {
+        "TIME": 12
+      },
+      "oldest_publication": "2026-09-07 06:00:00+00:00",
+      "newest_publication": "2026-09-09 08:10:50+00:00",
+      "resources_with_activity_facts": 7,
+      "activity_candidates": 10,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "MEETUP": 1,
+        "FESTIVAL": 2,
+        "EXHIBITION": 2,
+        "LIVE": 5
+      },
+      "milestone_kinds": {
+        "TICKET": 7,
+        "DOORS": 6,
+        "START": 8,
+        "GOODS": 1
+      },
+      "facts_without_event_date": 1,
+      "facts_with_specific_event_link": 7,
+      "facts_ended_before_report_date": 0,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 12
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    }
+  },
+  "cross_source_comparison_groups": [
+    {
+      "reference": "https://asobiticket2.asobistore.jp/receptions/c9c63d2b-37d4-4ab2-9fa2-ac246ffd6140",
+      "date": "2026-09-19",
+      "sources": {
+        "asobi-ticket-booths": [
+          {
+            "url": "https://asobiticket2.asobistore.jp/receptions/c9c63d2b-37d4-4ab2-9fa2-ac246ffd6140",
+            "activity_title": "THE IDOLM@STER MILLION LIVE! 14thLIVE",
+            "kind": "LIVE",
+            "time": {
+              "precision": "TIME",
+              "starts_at": "2026-09-19T17:30:00+09:00",
+              "ends_at": null,
+              "starts_on": null,
+              "ends_on": null,
+              "timezone": "Asia/Tokyo"
+            },
+            "fact_origin": "native_ticket",
+            "published_at": null,
+            "published_precision": "UNSPECIFIED",
+            "milestones": [
+              {
+                "kind": "TICKET",
+                "title": "一般発売（先着）",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-08-30T12:00:00+09:00",
+                  "ends_at": "2026-09-12T23:59:59.999000+09:00",
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://asobiticket2.asobistore.jp/receptions/c9c63d2b-37d4-4ab2-9fa2-ac246ffd6140"
+              },
+              {
+                "kind": "DOORS",
+                "title": "开放入场",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-19T16:30:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://asobiticket2.asobistore.jp/receptions/c9c63d2b-37d4-4ab2-9fa2-ac246ffd6140"
+              }
+            ]
+          }
+        ],
+        "idolmaster-news": [
+          {
+            "url": "https://idolmaster-official.jp/news/01_19782",
+            "activity_title": "THE IDOLM@STER MILLION LIVE! 14thLIVE",
+            "kind": "LIVE",
+            "time": {
+              "precision": "DATE",
+              "starts_at": null,
+              "ends_at": null,
+              "starts_on": "2026-09-19",
+              "ends_on": "2026-09-20",
+              "timezone": "Asia/Tokyo"
+            },
+            "fact_origin": "unreviewed_candidate",
+            "published_at": "2026-09-01 15:00:00+00:00",
+            "published_precision": "DATE",
+            "milestones": [
+              {
+                "kind": "TICKET",
+                "title": "一般販売(先着)",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-08-30T12:00:00+09:00",
+                  "ends_at": "2026-09-12T23:59:00+09:00",
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://asobiticket2.asobistore.jp/receptions/c9c63d2b-37d4-4ab2-9fa2-ac246ffd6140"
+              },
+              {
+                "kind": "TICKET",
+                "title": "公式リセール(抽選)",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-08-30T15:00:00+09:00",
+                  "ends_at": "2026-09-13T09:59:00+09:00",
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              },
+              {
+                "kind": "TICKET",
+                "title": "配信視聴チケット",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-02T00:00:00+09:00",
+                  "ends_at": "2026-09-28T18:00:00+09:00",
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              },
+              {
+                "kind": "GOODS",
+                "title": "会場物販",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-19T11:00:00+09:00",
+                  "ends_at": "2026-09-20T16:30:00+09:00",
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              },
+              {
+                "kind": "GOODS",
+                "title": "物販整理券受付",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-04T13:00:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://asobiticket2.asobistore.jp/receptions/798f65d0-22b6-4033-954a-3b8e852d6f27"
+              },
+              {
+                "kind": "START",
+                "title": "DAY1 開演",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-19T17:30:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              },
+              {
+                "kind": "START",
+                "title": "DAY2 開演",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-20T16:30:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "reference": "https://asobiticket2.asobistore.jp/receptions/798f65d0-22b6-4033-954a-3b8e852d6f27",
+      "date": "2026-09-19",
+      "sources": {
+        "asobi-ticket-booths": [
+          {
+            "url": "https://asobiticket2.asobistore.jp/receptions/798f65d0-22b6-4033-954a-3b8e852d6f27",
+            "activity_title": "THE IDOLM@STER MILLION LIVE! 14thLIVE",
+            "kind": "LIVE",
+            "time": {
+              "precision": "TIME",
+              "starts_at": "2026-09-19T17:30:00+09:00",
+              "ends_at": null,
+              "starts_on": null,
+              "ends_on": null,
+              "timezone": "Asia/Tokyo"
+            },
+            "fact_origin": "native_ticket",
+            "published_at": null,
+            "published_precision": "UNSPECIFIED",
+            "milestones": [
+              {
+                "kind": "TICKET",
+                "title": "一般受付（抽選）",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-04T13:00:00+09:00",
+                  "ends_at": "2026-09-09T23:59:59.999000+09:00",
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://asobiticket2.asobistore.jp/receptions/798f65d0-22b6-4033-954a-3b8e852d6f27"
+              },
+              {
+                "kind": "RESULT",
+                "title": "一般受付（抽選） · 结果公布",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-15T13:00:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://asobiticket2.asobistore.jp/receptions/798f65d0-22b6-4033-954a-3b8e852d6f27"
+              },
+              {
+                "kind": "PAYMENT",
+                "title": "一般受付（抽選） · 入金截止",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-15T13:00:59.999000+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://asobiticket2.asobistore.jp/receptions/798f65d0-22b6-4033-954a-3b8e852d6f27"
+              },
+              {
+                "kind": "DOORS",
+                "title": "开放入场",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-19T16:30:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://asobiticket2.asobistore.jp/receptions/798f65d0-22b6-4033-954a-3b8e852d6f27"
+              }
+            ]
+          }
+        ],
+        "idolmaster-news": [
+          {
+            "url": "https://idolmaster-official.jp/news/01_19782",
+            "activity_title": "THE IDOLM@STER MILLION LIVE! 14thLIVE",
+            "kind": "LIVE",
+            "time": {
+              "precision": "DATE",
+              "starts_at": null,
+              "ends_at": null,
+              "starts_on": "2026-09-19",
+              "ends_on": "2026-09-20",
+              "timezone": "Asia/Tokyo"
+            },
+            "fact_origin": "unreviewed_candidate",
+            "published_at": "2026-09-01 15:00:00+00:00",
+            "published_precision": "DATE",
+            "milestones": [
+              {
+                "kind": "TICKET",
+                "title": "一般販売(先着)",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-08-30T12:00:00+09:00",
+                  "ends_at": "2026-09-12T23:59:00+09:00",
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://asobiticket2.asobistore.jp/receptions/c9c63d2b-37d4-4ab2-9fa2-ac246ffd6140"
+              },
+              {
+                "kind": "TICKET",
+                "title": "公式リセール(抽選)",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-08-30T15:00:00+09:00",
+                  "ends_at": "2026-09-13T09:59:00+09:00",
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              },
+              {
+                "kind": "TICKET",
+                "title": "配信視聴チケット",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-02T00:00:00+09:00",
+                  "ends_at": "2026-09-28T18:00:00+09:00",
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              },
+              {
+                "kind": "GOODS",
+                "title": "会場物販",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-19T11:00:00+09:00",
+                  "ends_at": "2026-09-20T16:30:00+09:00",
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              },
+              {
+                "kind": "GOODS",
+                "title": "物販整理券受付",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-04T13:00:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://asobiticket2.asobistore.jp/receptions/798f65d0-22b6-4033-954a-3b8e852d6f27"
+              },
+              {
+                "kind": "START",
+                "title": "DAY1 開演",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-19T17:30:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              },
+              {
+                "kind": "START",
+                "title": "DAY2 開演",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-20T16:30:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "reference": "https://hehn.fujiikaze.com/fpr",
+      "date": "2026-11-20",
+      "sources": {
+        "livefans-news": [
+          {
+            "url": "https://www.livefans.jp/news/pc/63892",
+            "activity_title": "藤井風 ピアノリサイタル",
+            "kind": "LIVE",
+            "time": {
+              "precision": "TIME",
+              "starts_at": "2026-11-20T19:00:00+09:00",
+              "ends_at": null,
+              "starts_on": null,
+              "ends_on": null,
+              "timezone": "Asia/Tokyo"
+            },
+            "fact_origin": "unreviewed_candidate",
+            "published_at": "2026-09-08 15:00:00+00:00",
+            "published_precision": "DATE",
+            "milestones": [
+              {
+                "kind": "TICKET",
+                "title": "チケット最速先行受付（抽選）",
+                "time": {
+                  "precision": "DATE",
+                  "starts_at": null,
+                  "ends_at": null,
+                  "starts_on": "2026-09-09",
+                  "ends_on": "2026-09-23",
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://hehn.fujiikaze.com/fpr"
+              },
+              {
+                "kind": "DOORS",
+                "title": "開場",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-11-20T17:00:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              }
+            ]
+          }
+        ],
+        "spice-news": [
+          {
+            "url": "https://spice.eplus.jp/articles/348877",
+            "activity_title": "藤井風 ピアノリサイタル",
+            "kind": "LIVE",
+            "time": {
+              "precision": "TIME",
+              "starts_at": "2026-11-20T19:00:00+09:00",
+              "ends_at": null,
+              "starts_on": null,
+              "ends_on": null,
+              "timezone": "Asia/Tokyo"
+            },
+            "fact_origin": "unreviewed_candidate",
+            "published_at": "2026-09-09 03:00:00+00:00",
+            "published_precision": "TIME",
+            "milestones": [
+              {
+                "kind": "TICKET",
+                "title": "最速先行受付（抽選）",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-09T12:00:00+09:00",
+                  "ends_at": "2026-09-23T23:59:00+09:00",
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://hehn.fujiikaze.com/fpr"
+              },
+              {
+                "kind": "DOORS",
+                "title": "開場",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-11-20T17:00:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              },
+              {
+                "kind": "START",
+                "title": "開演",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-11-20T19:00:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "reference": "https://hehn.fujiikaze.com/fpr",
+      "date": "2026-11-21",
+      "sources": {
+        "livefans-news": [
+          {
+            "url": "https://www.livefans.jp/news/pc/63892",
+            "activity_title": "藤井風 ピアノリサイタル",
+            "kind": "LIVE",
+            "time": {
+              "precision": "TIME",
+              "starts_at": "2026-11-21T18:00:00+09:00",
+              "ends_at": null,
+              "starts_on": null,
+              "ends_on": null,
+              "timezone": "Asia/Tokyo"
+            },
+            "fact_origin": "unreviewed_candidate",
+            "published_at": "2026-09-08 15:00:00+00:00",
+            "published_precision": "DATE",
+            "milestones": [
+              {
+                "kind": "TICKET",
+                "title": "チケット最速先行受付（抽選）",
+                "time": {
+                  "precision": "DATE",
+                  "starts_at": null,
+                  "ends_at": null,
+                  "starts_on": "2026-09-09",
+                  "ends_on": "2026-09-23",
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://hehn.fujiikaze.com/fpr"
+              },
+              {
+                "kind": "DOORS",
+                "title": "開場",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-11-21T16:00:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              }
+            ]
+          }
+        ],
+        "spice-news": [
+          {
+            "url": "https://spice.eplus.jp/articles/348877",
+            "activity_title": "藤井風 ピアノリサイタル",
+            "kind": "LIVE",
+            "time": {
+              "precision": "TIME",
+              "starts_at": "2026-11-21T18:00:00+09:00",
+              "ends_at": null,
+              "starts_on": null,
+              "ends_on": null,
+              "timezone": "Asia/Tokyo"
+            },
+            "fact_origin": "unreviewed_candidate",
+            "published_at": "2026-09-09 03:00:00+00:00",
+            "published_precision": "TIME",
+            "milestones": [
+              {
+                "kind": "TICKET",
+                "title": "最速先行受付（抽選）",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-09-09T12:00:00+09:00",
+                  "ends_at": "2026-09-23T23:59:00+09:00",
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://hehn.fujiikaze.com/fpr"
+              },
+              {
+                "kind": "DOORS",
+                "title": "開場",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-11-21T16:00:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              },
+              {
+                "kind": "START",
+                "title": "開演",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-11-21T18:00:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "reference": "https://eplus.jp/sf/detail/4597140001-P0030001",
+      "date": "2026-11-21",
+      "sources": {
+        "livefans-news": [
+          {
+            "url": "https://www.livefans.jp/news/pc/63887",
+            "activity_title": "SNAZZY TUNES×over print pre.『over fest 2026』",
+            "kind": "FESTIVAL",
+            "time": {
+              "precision": "TIME",
+              "starts_at": "2026-11-21T12:00:00+09:00",
+              "ends_at": null,
+              "starts_on": null,
+              "ends_on": null,
+              "timezone": "Asia/Tokyo"
+            },
+            "fact_origin": "unreviewed_candidate",
+            "published_at": "2026-09-08 15:00:00+00:00",
+            "published_precision": "DATE",
+            "milestones": [
+              {
+                "kind": "DOORS",
+                "title": "開場",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-11-21T11:30:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              },
+              {
+                "kind": "TICKET",
+                "title": "一次先行（抽選）受付",
+                "time": {
+                  "precision": "DATE",
+                  "starts_at": null,
+                  "ends_at": null,
+                  "starts_on": "2026-09-08",
+                  "ends_on": "2026-09-16",
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://eplus.jp/sf/detail/4597140001-P0030001"
+              },
+              {
+                "kind": "GOODS",
+                "title": "over print POP UP STORE",
+                "time": {
+                  "precision": "TBD",
+                  "starts_at": null,
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              }
+            ]
+          }
+        ],
+        "spice-news": [
+          {
+            "url": "https://spice.eplus.jp/articles/348851",
+            "activity_title": "SNAZZY TUNES×over print pre.『over fest 2026』",
+            "kind": "FESTIVAL",
+            "time": {
+              "precision": "TIME",
+              "starts_at": "2026-11-21T12:00:00+09:00",
+              "ends_at": null,
+              "starts_on": null,
+              "ends_on": null,
+              "timezone": "Asia/Tokyo"
+            },
+            "fact_origin": "unreviewed_candidate",
+            "published_at": "2026-09-08 11:00:00+00:00",
+            "published_precision": "TIME",
+            "milestones": [
+              {
+                "kind": "DOORS",
+                "title": "開場",
+                "time": {
+                  "precision": "TIME",
+                  "starts_at": "2026-11-21T11:30:00+09:00",
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              },
+              {
+                "kind": "TICKET",
+                "title": "一次先行（抽選）受付",
+                "time": {
+                  "precision": "DATE",
+                  "starts_at": null,
+                  "ends_at": null,
+                  "starts_on": "2026-09-08",
+                  "ends_on": "2026-09-16",
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": "https://eplus.jp/sf/detail/4597140001-P0030001"
+              },
+              {
+                "kind": "GOODS",
+                "title": "over print POP UP STORE",
+                "time": {
+                  "precision": "TBD",
+                  "starts_at": null,
+                  "ends_at": null,
+                  "starts_on": null,
+                  "ends_on": null,
+                  "timezone": "Asia/Tokyo"
+                },
+                "url": null
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "limitations": [
+    "Counts describe this bounded observation sample, not total website coverage or true recall.",
+    "Candidates remain unreviewed; extraction failure and irrelevant content are different outcomes.",
+    "Native ticket facts are reconstructed deterministically, separate from model candidates and publication counts.",
+    "No shared group is not proof of unique coverage: official links/names may differ or candidates may be absent.",
+    "Publication, modification, first observation and event dates are different clocks. DATE is not a precise timestamp.",
+    "Same activity publications may describe different updates; compare the same milestone before claiming source latency.",
+    "Do not disable a source solely because it has fewer records or no matches in this sample."
+  ]
+}
