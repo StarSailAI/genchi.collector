@@ -58,6 +58,8 @@ python3 genchi.collector/deploy/manage.py status
 
 Nginx 示例日志省略查询串，避免记录退订等链接令牌。证书文件保存在 `/etc/letsencrypt/`，不要复制到仓库或 Docker 镜像。
 
+Agent API 通过同一域名的 `/agent/` 暴露，远程 Streamable HTTP MCP 使用 `/mcp`。两条路径直接代理 Product API，保留 `Authorization` 请求头；MCP 关闭代理缓冲。不要把 Product API 的其余内部路由整体暴露到公网，也不要在 Nginx 日志中加入 Authorization。
+
 ## Resend 收信转发
 
 发信和收信共用 `.env` 中的 **`RESEND_API_KEY`**，必须有 **Full access** 权限。Resend 中启用域名的 Receiving，并按要求设置 MX。所有 `email.received` 都转发到 `ADMIN_EMAIL`，不按收件地址筛选；管理员邮箱应使用另一个邮箱服务，以便实际收取邮件。

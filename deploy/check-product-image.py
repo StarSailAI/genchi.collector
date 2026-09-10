@@ -15,6 +15,19 @@ if "/auth/logout-all" not in schema["paths"]:
     raise SystemExit("Product image is missing account session management.")
 print("Product image supports email-code login and session management.")
 
+agent_paths = {
+    "/me/api-keys",
+    "/agent/v1/updates",
+    "/agent/v1/activities",
+    "/agent/v1/subscriptions",
+    "/agent/v1/agenda",
+    "/mcp",
+}
+missing_agent_paths = agent_paths - set(schema["paths"])
+if missing_agent_paths:
+    raise SystemExit(f"Product image is missing Agent access: {sorted(missing_agent_paths)}")
+print("Product image supports API keys, Agent REST and MCP.")
+
 properties = schema["components"]["schemas"][model]["properties"]
 if set(properties.get("locale", {}).get("enum", [])) != {"zh-Hans", "zh-Hant", "en", "ja"}:
     raise SystemExit("Product image is missing four-language authentication.")

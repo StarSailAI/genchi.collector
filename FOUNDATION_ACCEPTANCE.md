@@ -47,8 +47,10 @@
 
 ## Agent API 与 API Key（2026-09-10）
 
-状态：本地实现中，生产迁移和发布完成后更新。
+状态：2026-09-10 本地实现、生产迁移与发布完成。
 
 - PostgreSQL 隔离测试覆盖完整 Key 仅创建响应返回、摘要存储、列表不回传 Secret、Scope 拒绝、账号所有权、撤销立即失效、调用审计、增量游标和 MCP 初始化 / 工具发现。
 - 前端个人中心不持久化完整 Key；创建响应只保存在当前组件内存，页面刷新后不可恢复。
 - FoundationServices 项目 Profile 保持可验证；API Key 因上游为 `planned/spec-only`，只作为项目自建偏离记录。
+- 后端 ruff 与 256 项 PostgreSQL 测试通过；前端 14 项测试、类型检查、格式检查和生产构建通过。生产发布前生成并验证数据库备份，迁移到 Schema 1.8；Product、normalizer、notifier、collection digest 和 Web 容器均健康。
+- 生产 HTTPS 验收覆盖 OpenAPI、无凭证 MCP 拒绝、一次性 Key 创建与不可回读、REST 增量查询、MCP 工具发现、撤销立即返回 401。测试账号、Session、Key 和审计记录已定向清理。
