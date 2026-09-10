@@ -30,6 +30,11 @@ subject affiliation. It may only use known subject slugs and links supplied by t
 candidates remain in review. Deterministic structured ticket data can remain verified after its
 source-specific validators pass.
 
+For an editorial or community source, the publisher's own page cannot become the canonical event
+URL. The candidate may use a linked organizer page on another domain or a concrete ticket page; if
+neither is present, the canonical URL remains empty until review. Human approval verifies the
+activity, milestones and every explicit subject relation together.
+
 An explicit overseas performance marker in the title, city or venue fails domain validation. Its
 raw page remains searchable, but the activity cannot enter the Japan catalog even through a
 structured source or later review approval.

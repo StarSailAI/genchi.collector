@@ -173,6 +173,19 @@ def test_single_real_ticket_link_is_used_when_article_has_no_event_homepage():
     assert _text_candidates(json.dumps(value), resource, [])[0].url == 'https://eplus.jp/sf/detail/123'
 
 
+def test_discovery_source_page_cannot_become_the_official_activity_url():
+    resource = {"id": 1, "source_id": "community", "external_id": "1", "content_hash": "v1",
+                "url": "https://community.test/events/123", "content": "Festival 2026",
+                "attributes": {"source_type": "aggregator", "source_role": "community"}}
+    value = {"activities": [{"title": "Festival 2026", "evidence_id": "B1",
+                              "official_url": "https://community.test/events/123"}]}
+    assert _text_candidates(json.dumps(value), resource, [])[0].url is None
+
+    resource["content"] += " [https://organizer.test/festival]"
+    value["activities"][0]["official_url"] = "https://organizer.test/festival"
+    assert _text_candidates(json.dumps(value), resource, [])[0].url == "https://organizer.test/festival"
+
+
 @pytest.mark.parametrize('proof', [
     '受付期間：9/9(水) 12:00 ～ 9/23(水・祝) 23:59まで',
     '最速先行 2026年9月9日（水）12:00～9月23日（水）23:59',

@@ -20,6 +20,7 @@ from genchi_product.domain import (
     EvidenceInput,
     MilestoneInput,
     Moment,
+    SubjectRelationInput,
     legacy_time,
     outside_japan,
 )
@@ -145,6 +146,9 @@ def catalog(monkeypatch):
         runpy.run_path(str(Path("services/normalizer/alembic/versions/0011_agent_api.py")))[
             "upgrade"
         ]()
+        runpy.run_path(
+            str(Path("services/normalizer/alembic/versions/0012_subject_provenance.py"))
+        )["upgrade"]()
     with psycopg.connect(DSN, autocommit=True) as conn:
         conn.execute(f'CREATE SCHEMA "{schema}"')
     try:
@@ -465,6 +469,11 @@ def test_conflict_rejection_preserves_published_activity(catalog):
 def test_review_promotion_adds_verified_evidence(catalog):
     value = activity(verified=False)
     value.publication = "REVIEW"
+    value.subject_relations = [
+        SubjectRelationInput(
+            subject_slug="gakumas", relation_kind="DIRECT", evidence=proof(False)
+        )
+    ]
     with catalog.connect() as conn:
         Catalog.review(
             conn,
@@ -484,6 +493,9 @@ def test_review_promotion_adds_verified_evidence(catalog):
             conn.execute("SELECT count(*) n FROM catalog_evidence WHERE verified").fetchone()["n"]
             >= 3
         )
+        assert conn.execute(
+            "SELECT verified FROM catalog_activity_subjects"
+        ).fetchone()["verified"] is True
 
 
 def test_notification_dedup_and_send_once(catalog):

@@ -667,6 +667,9 @@ class Catalog:
                 for node in value.milestones:
                     node.evidence.verified = True
                     node.evidence.method = "human"
+                for relation in value.subject_relations:
+                    relation.evidence.verified = True
+                    relation.evidence.method = "human"
                 activity_id = self.publish(value, conn=conn)
                 conn.execute(
                     "UPDATE catalog_reviews SET activity_id=%s WHERE id=%s",
