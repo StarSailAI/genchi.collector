@@ -1,0 +1,76 @@
+{
+  "observed_since": "2026-09-09 00:00:00+00:00",
+  "sources": {
+    "natalie-comic-news": {
+      "observed_resources": 7,
+      "job_status": {
+        "DONE": 7
+      },
+      "publication_date_precision": {
+        "TIME": 7
+      },
+      "oldest_publication": "2026-09-09 09:36:00+00:00",
+      "newest_publication": "2026-09-09 11:25:00+00:00",
+      "resources_with_activity_facts": 1,
+      "activity_candidates": 2,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "EXHIBITION": 2
+      },
+      "milestone_kinds": {
+        "TICKET": 1
+      },
+      "facts_without_event_date": 0,
+      "facts_with_specific_event_link": 1,
+      "facts_ended_before_report_date": 0,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 7
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    },
+    "natalie-music-news": {
+      "observed_resources": 2,
+      "job_status": {
+        "DONE": 2
+      },
+      "publication_date_precision": {
+        "TIME": 2
+      },
+      "oldest_publication": "2026-09-09 12:00:00+00:00",
+      "newest_publication": "2026-09-09 12:00:00+00:00",
+      "resources_with_activity_facts": 1,
+      "activity_candidates": 1,
+      "native_ticket_activity_facts": 0,
+      "native_parse_failures": 0,
+      "activity_kinds": {
+        "LIVE": 1
+      },
+      "milestone_kinds": {
+        "TICKET": 3,
+        "GOODS": 1
+      },
+      "facts_without_event_date": 0,
+      "facts_with_specific_event_link": 1,
+      "facts_ended_before_report_date": 0,
+      "resources_with_image_details_pending": 0,
+      "original_publishers": {
+        "UNSPECIFIED": 2
+      },
+      "exact_body_shared_resources": 0,
+      "published_activity_ids": 0
+    }
+  },
+  "limitations": [
+    "Counts describe this bounded observation sample, not total website coverage or true recall.",
+    "Candidates remain unreviewed; extraction failure and irrelevant content are different outcomes.",
+    "Native ticket facts are reconstructed deterministically, separate from model candidates and publication counts.",
+    "No shared group is not proof of unique coverage: official links/names may differ or candidates may be absent.",
+    "Publication, modification, first observation and event dates are different clocks. DATE is not a precise timestamp.",
+    "Same activity publications may describe different updates; compare the same milestone before claiming source latency.",
+    "Do not disable a source solely because it has fewer records or no matches in this sample."
+  ],
+  "generated_at": "2026-09-09T12:10:45.953374+00:00"
+}

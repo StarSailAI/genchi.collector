@@ -15,5 +15,6 @@ ENV CAMOUFOX_BROWSER=official/152.0.4-beta.30
 RUN python -m camoufox fetch official/152.0.4-beta.30 \
     && python -m camoufox set official/stable/152.0.4-beta.30 \
     && python -c "from camoufox.pkgman import installed_verstr; assert installed_verstr().startswith('152.0.4-')"
+RUN mkdir -p /home/browser/verification-agent
 COPY --chown=browser:browser services/browser/*.py /app/
 CMD ["python", "/app/service.py"]

@@ -6,8 +6,52 @@ version: 1
 sources:
   # Aggregators are enabled one by one after remote acceptance. Their broader
   # discovery scope does not automatically add projects to the curated catalog.
-  - id: collabo-cafe-news
+  - id: natalie-comic-news
     enabled: false
+    fetcher: genchi.aggregator
+    sink: postgres
+    schedule: {type: cron, cron: "0 13 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://natalie.mu/comic]
+      detail_pattern: '^https://natalie\.mu/comic/news/[0-9]+$'
+      list_selector: main .NA_section-list .NA_card a[href]
+      title_selector: h1.NA_article_title
+      content_selector: .NA_article_body
+      remove_selector: 'script,style,nav,aside,form,iframe,.NA_share,.NA_article_prefsource,.NA_article_tag,.NA_article_social,.NA_article_embed_article,.NA_article_gallery,.NA_article_tagad-comic,.NA_article_youtube,.GAE_article_milestone,.NA_article_link:not(:has(a[data-gtm-click="external_link"])),a[href*="/gallery/news/"]'
+      published_selector: .NA_article_header .NA_article_date
+      min_page_interval_seconds: 30
+      stop_on_access_denied: true
+      max_detail_pages: 12
+      refresh_details_per_run: 4
+    timeout_seconds: 3600
+    retry: {max_attempts: 2, backoff: exponential, base_seconds: 1800, max_seconds: 7200}
+    routing: {queue: browser, capabilities: [browser_api], resources: {browser_api: 1, domain:natalie.mu: 1}}
+    tags: [scope:anime-offline, country:JP, timezone:Asia/Tokyo, source:editorial-aggregator]
+
+  - id: natalie-music-news
+    enabled: false
+    fetcher: genchi.aggregator
+    sink: postgres
+    schedule: {type: cron, cron: "10 13 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://natalie.mu/music]
+      detail_pattern: '^https://natalie\.mu/music/news/[0-9]+$'
+      list_selector: main .NA_section-list .NA_card a[href]
+      title_selector: h1.NA_article_title
+      content_selector: .NA_article_body
+      remove_selector: 'script,style,nav,aside,form,iframe,.NA_share,.NA_article_prefsource,.NA_article_tag,.NA_article_social,.NA_article_embed_article,.NA_article_gallery,.NA_article_tagad-comic,.NA_article_youtube,.GAE_article_milestone,.NA_article_link:not(:has(a[data-gtm-click="external_link"])),a[href*="/gallery/news/"]'
+      published_selector: .NA_article_header .NA_article_date
+      min_page_interval_seconds: 30
+      stop_on_access_denied: true
+      max_detail_pages: 12
+      refresh_details_per_run: 4
+    timeout_seconds: 3600
+    retry: {max_attempts: 2, backoff: exponential, base_seconds: 1800, max_seconds: 7200}
+    routing: {queue: browser, capabilities: [browser_api], resources: {browser_api: 1, domain:natalie.mu: 1}}
+    tags: [scope:music-offline, country:JP, timezone:Asia/Tokyo, source:editorial-aggregator]
+
+  - id: collabo-cafe-news
+    enabled: true
     fetcher: genchi.aggregator
     sink: postgres
     schedule: {type: cron, cron: "0 9 * * *", timezone: Asia/Tokyo}
@@ -35,13 +79,14 @@ sources:
     tags: [scope:anime-offline, country:JP, timezone:Asia/Tokyo, source:editorial-aggregator]
 
   - id: anime-hack-events
-    enabled: false
+    enabled: true
     fetcher: genchi.aggregator
     sink: postgres
     schedule: {type: cron, cron: "30 9 * * *", timezone: Asia/Tokyo}
     config:
       start_urls: [https://anime.eiga.com/event/]
       detail_pattern: '^https://anime\.eiga\.com/event/[0-9]+/$'
+      priority_selector: .eventInfoList .eventInfoTtl a[href]
       title_selector: h1.headTtlL
       content_selector: .eventDetailInfo > .eventDetailBox
       updated_selector: .headTtlR
@@ -54,6 +99,117 @@ sources:
       capabilities: [browser_api]
       resources: {browser_api: 1, domain:anime.eiga.com: 1}
     tags: [scope:anime-offline, country:JP, timezone:Asia/Tokyo, source:editorial-aggregator]
+
+  - id: eventernote-events
+    enabled: true
+    fetcher: genchi.aggregator
+    sink: postgres
+    schedule: {type: cron, cron: "0 10 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: ['https://www.eventernote.com/events/?type=2']
+      detail_pattern: '^https://www\.eventernote\.com/events/[0-9]+$'
+      list_selector: .event h4 a[href]
+      title_selector: .gb_events_detail_title h2
+      content_selector: .gb_events_info_table
+      source_role: community
+      max_detail_pages: 12
+      refresh_details_per_run: 4
+    timeout_seconds: 3600
+    retry: {max_attempts: 3, backoff: exponential, base_seconds: 300, max_seconds: 7200}
+    routing: {queue: browser, capabilities: [browser_api], resources: {browser_api: 1, domain:eventernote.com: 1}}
+    tags: [scope:anime-music-offline, country:JP, timezone:Asia/Tokyo, source:community-aggregator]
+
+  - id: nijimen-news
+    enabled: true
+    fetcher: genchi.aggregator
+    sink: postgres
+    schedule: {type: cron, cron: "30 10 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://nijimen.kusuguru.co.jp/]
+      detail_pattern: '^https://nijimen\.kusuguru\.co\.jp/topics/[0-9]+$'
+      list_selector: .js-topic a[href]
+      title_selector: h1.topic__title
+      content_selector: .topic__main-text-area
+      max_detail_pages: 12
+      refresh_details_per_run: 4
+    timeout_seconds: 3600
+    retry: {max_attempts: 3, backoff: exponential, base_seconds: 300, max_seconds: 7200}
+    routing: {queue: browser, capabilities: [browser_api], resources: {browser_api: 1, domain:nijimen.kusuguru.co.jp: 1}}
+    tags: [scope:anime-offline, country:JP, timezone:Asia/Tokyo, source:editorial-aggregator]
+
+  - id: spice-news
+    enabled: true
+    fetcher: genchi.aggregator
+    sink: postgres
+    schedule: {type: cron, cron: "0 11 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://spice.eplus.jp/articles/animation_or_game, https://spice.eplus.jp/articles/music]
+      detail_pattern: '^https://spice\.eplus\.jp/articles/[0-9]+$'
+      title_selector: h1.article-title
+      content_selector: article .template, article .rb-article-option
+      max_detail_pages: 12
+      refresh_details_per_run: 4
+    timeout_seconds: 3600
+    retry: {max_attempts: 3, backoff: exponential, base_seconds: 300, max_seconds: 7200}
+    routing: {queue: browser, capabilities: [browser_api], resources: {browser_api: 1, domain:spice.eplus.jp: 1}}
+    tags: [scope:anime-music-offline, country:JP, timezone:Asia/Tokyo, source:editorial-aggregator]
+
+  - id: livefans-news
+    enabled: true
+    fetcher: genchi.aggregator
+    sink: postgres
+    schedule: {type: cron, cron: "30 11 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://www.livefans.jp/news]
+      detail_pattern: '^https://www\.livefans\.jp/news/pc/[0-9]+$'
+      title_selector: '#homeList2 h3.artistName'
+      content_selector: '#homeList2 .whiteBack.midBox'
+      published_selector: '#homeList2 address'
+      remove_selector: 'script,style,nav,aside,form,iframe,.shareLink,.bannerBox,.relList,.exTitle,.exLink'
+      max_detail_pages: 12
+      refresh_details_per_run: 4
+    timeout_seconds: 3600
+    retry: {max_attempts: 3, backoff: exponential, base_seconds: 300, max_seconds: 7200}
+    routing: {queue: browser, capabilities: [browser_api], resources: {browser_api: 1, domain:livefans.jp: 1}}
+    tags: [scope:music-offline, country:JP, timezone:Asia/Tokyo, source:editorial-aggregator]
+
+  - id: marui-anime-events
+    enabled: true
+    fetcher: genchi.aggregator
+    sink: postgres
+    schedule: {type: cron, cron: "0 12 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://www.0101.co.jp/405/]
+      detail_pattern: '^https://www\.0101\.co\.jp/[0-9]+/event/detail\.html\?article_seq=[0-9]+&article_type=sto$'
+      list_selector: '#c-article .event-list-article__item a[href*="/event/detail.html"]'
+      title_selector: .p-article-event-info__ttl
+      content_selector: .p-article-event-info, .p-article-event-detail
+      source_role: official_operator
+      max_detail_pages: 12
+      refresh_details_per_run: 4
+    timeout_seconds: 3600
+    retry: {max_attempts: 3, backoff: exponential, base_seconds: 300, max_seconds: 7200}
+    routing: {queue: browser, capabilities: [browser_api], resources: {browser_api: 1, domain:0101.co.jp: 1}}
+    tags: [scope:anime-offline, country:JP, timezone:Asia/Tokyo, source:official-operator]
+
+  - id: animate-cafe-events
+    enabled: true
+    fetcher: genchi.aggregator
+    sink: postgres
+    schedule: {type: cron, cron: "30 12 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://www.animatecafe.jp/]
+      detail_pattern: '^https://www\.animatecafe\.jp/event/[A-Za-z0-9_-]+$'
+      list_selector: 'main a[href^="/event/"]'
+      content_selector: main
+      page_format: animate_nuxt
+      source_role: official_operator
+      max_detail_pages: 12
+      refresh_details_per_run: 4
+    timeout_seconds: 3600
+    retry: {max_attempts: 3, backoff: exponential, base_seconds: 300, max_seconds: 7200}
+    routing: {queue: browser, capabilities: [browser_api], resources: {browser_api: 1, domain:animatecafe.jp: 1}}
+    tags: [scope:anime-offline, country:JP, timezone:Asia/Tokyo, source:official-operator]
 
   - id: bang-dream-news
     enabled: true

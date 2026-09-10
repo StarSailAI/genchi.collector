@@ -13,6 +13,7 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote, urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 INTERNAL_KEYS = (
     "POSTGRES_PASSWORD",
@@ -129,6 +130,36 @@ def prepare(root: Path) -> dict[str, str]:
             "Fill LLM_BASE_URL, LLM_API_KEY and LLM_MODEL together, or leave all empty"
         )
     values["CATALOG_WORKER_MODE"] = "catalog" if all(llm) else "idle"
+    verification_enabled = values.get("VERIFICATION_AGENT_ENABLED", "false").lower() == "true"
+    visual_base = values.get("VERIFICATION_LLM_BASE_URL", "").rstrip("/")
+    if (
+        verification_enabled
+        and visual_base
+        and visual_base != values.get("LLM_BASE_URL", "").rstrip("/")
+        and not values.get("VERIFICATION_LLM_API_KEY")
+    ):
+        raise ValueError("A separate verification endpoint requires its own API key")
+    for target, fallback in [
+        ("VERIFICATION_LLM_BASE_URL", "LLM_BASE_URL"),
+        ("VERIFICATION_LLM_API_KEY", "LLM_API_KEY"),
+    ]:
+        values[target] = values.get(target) or values.get(fallback, "")
+    if verification_enabled and not all(
+        values.get(k)
+        for k in ("VERIFICATION_LLM_BASE_URL", "VERIFICATION_LLM_API_KEY", "VERIFICATION_LLM_MODEL")
+    ):
+        raise ValueError("Enabled verification agent requires a vision model and API credentials")
+    if verification_enabled:
+        endpoint = urlsplit(values["VERIFICATION_LLM_BASE_URL"])
+        if (
+            endpoint.scheme != "https"
+            or not endpoint.hostname
+            or endpoint.username
+            or endpoint.password
+            or endpoint.query
+            or endpoint.fragment
+        ):
+            raise ValueError("Verification model endpoint must be a trusted HTTPS URL")
     provider = values.get("MAIL_PROVIDER", "resend")
     if provider not in {"resend", "smtp"}:
         raise ValueError("MAIL_PROVIDER must be resend or smtp")
@@ -143,6 +174,35 @@ def prepare(root: Path) -> dict[str, str]:
         values["NOTIFIER_WORKER_MODE"] = "notifications" if values["SMTP_PASSWORD"] else "idle"
     else:
         values["NOTIFIER_WORKER_MODE"] = "notifications"
+    digest_enabled_value = values.get("COLLECTION_DIGEST_ENABLED", "false").lower()
+    if digest_enabled_value not in {"true", "false"}:
+        raise ValueError("COLLECTION_DIGEST_ENABLED must be true or false")
+    digest_enabled = digest_enabled_value == "true"
+    if digest_enabled:
+        if provider != "resend":
+            raise ValueError("Collection digest delivery requires MAIL_PROVIDER=resend")
+        for key in ("RESEND_API_KEY", "ADMIN_EMAIL", "MAIL_FROM"):
+            if not values.get(key):
+                raise ValueError(f"Enabled collection digest requires {key}")
+        try:
+            ZoneInfo(values.get("COLLECTION_DIGEST_TIMEZONE", "Asia/Tokyo"))
+        except ZoneInfoNotFoundError:
+            raise ValueError("Invalid COLLECTION_DIGEST_TIMEZONE") from None
+        clocks = {}
+        for key, default in (
+            ("COLLECTION_DIGEST_NOT_BEFORE", "18:00"),
+            ("COLLECTION_DIGEST_FORCE_AT", "23:00"),
+        ):
+            raw = values.get(key, default)
+            try:
+                clocks[key] = datetime.strptime(raw, "%H:%M").time()
+            except ValueError:
+                raise ValueError(f"{key} must use HH:MM") from None
+        if clocks["COLLECTION_DIGEST_FORCE_AT"] <= clocks["COLLECTION_DIGEST_NOT_BEFORE"]:
+            raise ValueError(
+                "COLLECTION_DIGEST_FORCE_AT must be after COLLECTION_DIGEST_NOT_BEFORE"
+            )
+    values["COLLECTION_DIGEST_WORKER_MODE"] = "collection-digest" if digest_enabled else "idle"
     if (
         values["NOTIFIER_WORKER_MODE"] == "notifications"
         and values.get("SMTP_HOST", "mailpit") != "mailpit"
@@ -190,6 +250,14 @@ def prepare(root: Path) -> dict[str, str]:
         source = "".join(
             re.sub(r"(?m)^    enabled: true$", "    enabled: false", part)
             if "\n    fetcher: genchi.x_profile\n" in part
+            else part
+            for part in parts
+        )
+    if not verification_enabled:
+        parts = re.split(r"(?m)(?=^  - id: )", source)
+        source = "".join(
+            re.sub(r"(?m)^    enabled: true$", "    enabled: false", part)
+            if part.startswith(("  - id: natalie-comic-news\n", "  - id: natalie-music-news\n"))
             else part
             for part in parts
         )
@@ -339,6 +407,12 @@ def main() -> None:
             if values.get("RESEND_WEBHOOK_SECRET")
             else "not configured; run deploy/inbound-setup.py after enabling receiving",
         )
+        print(
+            "Daily collection digest:",
+            "enabled"
+            if values["COLLECTION_DIGEST_WORKER_MODE"] == "collection-digest"
+            else "disabled",
+        )
         if not values.get("ADMIN_EMAIL"):
             print("Pending: ADMIN_EMAIL")
     elif args.command == "apply":
@@ -361,6 +435,7 @@ def main() -> None:
                 "product",
                 "mailpit",
                 "notifier",
+                "collection-digest",
             ],
         )
         compose(root, "web", ["up", "-d", "--no-build", "--wait", "--wait-timeout", "120", "web"])

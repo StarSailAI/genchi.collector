@@ -22,6 +22,7 @@ from allfeeds_sdk import (
     FetcherManifest,
     FetcherPlugin,
     FetchRequest,
+    PermanentError,
     RateLimitError,
     TransientError,
     UpstreamHTTPError,
@@ -107,6 +108,31 @@ class BrowserClient:
             raise ConfigurationError("browser rejected the page request or destination")
         if response.status_code == 429:
             raise RateLimitError("browser API is rate limited", retry_after_seconds=SafeHttpClient._retry_after(response, 60))
+        if response.status_code == 409 and response.json().get('code') == 'VERIFICATION_REQUIRED':
+            run = response.json().get('verification') or {}
+            run_id = run.get('id', '')
+            if not re.fullmatch(r'[A-Za-z0-9_-]{16,80}', run_id):
+                raise PermanentError('browser returned an invalid verification identifier')
+            # Keep the same worker call and original browser navigation alive.
+            # An external operator handles the bounded visual intervention.
+            deadline = time.monotonic() + 600
+            while time.monotonic() < deadline:
+                if run.get('state') in {'FAILED', 'EXPIRED', 'CANCELED'}:
+                    raise PermanentError(f'browser verification {run_id}: {run["state"]}')
+                time.sleep(2)
+                try:
+                    response = requests.get(f'{self.base_url}/verification/{run_id}/result', headers=self.headers, timeout=15)
+                except (requests.ConnectionError, requests.Timeout):
+                    # A lost polling reply must not escape to render() and
+                    # replay the original POST after the session has resumed.
+                    continue
+                if response.status_code == 200:
+                    break
+                if response.status_code != 409:
+                    raise PermanentError(f'browser verification {run_id}: result unavailable')
+                run = response.json().get('verification') or {}
+            else:
+                raise PermanentError(f'browser verification {run_id}: timed out waiting for intervention')
         if response.status_code >= 400:
             raise TransientError(f"browser render failed with HTTP {response.status_code}")
         upstream_status = response.headers.get("X-Genchi-Browser-Upstream-Status")

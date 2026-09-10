@@ -93,6 +93,24 @@ def hydrate(conn, rows):
         "SELECT activity_id,count(DISTINCT url) AS source_count,max(observed_at) AS checked_at FROM catalog_evidence WHERE activity_id=ANY(%s) GROUP BY activity_id",
         (ids,),
     ).fetchall()
+    fresh_time_ids = {
+        row["activity_id"]
+        for row in conn.execute(
+            """SELECT DISTINCT activity_id FROM catalog_changes
+            WHERE activity_id=ANY(%s)
+            AND (created_at AT TIME ZONE 'Asia/Tokyo')::date=
+                (NOW() AT TIME ZONE 'Asia/Tokyo')::date
+            AND (kind IN ('NEW_ACTIVITY','NEW_MILESTONE') OR
+              (kind='MILESTONE_CHANGED' AND (
+                before_value->'starts_at' IS DISTINCT FROM after_value->'starts_at' OR
+                before_value->'ends_at' IS DISTINCT FROM after_value->'ends_at' OR
+                before_value->'starts_on' IS DISTINCT FROM after_value->'starts_on' OR
+                before_value->'ends_on' IS DISTINCT FROM after_value->'ends_on' OR
+                before_value->'precision' IS DISTINCT FROM after_value->'precision'
+              )))""",
+            (ids,),
+        ).fetchall()
+    }
     node_counts = {
         r["activity_id"]: r["count"]
         for r in conn.execute(
@@ -105,6 +123,7 @@ def hydrate(conn, rows):
         row["occurrences"] = [s for s in occurrences if s["activity_id"] == row["id"]]
         row["next_milestone"] = next((n for n in nodes if n["activity_id"] == row["id"]), None)
         row["milestone_count"] = node_counts.get(row["id"], 0)
+        row["has_new_time_today"] = row["id"] in fresh_time_ids
         row.update(
             next(
                 (c for c in counts if c["activity_id"] == row["id"]),

@@ -1,6 +1,7 @@
 """Conservative cross-source identity rules, independent of translated display names."""
 from __future__ import annotations
 
+import re
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .domain import JST, ActivityInput, MilestoneInput, canonical_url, normalize
@@ -10,6 +11,14 @@ SECONDARY_HOSTS = {
     "nijimen.kusuguru.co.jp", "natalie.mu", "spice.eplus.jp", "www.livefans.jp",
     "x.com", "twitter.com", "www.youtube.com", "youtu.be",
 }
+
+
+def round_name(title: str) -> str:
+    # Only grammatical ticket labels are noise. Preserve round numbers, fastest /
+    # second rounds, fan-club names, ticket categories and lottery/first-come mode.
+    title = re.sub(r"^チケット", "", title)
+    title = re.sub(r"受付", "", title)
+    return normalize(title)
 
 
 def event_reference(url: str | None) -> str | None:
@@ -78,7 +87,7 @@ def same_milestone_fact(item: MilestoneInput, row: dict, *, same_occurrence: boo
         return False
     if not item.url or canonical_url(item.url) != canonical_url(row.get("url")):
         return False
-    if normalize(item.title) != normalize(row["title"]) or item.eligibility != row.get("eligibility"):
+    if round_name(item.title) != round_name(row["title"]) or item.eligibility != row.get("eligibility"):
         return False
     if item.platform and row.get("platform") and item.platform != row["platform"]:
         return False

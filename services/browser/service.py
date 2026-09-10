@@ -16,6 +16,7 @@ from aiohttp import web
 from camoufox.addons import DefaultAddons
 from camoufox.async_api import AsyncCamoufox
 from egress import BlockedDestination, EgressProxy, PublicResolver, public_url
+from verification import VerificationManager, supported_url
 from x_parser import failure_code, parse_detail, parse_profile
 
 LOGGER = logging.getLogger("genchi.browser")
@@ -142,6 +143,9 @@ async def fetch(request: web.Request) -> web.Response:
     wait_seconds = max(0.0, min(30.0, float(payload.get("waitSeconds") or 2.0)))
     timeout_seconds = max(5.0, min(180.0, float(payload.get("timeoutSeconds") or 75.0)))
     selector = str(payload.get("selector") or "").strip()[:500]
+    if supported_url(url):
+        return await request.app['verification'].fetch(
+            request, url, selector=selector, timeout=timeout_seconds, wait=wait_seconds)
     async with request.app["browser_semaphore"]:
         page = await _new_page(request)
         try:
@@ -375,6 +379,21 @@ def create_app() -> web.Application:
     app["x_context"] = None
     app["browser_semaphore"] = asyncio.Semaphore(concurrency)
     app["browser_restart_lock"] = asyncio.Lock()
+    manager = VerificationManager(app, authorized=_authorized, new_page=_new_page,
+                                  close_page=_close_page, guard_public=_guard_public)
+    app['verification'] = manager
+
+    async def verification_lifecycle(current):
+        task = asyncio.create_task(manager.cleanup_loop())
+        yield
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await manager.close('FAILED', 'service_stopped')
+
+    app.cleanup_ctx.append(verification_lifecycle)
+    app.router.add_get('/verification', manager.handle)
+    app.router.add_get('/verification/{id}/result', manager.result)
+    app.router.add_post('/verification/{id}/{action}', manager.handle)
     app.router.add_get("/", health)
     app.router.add_get("/health", health)
     app.router.add_post("/fetch", fetch)

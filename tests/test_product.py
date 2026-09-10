@@ -13,7 +13,8 @@ from unittest.mock import patch
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
-from genchi_product.api import create_app, digest
+from genchi_product.api import create_app, digest, hydrate
+from genchi_product.collection_digest import deliver_digest, prepare_due_digest
 from genchi_product.domain import ActivityInput, EvidenceInput, MilestoneInput, Moment, legacy_time
 from genchi_product.notifications import (
     deliver_one,
@@ -118,6 +119,9 @@ def catalog(monkeypatch):
         ]()
         runpy.run_path(str(Path("services/normalizer/alembic/versions/0008_email_code_auth.py")))["upgrade"]()
         runpy.run_path(str(Path("services/normalizer/alembic/versions/0009_account_locale.py")))["upgrade"]()
+        runpy.run_path(
+            str(Path("services/normalizer/alembic/versions/0010_collection_digest.py"))
+        )["upgrade"]()
     with psycopg.connect(DSN, autocommit=True) as conn:
         conn.execute(f'CREATE SCHEMA "{schema}"')
     try:
@@ -128,6 +132,12 @@ def catalog(monkeypatch):
                 INSERT INTO "SchemaContract" VALUES(1,1,1,NOW());
                 CREATE TABLE resources(id bigserial PRIMARY KEY,source_id text,external_id text,content_hash text,kind text,
                   title text,content text,url text,attributes jsonb DEFAULT '{}',tags jsonb DEFAULT '[]',published_at timestamptz,observed_at timestamptz);
+                CREATE TABLE resource_versions(id bigserial PRIMARY KEY,resource_id bigint NOT NULL REFERENCES resources(id),
+                  content_hash char(64) NOT NULL,title text,content text,attributes jsonb NOT NULL DEFAULT '{}',
+                  observed_at timestamptz NOT NULL DEFAULT NOW(),created_at timestamptz NOT NULL DEFAULT NOW(),
+                  UNIQUE(resource_id,content_hash));
+                CREATE TABLE tasks(id bigserial PRIMARY KEY,workload text NOT NULL,status text NOT NULL,
+                  scheduled_for timestamptz NOT NULL DEFAULT NOW());
                 CREATE TABLE "SearchDocument"("id" text,"entityType" text,"entityId" text,"titleOriginal" text,
                   "bodyOriginal" text,"projectKey" text,"kind" text,"country" text,"publishedAt" timestamptz,
                   "canonicalUrl" text,"searchText" text,"updatedAt" timestamptz, UNIQUE("entityType","entityId"));""")
@@ -182,6 +192,97 @@ def subscribe(catalog, activity_id=None, account_id="user-one", verified=True):
     return account_id
 
 
+class DigestResend:
+    def __init__(self, result=None, error=None):
+        self.result = result or {"id": "00000000-0000-4000-8000-000000000001"}
+        self.error = error
+        self.calls = []
+
+    def request(self, method, path, *, payload=None, idempotency_key=None):
+        self.calls.append((method, path, payload, idempotency_key))
+        if self.error:
+            raise self.error
+        return self.result
+
+
+def test_collection_digest_freezes_new_versions_and_advances_only_after_send(catalog, monkeypatch):
+    monkeypatch.setenv("MAIL_FROM", "Genchi <hello@example.test>")
+    monkeypatch.setenv("ADMIN_EMAIL", "admin@example.test")
+    with catalog.connect() as conn:
+        resource_id = conn.execute(
+            """INSERT INTO allfeeds.resources
+            (source_id,external_id,content_hash,kind,title,content,url,observed_at)
+            VALUES('official','event-1',%s,'article','演唱会售票开始','正文',
+            'https://official.example.test/event-1',%s) RETURNING id""",
+            ("a" * 64, NOW),
+        ).fetchone()["id"]
+        conn.execute(
+            """INSERT INTO allfeeds.resource_versions
+            (resource_id,content_hash,title,content,observed_at) VALUES(%s,%s,%s,'正文',%s)""",
+            (resource_id, "a" * 64, "演唱会售票开始", NOW),
+        )
+    due = NOW + timedelta(hours=10)
+    assert prepare_due_digest(catalog, due) == "pending"
+    assert prepare_due_digest(catalog, due) == "pending"
+    client = DigestResend()
+    assert deliver_digest(catalog, client, due)
+    assert client.calls[0][0:2] == ("POST", "/emails")
+    assert client.calls[0][2]["to"] == ["admin@example.test"]
+    assert "[新增] 演唱会售票开始" in client.calls[0][2]["text"]
+    assert client.calls[0][3] == "genchi-collection-digest/2030-06-01"
+    assert not deliver_digest(catalog, client, due)
+    with catalog.connect() as conn:
+        digest_row = conn.execute(
+            "SELECT * FROM genchi_private.collection_digests"
+        ).fetchone()
+        cursor = conn.execute(
+            "SELECT last_version_id FROM genchi_private.collection_digest_state WHERE id=TRUE"
+        ).fetchone()
+    assert digest_row["status"] == "SENT"
+    assert digest_row["payload"] is None
+    assert cursor["last_version_id"] == 1
+
+
+def test_collection_digest_waits_for_scheduled_collection_until_force_time(catalog, monkeypatch):
+    monkeypatch.setenv("MAIL_FROM", "Genchi <hello@example.test>")
+    monkeypatch.setenv("ADMIN_EMAIL", "admin@example.test")
+    with catalog.connect() as conn:
+        conn.execute(
+            """INSERT INTO allfeeds.tasks(workload,status,scheduled_for)
+            VALUES('scheduled','retry',%s)""",
+            (NOW,),
+        )
+    assert prepare_due_digest(catalog, NOW + timedelta(hours=10)) == "waiting_for_collection"
+    assert prepare_due_digest(catalog, NOW + timedelta(hours=14)) == "empty"
+
+
+def test_activity_new_badge_tracks_time_changes_in_japan_day(catalog):
+    aid = catalog.publish(activity())
+    with catalog.connect() as conn:
+        row = conn.execute("SELECT * FROM catalog_activities WHERE id=%s", (aid,)).fetchone()
+        assert hydrate(conn, [row])[0]["has_new_time_today"] is True
+        conn.execute(
+            "UPDATE catalog_changes SET created_at=NOW()-INTERVAL '2 days' WHERE activity_id=%s",
+            (aid,),
+        )
+        unchanged = conn.execute("SELECT * FROM catalog_activities WHERE id=%s", (aid,)).fetchone()
+        assert hydrate(conn, [unchanged])[0]["has_new_time_today"] is False
+        conn.execute(
+            """INSERT INTO catalog_changes(activity_id,kind,summary,before_value,after_value)
+            VALUES(%s,'MILESTONE_CHANGED','只修改标题',%s::jsonb,%s::jsonb)""",
+            (aid, json.dumps({"title": "旧标题"}), json.dumps({"title": "新标题"})),
+        )
+        title_only = conn.execute("SELECT * FROM catalog_activities WHERE id=%s", (aid,)).fetchone()
+        assert hydrate(conn, [title_only])[0]["has_new_time_today"] is False
+        conn.execute(
+            """UPDATE catalog_changes SET after_value=%s::jsonb
+            WHERE activity_id=%s AND summary='只修改标题'""",
+            (json.dumps({"title": "新标题", "starts_at": "2030-06-20T10:00:00Z"}), aid),
+        )
+        new_time = conn.execute("SELECT * FROM catalog_activities WHERE id=%s", (aid,)).fetchone()
+        assert hydrate(conn, [new_time])[0]["has_new_time_today"] is True
+
+
 def test_date_precision_rejects_invented_clock_and_naive_times():
     with pytest.raises(ValidationError):
         Moment(precision="TIME", starts_at="2030-01-01T00:00:00")
@@ -197,6 +298,7 @@ def test_cross_publisher_activity_and_round_merge_preserves_evidence(catalog):
     first = activity("official:event")
     first.url = "https://official.test/live/2030"
     first.milestones[0].url = "https://tickets.test/2030"
+    first.milestones[0].title = "最速先行受付（抽選）"
     original = catalog.publish(first, historical=True)
     second = first.model_copy(deep=True)
     second.source_key = "publisher:article"
@@ -205,6 +307,7 @@ def test_cross_publisher_activity_and_round_merge_preserves_evidence(catalog):
     second.evidence.source_id = "publisher"
     second.milestones[0].source_key = "article:round"
     second.milestones[0].round_key = "先行抽选"
+    second.milestones[0].title = "チケット最速先行受付（抽選）"
     second.milestones[0].evidence.source_id = "publisher"
     assert catalog.publish(second, historical=True) == original
     assert catalog.publish(second, historical=True) == original
@@ -235,6 +338,22 @@ def test_reused_official_url_does_not_merge_another_edition_or_ticket_product(ca
     assert catalog.publish(third, historical=True) == original
     with catalog.connect() as conn:
         assert conn.execute("SELECT COUNT(*) n FROM catalog_milestones WHERE activity_id=%s AND kind='TICKET'", (original,)).fetchone()["n"] == 2
+
+
+def test_aggregator_generic_title_does_not_bypass_evidence_match(catalog):
+    with catalog.connect() as conn:
+        conn.execute("""INSERT INTO allfeeds.resources(source_id,external_id,content_hash,kind,title,content,attributes)
+            VALUES('publisher','one','v1','aggregate_article','カフェ','原文','{"source_type":"aggregator"}'),
+                  ('publisher','two','v1','aggregate_article','カフェ','原文','{"source_type":"aggregator"}')""")
+    first = activity('document:one')
+    first.url = 'https://official.test/cafe'
+    first.evidence = first.evidence.model_copy(update={'source_id': 'publisher', 'external_id': 'one'})
+    original = catalog.publish(first, historical=True)
+    later = first.model_copy(deep=True)
+    later.source_key = 'document:two'
+    later.evidence.external_id = 'two'
+    later.time.starts_at += timedelta(days=120)
+    assert catalog.publish(later, historical=True) != original
 
 
 def test_replay_timezone_correction_and_year_identity(catalog):
@@ -674,6 +793,24 @@ def test_successful_reprocessing_closes_only_its_failure_and_keeps_candidate_pen
             {"status": "REJECTED", "reviewed_by": "system:normalizer", "candidate": False},
             {"status": "PENDING", "reviewed_by": None, "candidate": True},
         ]
+        assert conn.execute("SELECT count(*) n FROM catalog_activities").fetchone()["n"] == 0
+
+
+def test_reprocessing_supersedes_obsolete_candidates_without_publishing(catalog, monkeypatch):
+    with catalog.connect() as conn:
+        conn.execute("INSERT INTO allfeeds.resources(source_id,external_id,content_hash,kind,title,content) VALUES('official','one','hash','official_news','ライブ','原文')")
+    candidate = activity(verified=False)
+    candidate.publication = "REVIEW"
+    candidate.evidence = candidate.evidence.model_copy(update={"version_hash": "hash", "method": "llm:old"})
+    monkeypatch.setattr("genchi_product.pipeline.extract_text", lambda *_: [candidate])
+    assert process_one(catalog)
+    candidate = candidate.model_copy(update={"source_key": "corrected:session"})
+    with catalog.connect() as conn:
+        conn.execute("UPDATE catalog_jobs SET status='PENDING',not_before=NOW()")
+    assert process_one(catalog)
+    with catalog.connect() as conn:
+        rows = conn.execute("SELECT status,reviewed_by FROM catalog_reviews ORDER BY created_at").fetchall()
+        assert rows == [{"status": "REJECTED", "reviewed_by": "system:normalizer"}, {"status": "PENDING", "reviewed_by": None}]
         assert conn.execute("SELECT count(*) n FROM catalog_activities").fetchone()["n"] == 0
 
 

@@ -83,6 +83,33 @@ services:
       retries: 8
       start_period: 60s
 
+  verification-agent:
+    image: genchi/browser:${GENCHI_IMAGE_TAG:-current}
+    command: ["python", "/app/verification_agent.py"]
+    restart: unless-stopped
+    init: true
+    depends_on:
+      browser:
+        condition: service_healthy
+    environment:
+      BROWSER_URL: http://browser:3003
+      BROWSER_API_TOKEN: ${BROWSER_API_TOKEN:-genchi-local-browser-token}
+      VERIFICATION_AGENT_ENABLED: ${VERIFICATION_AGENT_ENABLED:-false}
+      VERIFICATION_LLM_BASE_URL: ${VERIFICATION_LLM_BASE_URL:-}
+      VERIFICATION_LLM_API_KEY: ${VERIFICATION_LLM_API_KEY:-}
+      VERIFICATION_LLM_MODEL: ${VERIFICATION_LLM_MODEL:-}
+      VERIFICATION_DAILY_MODEL_CALLS: ${VERIFICATION_DAILY_MODEL_CALLS:-40}
+    volumes:
+      - verification-state:/home/browser/verification-agent
+    networks: [collector]
+    read_only: true
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3004/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
   worker:
     build:
       context: .
@@ -199,6 +226,30 @@ services:
       timeout: 5s
       retries: 6
 
+  collection-digest:
+    build:
+      context: .
+      dockerfile: services/normalizer/Dockerfile
+    command: ["genchi-product", "worker", "--mode", "${COLLECTION_DIGEST_WORKER_MODE:-idle}"]
+    restart: unless-stopped
+    depends_on:
+      product:
+        condition: service_healthy
+    environment:
+      <<: *database
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@genchi.local}
+      MAIL_FROM: ${MAIL_FROM:-Genchi <hello@genchi.local>}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      COLLECTION_DIGEST_TIMEZONE: ${COLLECTION_DIGEST_TIMEZONE:-Asia/Tokyo}
+      COLLECTION_DIGEST_NOT_BEFORE: ${COLLECTION_DIGEST_NOT_BEFORE:-18:00}
+      COLLECTION_DIGEST_FORCE_AT: ${COLLECTION_DIGEST_FORCE_AT:-23:00}
+    networks: [collector]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8070/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
   mailpit:
     image: axllent/mailpit:v1.27.4
     restart: unless-stopped
@@ -222,6 +273,7 @@ services:
     networks: [collector]
 
 volumes:
+  verification-state:
   postgres-data:
   worker-state:
   asset-data:

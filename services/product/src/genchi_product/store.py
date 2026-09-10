@@ -110,6 +110,14 @@ class Catalog:
         # A title is a candidate match, scoped to an edition. A persistent source mapping wins on updates.
         year = item.time.anchor()[:4]
         key = fingerprint(f"{normalize(item.title)}:{year}:{item.attendance}")
+        origin = conn.execute(
+            "SELECT attributes->>'source_type' source_type FROM allfeeds.resources WHERE source_id=%s AND external_id=%s",
+            (item.evidence.source_id, item.evidence.external_id),
+        ).fetchone()
+        if origin and origin["source_type"] == "aggregator":
+            # Broad publishers reuse generic event titles. They must pass the
+            # cross-source evidence/date match, never the legacy title/year key.
+            key = fingerprint("aggregator:" + item.source_key)
         reference = event_reference(item.url)
         if reference:
             # Serialize different publishers of the same event before looking up

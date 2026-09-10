@@ -15,6 +15,8 @@ services:
   worker:
     image: genchi/worker:${GENCHI_IMAGE_TAG:-current}
     mem_limit: 512m
+  verification-agent:
+    mem_limit: 128m
   browser:
     mem_limit: 1400m
     environment:
@@ -34,6 +36,9 @@ services:
     # Attachment encoding and a durable retry payload can briefly consume extra memory.
     mem_limit: 512m
     command: ["genchi-product", "worker", "--mode", "${NOTIFIER_WORKER_MODE:-idle}"]
+  collection-digest:
+    image: genchi/product:${GENCHI_IMAGE_TAG:-current}
+    mem_limit: 192m
   mailpit:
     mem_limit: 96m
   dashboard:

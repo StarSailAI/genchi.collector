@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -73,7 +74,8 @@ def test_migration_claim_sink_and_backfill(monkeypatch) -> None:
         first_worker = _worker(store, 1, plugins)
         second_worker = _worker(store, 2, plugins)
 
-        manual_id = store.register_manual(source_id="bang-dream-news")
+        manual_id = store.register_manual(source_id="bang-dream-news", dedupe_key="immutable-manual")
+        assert store.register_manual(source_id="bang-dream-news", dedupe_key="immutable-manual") is None
         tasks, _ = store.claim_tasks(
             node_id=first_worker.node_id,
             instance_id=first_worker.instance_id,
@@ -95,6 +97,12 @@ def test_migration_claim_sink_and_backfill(monkeypatch) -> None:
             report={"seen": 1, "added": 1},
             error_message=None,
         )
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            replayed = list(executor.map(lambda _: store.register_manual(source_id="bang-dream-news", dedupe_key="immutable-manual"), range(4)))
+        assert replayed == [None] * 4
+        with psycopg.connect(TEST_DSN, options=f"-c search_path={schema},public") as conn:
+            assert conn.execute("SELECT count(*) FROM tasks WHERE dedupe_key='immutable-manual'").fetchone()[0] == 0
+            assert conn.execute("SELECT count(*) FROM task_runs WHERE dedupe_key='immutable-manual'").fetchone()[0] == 1
 
         start = datetime(2026, 7, 1, tzinfo=UTC)
         batch = store.create_backfill(

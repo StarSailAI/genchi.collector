@@ -96,7 +96,7 @@ allfeeds-control config-validate --sources config/sources.yaml
 - 参与状态未记录时，结果 / 付款事项带条件提示；记录申请、中选或购票后，已完成的相应事项不再占据个人日程。邮件发送前执行同样的轮次判断；修改另一轮不会抑制本轮提醒。DELETE `/me/participation/{id}?round_key=...` 可恢复为未记录。
 - `/calendar` 保留 ICS 使用的节点读取接口，新增 `total/page/limit`。网站循环取完分页，不静默截取前 2,000 项。
 
-上述读取 API 与参与状态撤销沿用原有表结构；当前完整版本包含名称规范与收信转发迁移，SchemaContract 为 1.4，兼容网站的 1.3 读取契约。
+上述读取 API 与参与状态撤销沿用原有表结构；当前完整版本包含名称规范、收信转发、邮箱验证码登录、账户语言与采集日报迁移，SchemaContract 为 1.7。
 
 ## 名称规范（SchemaContract 1.3）
 
@@ -105,3 +105,15 @@ allfeeds-control config-validate --sources config/sources.yaml
 ## 收信转发（SchemaContract 1.4）
 
 Resend 收件进入独立私有队列 `genchi_private.inbound_mail`，由 notifier 转发到 `ADMIN_EMAIL`，与账户登录、关注及退订状态无关。邮件不进入活动目录或模型提取。回调签名、附件、幂等重试与运维命令见 [单机部署](production.md#resend-收信转发)。
+
+## 邮箱验证码登录（SchemaContract 1.5）
+
+账户登录令牌使用一次性验证码及独立的私有表保存，网站只通过 Product API 访问登录能力。
+
+## 账户语言（SchemaContract 1.6）
+
+账户与登录挑战保存明确的界面语言，使验证码、活动提醒和网站展示使用同一语言偏好。
+
+## 采集日报（SchemaContract 1.7）
+
+`genchi_private.collection_digest_state` 保存最后一次确认发送的原始版本游标，`collection_digests` 保存每日冻结的汇总批次、发送状态与 Resend 幂等键对应的投递记录。迁移会把游标初始化为迁移时已有的最大版本号，因此首次启用不会发送全部历史数据。

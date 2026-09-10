@@ -215,6 +215,15 @@ class ControlStore:
         window_start: datetime | None = None,
         window_end: datetime | None = None,
     ) -> int | None:
+        # A task's idempotency key survives movement to terminal history.
+        # Serialize registration with archival, so a just-completed task cannot
+        # be executed again and then lose its report on task_runs' unique key.
+        conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("task-dedupe:" + dedupe_key,))
+        if conn.execute(
+            "SELECT 1 FROM tasks WHERE dedupe_key=%s UNION ALL SELECT 1 FROM task_runs WHERE dedupe_key=%s LIMIT 1",
+            (dedupe_key, dedupe_key),
+        ).fetchone():
+            return None
         row = conn.execute(
             """
             INSERT INTO tasks (
@@ -732,6 +741,7 @@ class ControlStore:
         error_class: str | None,
         error_message: str | None,
     ) -> None:
+        conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", ("task-dedupe:" + row["dedupe_key"],))
         now = datetime.now(UTC)
         duration = (now - row["locked_at"]).total_seconds() if row["locked_at"] else None
         conn.execute(
