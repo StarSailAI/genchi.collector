@@ -73,7 +73,8 @@ def official_link_candidates(conn) -> list[dict]:
           FROM catalog_reviews rv JOIN allfeeds.resources r ON r.id=rv.resource_id
           WHERE r.source_id='bang-dream-events' AND rv.status='PENDING'
         ), matches AS (
-          SELECT a.id,a.title,a.official_url,c.*,
+          SELECT a.id,a.title,a.official_url,c.source_url,c.external_id,
+            c.content_hash,c.content,c.event_day,
             EXISTS(SELECT 1 FROM catalog_occurrences o
               WHERE o.activity_id=a.id AND o.status<>'SUPERSEDED'
               AND c.event_day BETWEEN
