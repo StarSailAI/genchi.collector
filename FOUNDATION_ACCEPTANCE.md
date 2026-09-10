@@ -44,3 +44,11 @@
 ## 品牌验证码邮件（2026-09-09）
 
 按 Email 0.2.0 规范新增 HTML / 纯文本渲染和 SMTP multipart/alternative，视觉沿用衬线品牌字标、珊瑚红及网站主 slogan。189 项后端测试、ruff、全部 10 个 Python 分发包构建通过；模板确实包含在 product wheel 中。760 / 390 / 320 px 预览与 Mailpit 实际登录收码 / 验证均通过，测试账户及消息已清理。新模板没有自动发往真实邮箱；邮箱客户端的最终呈现以用户实际收信为准。详见 `docs/email-templates.md`。
+
+## Agent API 与 API Key（2026-09-10）
+
+状态：本地实现中，生产迁移和发布完成后更新。
+
+- PostgreSQL 隔离测试覆盖完整 Key 仅创建响应返回、摘要存储、列表不回传 Secret、Scope 拒绝、账号所有权、撤销立即失效、调用审计、增量游标和 MCP 初始化 / 工具发现。
+- 前端个人中心不持久化完整 Key；创建响应只保存在当前组件内存，页面刷新后不可恢复。
+- FoundationServices 项目 Profile 保持可验证；API Key 因上游为 `planned/spec-only`，只作为项目自建偏离记录。

@@ -280,6 +280,76 @@ def test_keyword_tag_follow_matching_and_privacy(catalog, mail):
     assert c.get("/tags").json()[0]["slug"] == "LIVE"
 
 
+def test_agent_key_is_one_time_scoped_revocable_and_mcp_compatible(catalog, mail):
+    c = client(catalog)
+    verify(c, send(c, mail))
+    created = c.post("/me/api-keys", json={"name": "My Agent"})
+    assert created.status_code == 201, created.text
+    key = created.json()
+    assert key["secret"].startswith("gch_live_")
+    assert key["secret"] not in str(c.get("/me/api-keys").json())
+    headers = {"Authorization": "Bearer " + key["secret"]}
+
+    subscriptions = c.get("/agent/v1/subscriptions", headers=headers)
+    assert subscriptions.status_code == 200 and subscriptions.json()["items"] == []
+    added = c.post(
+        "/agent/v1/subscriptions",
+        headers=headers,
+        json={"target_type": "SUBJECT", "target_id": "gakumas"},
+    )
+    assert added.status_code == 201
+    first = c.get("/agent/v1/updates", headers=headers).json()
+    assert first["next_cursor"]
+    assert (
+        c.get(
+            "/agent/v1/updates", headers=headers, params={"cursor": first["next_cursor"]}
+        ).status_code
+        == 200
+    )
+
+    initialized = c.post(
+        "/mcp",
+        headers=headers,
+        json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+    )
+    assert initialized.status_code == 200
+    assert initialized.json()["result"]["serverInfo"]["name"] == "genchi"
+    tools = c.post(
+        "/mcp",
+        headers=headers,
+        json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+    ).json()["result"]["tools"]
+    assert "get_latest_updates" in {tool["name"] for tool in tools}
+
+    assert c.delete("/me/api-keys/" + key["id"]).status_code == 200
+    assert c.get("/agent/v1/subscriptions", headers=headers).status_code == 401
+    with catalog.connect() as conn:
+        stored = conn.execute(
+            "SELECT secret_digest FROM genchi_private.api_keys WHERE id=%s", (key["id"],)
+        ).fetchone()["secret_digest"]
+        assert key["secret"] not in stored
+        assert (
+            conn.execute(
+                "SELECT count(*) n FROM genchi_private.api_key_requests WHERE api_key_id=%s",
+                (key["id"],),
+            ).fetchone()["n"]
+            >= 4
+        )
+
+
+def test_agent_key_scope_is_enforced(catalog, mail):
+    c = client(catalog)
+    verify(c, send(c, mail))
+    key = c.post(
+        "/me/api-keys",
+        json={"name": "Read only", "scopes": ["activities:read"]},
+    ).json()["secret"]
+    headers = {"Authorization": "Bearer " + key}
+    assert c.get("/agent/v1/activities", headers=headers).status_code == 200
+    denied = c.get("/agent/v1/subscriptions", headers=headers)
+    assert denied.status_code == 403 and "subscriptions:read" in denied.text
+
+
 def test_https_cookie_session_expiry_and_all_devices(catalog, mail, monkeypatch):
     monkeypatch.setenv("PUBLIC_SITE_URL", "https://events.example.test")
 

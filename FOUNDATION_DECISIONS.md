@@ -19,6 +19,14 @@
 
 安全设计参考 [OWASP Authentication](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html) 与 [Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)。这些规范不等同于本项目已经通过安全审核。
 
+## Agent API 与 API Key（2026-09-10）
+
+Agent 是用户读取活动、管理关注与安排日程的一种能力，网站目标和主 slogan 仍为「下一次心动，现场见。」。首版提供同一套服务端权限模型下的 REST API 和远程 Streamable HTTP MCP，不按 Agent 品牌复制业务接口。
+
+FoundationServices 的 API Key 模块当前为 `planned / draft / spec-only`，没有支持栈或可采用 Recipe。因此本项目只采用其安全和验收基线，自行实现并标记为 `project-owned`：完整 Secret 只显示一次；数据库保存带服务端密钥的摘要和非敏感前缀；Key ID 与 Secret 分离；Scope、账号状态、Key 状态均由服务端检查；账号级和 Key 级同时限流；撤销立即生效；调用记录不保存 Authorization、请求正文或查询内容。
+
+API Key 只能由现有浏览器 Session 创建和撤销，不能访问账号邮箱、Session、后台或创建其他 Key。Agent 写入仅限用户自己的关注；活动和来源内容视为不可信数据，以结构化字段和官方证据返回，不作为工具指令。增量更新使用签名游标读取 `catalog_changes`，不依赖时间戳推断是否遗漏。
+
 ## 验证码邮件模板（2026-09-09）
 
 沿用 Email 0.2.0 的 HTML / 纯文本、上下文转义、公开 Origin 和测试隔离要求。该模块仍为 spec-only，本项目实现独立的纯渲染函数、可随 Python 包分发的 HTML 模板，以及 SMTP multipart/alternative 支持。模板使用衬线品牌名、珊瑚红和网站主 slogan，不依赖图片、脚本或外部字体。语言固定为当前登录流程的简体中文，不按收件人域名推断语言。只调整验证码邮件展示，保留现有验证码、会话、限流、SMTP 和业务通知行为。真实收信链路已由用户确认可用；新模板先通过 Mailpit 验收，不额外向真实邮箱发送测试邮件。

@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 from svix.webhooks import Webhook, WebhookVerificationError
 
+from .agent_api import register_agent_routes
 from .auth import COOKIE, account, clear_cookie, register_auth_routes, valid_timezone
 from .auth import digest as digest
 from .domain import KINDS, ActivityInput
@@ -266,9 +267,9 @@ def create_app(catalog: Catalog | None = None):
             contract = conn.execute(
                 'SELECT major,minor FROM "SchemaContract" WHERE id=1'
             ).fetchone()
-            ready = bool(contract and contract["major"] == 1 and contract["minor"] >= 6)
+            ready = bool(contract and contract["major"] == 1 and contract["minor"] >= 8)
             if not ready:
-                raise HTTPException(503, "Catalog schema 1.6 required")
+                raise HTTPException(503, "Catalog schema 1.8 required")
             return {
                 "ok": True,
                 "schema": f"{contract['major']}.{contract['minor']}",
@@ -795,4 +796,5 @@ def create_app(catalog: Catalog | None = None):
                 raise HTTPException(404, "名称记录不存在")
             return {"ok": True, "item": result}
 
+    register_agent_routes(app, catalog, hydrate, public_activity)
     return app
