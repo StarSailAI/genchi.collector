@@ -9,6 +9,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from .collection_digest import deliver_digest, prepare_due_digest
 from .importer import import_legacy
 from .inbound import InboundError, Resend, backfill, forward_one, reconcile
 from .naming import normalize_catalog
@@ -29,11 +30,16 @@ def main():
     sub.add_parser(
         "inbound-status", help="Show forwarding counts and failures without mail contents"
     )
+    sub.add_parser("collection-digest-status", help="Show daily collection digest delivery status")
     names = sub.add_parser("normalize-names", help="Preview/apply audited Chinese display names")
     names.add_argument("--apply", action="store_true")
     names.add_argument("--output", help="Write the complete reviewable report as JSON")
     worker = sub.add_parser("worker")
-    worker.add_argument("--mode", choices=["catalog", "notifications", "idle"], default="catalog")
+    worker.add_argument(
+        "--mode",
+        choices=["catalog", "notifications", "collection-digest", "idle"],
+        default="catalog",
+    )
     args = parser.parse_args()
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s"
@@ -79,6 +85,16 @@ def main():
                 "SELECT email_id,status,attempts,last_error FROM genchi_private.inbound_mail WHERE status IN ('FAILED','UNCERTAIN') ORDER BY created_at DESC LIMIT 50"
             ).fetchall()
             print(json.dumps({"counts": counts, "failures": failures}, default=str))
+    elif args.command == "collection-digest-status":
+        with catalog.connect() as conn:
+            state = conn.execute(
+                "SELECT last_version_id,updated_at FROM genchi_private.collection_digest_state WHERE id=TRUE"
+            ).fetchone()
+            recent = conn.execute(
+                """SELECT digest_date,status,counts,attempts,sent_at,last_error
+                FROM genchi_private.collection_digests ORDER BY digest_date DESC LIMIT 14"""
+            ).fetchall()
+            print(json.dumps({"cursor": state, "recent": recent}, default=str))
     else:
         stop = threading.Event()
         signal.signal(signal.SIGTERM, lambda *_: stop.set())
@@ -118,9 +134,12 @@ def main():
                         last_plan = time.monotonic()
                     busy = deliver_one(catalog)
                     busy = forward_one(catalog, inbound_client) or busy
+                elif args.mode == "collection-digest":
+                    prepare_due_digest(catalog)
+                    busy = deliver_digest(catalog, inbound_client)
                 else:
                     busy = False
-                stop.wait(0.1 if busy else 2)
+                stop.wait(0.1 if busy else 60 if args.mode == "collection-digest" else 2)
             except Exception:
                 logging.exception("product worker iteration failed")
                 stop.wait(5)

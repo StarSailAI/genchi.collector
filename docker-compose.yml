@@ -218,6 +218,30 @@ services:
       timeout: 5s
       retries: 6
 
+  collection-digest:
+    build:
+      context: .
+      dockerfile: services/normalizer/Dockerfile
+    command: ["genchi-product", "worker", "--mode", "${COLLECTION_DIGEST_WORKER_MODE:-idle}"]
+    restart: unless-stopped
+    depends_on:
+      product:
+        condition: service_healthy
+    environment:
+      <<: *database
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@genchi.local}
+      MAIL_FROM: ${MAIL_FROM:-Genchi <hello@genchi.local>}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      COLLECTION_DIGEST_TIMEZONE: ${COLLECTION_DIGEST_TIMEZONE:-Asia/Tokyo}
+      COLLECTION_DIGEST_NOT_BEFORE: ${COLLECTION_DIGEST_NOT_BEFORE:-18:00}
+      COLLECTION_DIGEST_FORCE_AT: ${COLLECTION_DIGEST_FORCE_AT:-23:00}
+    networks: [collector]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8070/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
   mailpit:
     image: axllent/mailpit:v1.27.4
     restart: unless-stopped
