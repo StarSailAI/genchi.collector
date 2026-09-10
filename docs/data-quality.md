@@ -58,7 +58,8 @@ for provenance but are hidden from public presentation.
 The conservative historical link repair only considers published activities whose canonical URL is
 still on `bandori.fans`. It requires an exact title match to a collected BanG Dream official event
 page and requires every extracted official date to be covered by an existing active occurrence.
-The preview and apply commands are:
+Known overseas locations in the official body or existing venue exclude the record from this repair
+and place it in the separate overseas-location audit. The preview and apply commands are:
 
 ```bash
 python -m genchi_product.quality repair-community-links

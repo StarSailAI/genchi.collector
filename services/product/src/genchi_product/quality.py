@@ -48,6 +48,12 @@ def audit(catalog: Catalog, limit: int = 50) -> dict:
                OR (e.source_id ILIKE '%%pia%%' AND e.url IS NOT NULL AND e.url !~* 'pia\\.jp')
                OR (e.source_id ILIKE '%%lawson%%' AND e.url IS NOT NULL AND e.url !~* '(l-tike\\.com|lawson)')
             ORDER BY e.observed_at DESC LIMIT %s""",
+        "published_overseas_location": """
+            SELECT DISTINCT a.id,a.title,o.venue,o.city FROM catalog_activities a
+            JOIN catalog_occurrences o ON o.activity_id=a.id AND o.status<>'SUPERSEDED'
+            WHERE a.publication='PUBLISHED' AND concat_ws(' ',a.title,o.venue,o.city) ~*
+              '(香港|Hong Kong|Seoul|서울|韓国|韩国|Korea|台北|Taipei|上海|Shanghai|北京|Beijing)'
+            ORDER BY a.title LIMIT %s""",
     }
     result = {}
     with catalog.connect() as conn:
@@ -69,27 +75,42 @@ def official_link_candidates(conn) -> list[dict]:
             rv.payload->'activity'->>'title' AS title,
             COALESCE((rv.payload->'activity'->'time'->>'starts_on')::date,
               ((rv.payload->'activity'->'time'->>'starts_at')::timestamptz
-                AT TIME ZONE 'Asia/Tokyo')::date) AS event_day
+                AT TIME ZONE 'Asia/Tokyo')::date) AS starts_on,
+            COALESCE((rv.payload->'activity'->'time'->>'ends_on')::date,
+              ((rv.payload->'activity'->'time'->>'ends_at')::timestamptz
+                AT TIME ZONE 'Asia/Tokyo')::date) AS ends_on
           FROM catalog_reviews rv JOIN allfeeds.resources r ON r.id=rv.resource_id
           WHERE r.source_id='bang-dream-events' AND rv.status='PENDING'
         ), matches AS (
           SELECT a.id,a.title,a.official_url,c.source_url,c.external_id,
-            c.content_hash,c.content,c.event_day,
+            c.content_hash,c.content,c.starts_on,c.ends_on,
             EXISTS(SELECT 1 FROM catalog_occurrences o
               WHERE o.activity_id=a.id AND o.status<>'SUPERSEDED'
-              AND c.event_day BETWEEN
+              AND c.starts_on BETWEEN
                 COALESCE(o.starts_on,(o.starts_at AT TIME ZONE 'Asia/Tokyo')::date)
                 AND COALESCE(o.ends_on,(o.ends_at AT TIME ZONE 'Asia/Tokyo')::date,
-                  o.starts_on,(o.starts_at AT TIME ZONE 'Asia/Tokyo')::date)) AS day_matches
+                  o.starts_on,(o.starts_at AT TIME ZONE 'Asia/Tokyo')::date))
+            AND (c.ends_on IS NULL OR EXISTS(SELECT 1 FROM catalog_occurrences o
+              WHERE o.activity_id=a.id AND o.status<>'SUPERSEDED'
+              AND c.ends_on BETWEEN
+                COALESCE(o.starts_on,(o.starts_at AT TIME ZONE 'Asia/Tokyo')::date)
+                AND COALESCE(o.ends_on,(o.ends_at AT TIME ZONE 'Asia/Tokyo')::date,
+                  o.starts_on,(o.starts_at AT TIME ZONE 'Asia/Tokyo')::date))) AS day_matches
           FROM candidates c JOIN catalog_activities a
             ON a.title=c.title AND a.publication='PUBLISHED'
           WHERE a.official_url ~* '^https?://([^/]+\\.)?bandori\\.fans/'
-            AND c.event_day IS NOT NULL
+            AND c.starts_on IS NOT NULL
+            AND c.content !~* '(香港|Hong Kong|Seoul|서울|韓国|韩国|Korea|台北|Taipei|上海|Shanghai|北京|Beijing)'
+            AND NOT EXISTS(SELECT 1 FROM catalog_occurrences foreign_occurrence
+              WHERE foreign_occurrence.activity_id=a.id AND foreign_occurrence.status<>'SUPERSEDED'
+              AND concat_ws(' ',foreign_occurrence.venue,foreign_occurrence.city) ~*
+                '(香港|Hong Kong|Seoul|서울|韓国|韩国|Korea|台北|Taipei|上海|Shanghai|北京|Beijing)')
         )
         SELECT id,title,official_url AS previous_url,max(source_url) AS source_url,
           max(external_id) AS external_id,max(content_hash) AS content_hash,
           left(max(content),4000) AS excerpt,
-          array_agg(DISTINCT event_day::text ORDER BY event_day::text) AS dates
+          array_agg(DISTINCT (starts_on::text || COALESCE('..' || ends_on::text,''))
+            ORDER BY (starts_on::text || COALESCE('..' || ends_on::text,''))) AS dates
         FROM matches GROUP BY id,title,official_url
         HAVING bool_and(day_matches)
           AND count(DISTINCT source_url)=1
