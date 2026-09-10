@@ -415,8 +415,8 @@ def _text_candidates(content: str, resource: dict, subjects: list[dict]) -> list
     if not isinstance(items, list) or len(items) > 30:
         raise ValueError("活动集合结构不正确")
     result = []
-    # Aggregators retain literal anchor URLs in the body. A model-supplied URL is
-    # not evidence and must never become the sole reason to merge two activities.
+    # A model-supplied URL is not evidence. Fetchers retain their page URL and
+    # extracted outbound links so every accepted activity/action URL is source-backed.
     provided_urls = {canonical_url(resource.get("url"))}
     provided_urls.update(canonical_url(m.rstrip("]）。、,;")) for m in re.findall(r"https?://[^\s<>\"']+", text))
     provided_urls.update(canonical_url(link.get("url")) for link in (resource.get("attributes") or {}).get("outbound_links", []) if isinstance(link, dict))
@@ -427,7 +427,7 @@ def _text_candidates(content: str, resource: dict, subjects: list[dict]) -> list
         excerpt = selected_evidence(text, raw)
         if not excerpt:
             raise ValueError(f"活动[{index}]缺少可定位的原文证据")
-        if aggregate and raw.get("official_url") and canonical_url(raw["official_url"]) not in provided_urls:
+        if raw.get("official_url") and canonical_url(raw["official_url"]) not in provided_urls:
             raise ValueError(f"活动[{index}]官方链接不在原文中")
         ev = EvidenceInput(
             source_id=resource["source_id"],
@@ -490,7 +490,7 @@ def _text_candidates(content: str, resource: dict, subjects: list[dict]) -> list
             node.pop("evidence_id", None)
             if not proof:
                 raise ValueError(f"活动[{index}]节点[{node_index}]缺少可定位的原文证据")
-            if aggregate and node.get("url") and canonical_url(node["url"]) not in provided_urls:
+            if node.get("url") and canonical_url(node["url"]) not in provided_urls:
                 raise ValueError(f"活动[{index}]节点[{node_index}]链接不在原文中")
             round_key = node.pop("round", None)
             milestones.append(
