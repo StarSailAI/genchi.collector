@@ -72,6 +72,25 @@ def online_only(title: str) -> bool:
     ) and not bool(re.search(r"公開収録|現地|ライブビューイング|上映", title))
 
 
+FOREIGN_LOCATION = re.compile(
+    r"香港|Hong Kong|Seoul|서울|韓国|韩国|Korea|台北|Taipei|Taoyuan|上海|Shanghai|北京|Beijing",
+    re.I,
+)
+
+
+def outside_japan(title: str, venue: str | None = None, city: str | None = None) -> bool:
+    if FOREIGN_LOCATION.search(" ".join(value for value in (venue, city) if value)):
+        return True
+    return bool(
+        re.search(
+            r"(?:香港|台北|上海|北京)(?:追加)?公演|(?:LIVE|SHOWCASE|FES(?:TIVAL)?)\s+(?:in|@)\s*"
+            + FOREIGN_LOCATION.pattern,
+            title,
+            re.I,
+        )
+    )
+
+
 class Moment(BaseModel):
     model_config = ConfigDict(extra="forbid")
     precision: Literal["TIME", "DATE", "TBD"] = "TBD"
@@ -208,6 +227,8 @@ class ActivityInput(BaseModel):
     def validate_activity(self):
         self.kind = classify(self.title, self.kind)
         self.url = canonical_url(self.url)
+        if outside_japan(self.title, self.venue, self.city):
+            raise ValueError("Only physical activities held in Japan belong in the catalog")
         if online_only(self.title):
             self.attendance = "ONLINE"
         self.subject_slugs = list(dict.fromkeys(

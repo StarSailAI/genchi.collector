@@ -30,6 +30,10 @@ subject affiliation. It may only use known subject slugs and links supplied by t
 candidates remain in review. Deterministic structured ticket data can remain verified after its
 source-specific validators pass.
 
+An explicit overseas performance marker in the title, city or venue fails domain validation. Its
+raw page remains searchable, but the activity cannot enter the Japan catalog even through a
+structured source or later review approval.
+
 ## Audit and repair
 
 Run the read-only report inside the product image:

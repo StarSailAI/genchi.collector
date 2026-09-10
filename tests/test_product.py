@@ -15,7 +15,14 @@ import pytest
 from fastapi.testclient import TestClient
 from genchi_product.api import create_app, digest, hydrate
 from genchi_product.collection_digest import deliver_digest, prepare_due_digest
-from genchi_product.domain import ActivityInput, EvidenceInput, MilestoneInput, Moment, legacy_time
+from genchi_product.domain import (
+    ActivityInput,
+    EvidenceInput,
+    MilestoneInput,
+    Moment,
+    legacy_time,
+    outside_japan,
+)
 from genchi_product.notifications import (
     deliver_one,
     eligible_follows,
@@ -66,6 +73,19 @@ def proof(verified=True, version="one"):
         version_hash=version,
         verified=verified,
     )
+
+
+@pytest.mark.parametrize(
+    "title,venue,expected",
+    [
+        ("RAISE A SUILEN LIVE 2026 香港公演", None, True),
+        ("MIKI HOSHII SOLO SHOWCASE in KOREA", None, True),
+        ("KIMCHIKURA Fes '26", "Seoul, Grand Peace Palace", True),
+        ("海外公演のお知らせを含む東京ライブ", "東京ガーデンシアター", False),
+    ],
+)
+def test_explicit_overseas_activities_are_outside_catalog(title, venue, expected):
+    assert outside_japan(title, venue) is expected
 
 
 def activity(key="upstream:1", start=None, verified=True):
