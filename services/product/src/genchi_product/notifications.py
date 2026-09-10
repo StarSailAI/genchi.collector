@@ -11,9 +11,11 @@ from zoneinfo import ZoneInfo
 
 from psycopg.types.json import Jsonb
 
-from .naming import change_summary, title
+from .localization import display_title, locale_of, translate
+from .naming import change_summary
 from .presentation import relevant
 from .store import Catalog, uid
+from .subscriptions import DIRECT_FOLLOW_MATCH
 
 
 def signing_key() -> bytes:
@@ -39,20 +41,21 @@ def eligible_follows(
     conn, activity_id: str, account_id: str | None = None, *, for_delivery=True
 ) -> list[dict]:
     rows = conn.execute(
-        """WITH RECURSIVE topics AS (
+        f"""WITH RECURSIVE topics AS (
         SELECT s.slug,s.parent_slug FROM catalog_subjects s JOIN catalog_activity_subjects a ON a.subject_slug=s.slug WHERE a.activity_id=%s
         UNION SELECT s.slug,s.parent_slug FROM catalog_subjects s JOIN topics t ON t.parent_slug=s.slug
     ) SELECT f.*,u.email,u.timezone FROM genchi_private.follows f
     JOIN genchi_private.accounts u ON u.id=f.account_id
     JOIN catalog_activities a ON a.id=%s
-    WHERE u.verified_at IS NOT NULL AND (NOT %s OR NOT u.unsubscribed) AND (%s::text IS NULL OR u.id=%s)
+    WHERE u.verified_at IS NOT NULL AND u.disabled_at IS NULL AND (NOT %s OR NOT u.unsubscribed) AND (%s::text IS NULL OR u.id=%s)
       AND a.publication='PUBLISHED' AND a.attendance IN ('OFFLINE','HYBRID')
-      AND ((f.target_type='ACTIVITY' AND f.target_id=a.id) OR (f.target_type='SUBJECT'
+      AND ({DIRECT_FOLLOW_MATCH} OR (f.target_type='SUBJECT'
         AND ((f.include_children AND f.target_id IN (SELECT slug FROM topics)) OR f.target_id IN
           (SELECT subject_slug FROM catalog_activity_subjects WHERE activity_id=a.id))))
       AND (jsonb_array_length(f.kinds)=0 OR f.kinds ? a.kind)
       AND (jsonb_array_length(f.cities)=0 OR EXISTS(SELECT 1 FROM catalog_occurrences o
-        WHERE o.activity_id=a.id AND f.cities ? o.city)) ORDER BY f.target_type,f.created_at DESC""",
+        WHERE o.activity_id=a.id AND f.cities ? o.city)) ORDER BY
+        CASE f.target_type WHEN 'ACTIVITY' THEN 0 WHEN 'SUBJECT' THEN 1 WHEN 'KEYWORD' THEN 2 ELSE 3 END,f.created_at DESC""",
         (activity_id, activity_id, for_delivery, account_id, account_id),
     ).fetchall()
     # Explicit activity preferences take priority over broader subject subscriptions.
@@ -236,19 +239,16 @@ def format_time(value, timezone="Asia/Tokyo"):
 def render_mail(conn, job, user, now):
     site = os.environ.get("PUBLIC_SITE_URL", "http://localhost:13000").rstrip("/")
     if job["kind"] == "LOGIN":
-        token_hash = job["payload"].get("token_hash")
-        if (
-            token_hash
-            and not conn.execute(
-                "SELECT token_hash FROM genchi_private.login_tokens WHERE token_hash=%s AND expires_at>%s",
-                (token_hash, now),
-            ).fetchone()
-        ):
-            return None
-        return "登录 Genchi · 验证你的邮箱", job["payload"]["text"]
-    if user["unsubscribed"]:
+        # Link authentication is retired; OTP mail is sent only by the auth service.
         return None
-    footer = f"\n\n管理关注：{site}/zh-Hans/following\n退订所有提醒：{site}/zh-Hans/unsubscribe?token={unsubscribe_token(user['id'])}"
+    if user["unsubscribed"] or user.get("disabled_at"):
+        return None
+    locale = locale_of(user.get("locale"))
+
+    def t(key):
+        return translate(key, locale)
+
+    footer = f"\n\n{t('管理关注')}：{site}/{locale}/dashboard\n{t('退订所有提醒')}：{site}/{locale}/unsubscribe?token={unsubscribe_token(user['id'])}"
     if job["kind"] == "DIGEST":
         lines = []
         for activity_id in job["payload"].get("activity_ids", []):
@@ -256,8 +256,10 @@ def render_mail(conn, job, user, now):
                 activity = conn.execute(
                     "SELECT title,title_zh FROM catalog_activities WHERE id=%s", (activity_id,)
                 ).fetchone()
-                lines.append(f"{title(activity)}\n{site}/zh-Hans/activities/{activity_id}")
-        return ("你关注的新活动 · Genchi", "\n\n".join(lines) + footer) if lines else None
+                lines.append(
+                    f"{display_title(activity, locale)}\n{site}/{locale}/activities/{activity_id}"
+                )
+        return (t("你关注的新活动 · Genchi"), "\n\n".join(lines) + footer) if lines else None
     follows = eligible_follows(conn, job["activity_id"], user["id"])
     if not follows:
         return None
@@ -266,22 +268,27 @@ def render_mail(conn, job, user, now):
     activity = conn.execute(
         "SELECT * FROM catalog_activities WHERE id=%s FOR UPDATE", (job["activity_id"],)
     ).fetchone()
-    link = f"{site}/zh-Hans/activities/{activity['id']}"
+    link = f"{site}/{locale}/activities/{activity['id']}"
     if job["kind"] == "UPDATE":
-        status_label = {"CANCELED": "已取消", "POSTPONED": "已延期"}.get(activity["status"], "")
-        details = f"最新状态：{status_label}\n" if status_label else ""
+        status_label = {"CANCELED": t("已取消"), "POSTPONED": t("已延期")}.get(
+            activity["status"], ""
+        )
+        details = f"{t('最新状态')}：{status_label}\n" if status_label else ""
         details += "".join(
             f"• {change_summary(item['summary'])}\n"
             for item in job["payload"].get("changes", [])[:15]
         )
         after = job["payload"].get("after")
         if isinstance(after, dict):
-            for key, label in (("starts_at", "更新后的开始时间"), ("ends_at", "更新后的截止时间")):
+            for key, label in (
+                ("starts_at", t("更新后的开始时间")),
+                ("ends_at", t("更新后的截止时间")),
+            ):
                 if after.get(key):
                     details += f"{label}：{format_time(datetime.fromisoformat(after[key]))} JST\n"
         return (
-            f"活动信息更新{('（' + status_label + '）') if status_label else ''} · {title(activity)}",
-            f"{change_summary(job['payload']['summary'])}\n{details}请查看最新时间、状态和来源：\n{link}"
+            f"{t('活动信息更新')}{('（' + status_label + '）') if status_label else ''} · {display_title(activity, locale)}",
+            f"{change_summary(job['payload']['summary'])}\n{details}{t('请查看最新时间、状态和来源：')}\n{link}"
             + footer,
         )
     node = conn.execute(
@@ -318,23 +325,23 @@ def render_mail(conn, job, user, now):
     if not relevant(node, progress["status"] if progress else None):
         return None
     labels = {
-        "OPENING": "开始申请",
-        "DEADLINE": "截止提醒",
-        "RESULT": "结果公布",
-        "UPCOMING": "活动提醒",
+        "OPENING": t("开始申请"),
+        "DEADLINE": t("截止提醒"),
+        "RESULT": t("结果公布"),
+        "UPCOMING": t("活动提醒"),
     }
-    heading = f"{labels.get(job['kind'], '活动提醒')} · {title(node)}"
-    body = f"{title(activity)}\n{heading}\n开始：{format_time(node['starts_at'])} JST\n"
+    heading = f"{labels.get(job['kind'], t('活动提醒'))} · {display_title(node, locale)}"
+    body = f"{display_title(activity, locale)}\n{heading}\n{t('开始')}：{format_time(node['starts_at'])} JST\n"
     if node["ends_at"]:
-        body += f"截止：{format_time(node['ends_at'])} JST\n"
-    body += f"你的时区：{format_time(deadline, user['timezone'])} ({user['timezone']})\n"
+        body += f"{t('截止')}：{format_time(node['ends_at'])} JST\n"
+    body += f"{t('你的时区')}：{format_time(deadline, user['timezone'])} ({user['timezone']})\n"
     if node["eligibility"]:
-        body += f"适用条件：{node['eligibility']}\n"
-    body += f"\n活动详情与官方依据：{link}\n"
+        body += f"{t('适用条件')}：{node['eligibility']}\n"
+    body += f"\n{t('活动详情与官方依据')}：{link}\n"
     if node["url"]:
-        body += f"官方入口：{node['url']}\n"
+        body += f"{t('官方入口')}：{node['url']}\n"
     if node["kind"] == "RESULT":
-        body += "本邮件仅提示结果发表，请自行前往官方平台确认是否中选。\n"
+        body += t("本邮件仅提示结果发表，请自行前往官方平台确认是否中选。") + "\n"
     return heading, body + footer
 
 
@@ -410,7 +417,7 @@ def deliver_one(catalog: Catalog, *, now: datetime | None = None, transport=None
     return True
 
 
-def smtp_send(recipient, subject, body, message_id, account_id):
+def smtp_send(recipient, subject, body, message_id, account_id, *, timeout=20, html=None):
     host = os.environ.get("SMTP_HOST", "mailpit")
     security = os.environ.get("SMTP_SECURITY", "none")
     if security not in {"none", "ssl", "starttls"}:
@@ -424,14 +431,17 @@ def smtp_send(recipient, subject, body, message_id, account_id):
     message["Message-ID"] = f"<{message_id}@genchi.local>"
     if host.lower() == "smtp.resend.com":
         message["Resend-Idempotency-Key"] = message_id
-    site = os.getenv("PUBLIC_SITE_URL", "http://localhost:13000")
-    message["List-Unsubscribe"] = (
-        f"<{site}/api/product/auth/unsubscribe?token={unsubscribe_token(account_id)}>"
-    )
-    message["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
+    if account_id is not None:
+        site = os.getenv("PUBLIC_SITE_URL", "http://localhost:13000")
+        message["List-Unsubscribe"] = (
+            f"<{site}/api/product/auth/unsubscribe?token={unsubscribe_token(account_id)}>"
+        )
+        message["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     message.set_content(body)
+    if html is not None:
+        message.add_alternative(html, subtype="html")
     client = smtplib.SMTP_SSL if security == "ssl" else smtplib.SMTP
-    options = {"timeout": 20}
+    options = {"timeout": timeout}
     if security == "ssl":
         options["context"] = ssl.create_default_context()
     with client(host, int(os.getenv("SMTP_PORT", "1025")), **options) as smtp:
@@ -439,4 +449,5 @@ def smtp_send(recipient, subject, body, message_id, account_id):
             smtp.starttls(context=ssl.create_default_context())
         if os.getenv("SMTP_USER"):
             smtp.login(os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"])
-        smtp.send_message(message)
+        if smtp.send_message(message):
+            raise RuntimeError("SMTP did not accept the recipient")

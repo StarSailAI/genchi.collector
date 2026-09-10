@@ -21,6 +21,7 @@ INTERNAL_KEYS = (
     "ENROLLMENT_TOKEN",
     "BROWSER_API_TOKEN",
     "PRODUCT_SECRET",
+    "PRODUCT_PROXY_SECRET",
     "PRODUCT_ADMIN_TOKEN",
 )
 
@@ -234,6 +235,19 @@ def compose(root: Path, target: str, args: list[str], **kwargs):
     )
 
 
+def check_product_image(root: Path, values: dict[str, str]) -> None:
+    """Reject an old auth image before replacing any running services."""
+    docker = ["docker"] if os.geteuid() == 0 else ["sudo", "-n", "docker"]
+    image = "genchi/product:" + values.get("GENCHI_IMAGE_TAG", "current")
+    script = (root / "genchi.collector/deploy/check-product-image.py").read_text()
+    subprocess.run(
+        docker + ["run", "--rm", "-i", "--network", "none", image, "python", "-"],
+        input=script,
+        text=True,
+        check=True,
+    )
+
+
 def backup(root: Path, values: dict[str, str]) -> None:
     directory = root / "backups"
     directory.mkdir(mode=0o700, exist_ok=True)
@@ -328,6 +342,7 @@ def main() -> None:
         if not values.get("ADMIN_EMAIL"):
             print("Pending: ADMIN_EMAIL")
     elif args.command == "apply":
+        check_product_image(root, values)
         compose(
             root,
             "backend",

@@ -56,7 +56,7 @@ python3 genchi.collector/deploy/manage.py status
 
 域名 A 记录指向服务器后，用 `deploy/nginx.conf.example` 替换域名与网站回环端口占位符，安装到 `/etc/nginx/sites-available/genchi` 并链接到 `sites-enabled/`。使用 `certbot --nginx -d 你的域名 --redirect` 申请证书并启用 HTTPS 重定向；启用 `certbot.timer` 自动续期。改为 `PUBLIC_SITE_URL=https://你的域名` 后执行 `apply`，该命令会检查并重载已有 Nginx 配置。更换域名时同步调整 Nginx 与证书；前端来源校验和 ICS URL 无需重建镜像。
 
-Nginx 示例日志省略查询串，避免记录登录链接令牌。证书文件保存在 `/etc/letsencrypt/`，不要复制到仓库或 Docker 镜像。
+Nginx 示例日志省略查询串，避免记录退订等链接令牌。证书文件保存在 `/etc/letsencrypt/`，不要复制到仓库或 Docker 镜像。
 
 ## Resend 收信转发
 
@@ -94,3 +94,11 @@ python3 genchi.collector/deploy/manage.py backup
 备份保存到上一级 `backups/`，权限为 0600；归档目录验证通过后才替换临时文件，默认保留 7 天。本机备份不能覆盖整台服务器丢失的情况，应另配置异地备份。迁移原始备份应单独保留，不放入自动过期的 `genchi-*.dump` 命名范围。
 
 Gitee 无法直连时，可通过 SSH 传递 Git bundle 并核对提交哈希，或上传构建好的镜像。不要为拉代码关闭 TLS 校验，也不要把个人 Git 凭据写入镜像。
+
+## 邮箱验证码系统升级（Schema 1.5）
+
+首次初始化会生成独立 `PRODUCT_PROXY_SECRET`；既有部署在共用 `.env` 中补充至少 32 字符的随机值，再执行 `check`，前后端消费同一份配置。新版本 Product API 自行发送验证码，需配置 SMTP；notifier 未启动不影响验证码认证。Resend key 未配置时验证码返回暂不可用，不回落到生产 Mailpit。
+
+升级前备份私有账户和目录数据，迁移到 `0008_email_code_auth`，构建并更新 product、notifier、web。旧邮件登录链接停用，原账户和关注保留。个人中心为 `/zh-Hans/dashboard`。验证码默认限额和恢复邮件开关见 [用户系统](accounts.md)。
+
+可信来源默认合并限流。确认 Nginx 使用当前模板覆盖 `X-Real-IP`，并且网站端口仅允许本机反向代理后，在共用环境设置 `AUTH_TRUST_PROXY=true`，启用按真实来源的独立额度。外部可直接访问源站端口时不要开启。

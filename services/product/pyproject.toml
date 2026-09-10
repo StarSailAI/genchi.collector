@@ -7,7 +7,7 @@ name = "genchi-product"
 version = "0.2.0"
 description = "Canonical activity catalog, subscriptions and notifications"
 requires-python = ">=3.11"
-dependencies = ["fastapi>=0.115", "uvicorn>=0.30", "psycopg[binary]>=3.2", "pydantic>=2.8", "requests>=2.32", "svix>=1.80,<2", "genchi-normalizer>=0.1.0"]
+dependencies = ["fastapi>=0.115", "uvicorn>=0.30", "psycopg[binary]>=3.2", "pydantic>=2.8", "requests>=2.32", "svix>=1.80,<2", "genchi-normalizer>=0.1.0", "opencc==1.4.2"]
 
 [project.scripts]
 genchi-product = "genchi_product.cli:main"
@@ -16,4 +16,4 @@ genchi-product = "genchi_product.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-genchi_product = ["data/*.json"]
+genchi_product = ["data/*.json", "templates/*.html"]

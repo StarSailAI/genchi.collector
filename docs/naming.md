@@ -50,3 +50,7 @@ genchi-product normalize-names --apply --output names-applied.json
 ## 边界
 
 本轮清洗针对名称与命名结构。重复活动的事实归并、线上内容误分类、日期与地点的补全仍属于后续来源和事实治理；名称相同不是归并证据。
+
+## 四语言展示投影
+
+Schema 1.6 的 Product API 使用 `X-Genchi-Locale` 或 `locale` 查询参数产生展示投影。原始 title/name/label、规范 `_zh` 字段、原文证据和稳定 ID 保持不变；新增 `_localized` 字段供前端读取。繁体转换由后端 OpenCC s2twp 执行；日文与英文在没有已审核译名时展示官方原名，不自动生成英文专名或改写作品身份。中文说明的繁体投影使用 `_localized`，未翻译说明明确保留为来源内容。

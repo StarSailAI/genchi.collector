@@ -290,8 +290,10 @@ python -m build dashboard
 - Put architecture and operations detail under `docs/`.
 - Put instructions intended primarily for coding agents in this file.
 - Never add real credentials, internal hostnames or production screenshots.
-- Enabled Sources must be official public endpoints, carry project/country/timezone
-  tags and have a tested stable external-ID strategy.
+- Enabled Sources must be public official endpoints or explicitly approved
+  editorial/community aggregators, carry scope/country/timezone tags and have a
+  tested stable external-ID strategy. Aggregators retain their source role and
+  outbound evidence; community/editable content is never marked official.
 
 ## Definition of Done
 
@@ -324,3 +326,21 @@ A change is complete only when:
 - Preserve original titles, source identifiers and round keys. Normalize only display fields; never merge by translated title.
 - Naming edits use `catalog_names` / `catalog_name_history`, not event revision or notification changes. Preserve an editor override until its original source name changes.
 - Read `docs/naming.md` before changing glossary or title handling. Coordinate schema 1.3 with the website.
+
+## Account authentication
+
+- Schema 1.6 uses numeric email challenges and explicit account/email locales; no login-link outbox or passwords.
+- Account, challenge, session and rate-limit state stays in genchi_private. Failed verification/rate counters must commit before returning errors; challenge consumption must be atomic.
+- PRODUCT_PROXY_SECRET is a distinct server-only BFF key shared with genchi.news. Ignore arbitrary forwarding headers; only signed attribution or the actual peer may choose source limits.
+- KEYWORD/TAG matches are shared by agendas and notification eligibility. Editing follows must not clear the account-wide unsubscribe flag.
+- User-system configuration and acceptance: docs/accounts.md, FOUNDATION_DECISIONS.md, FOUNDATION_ACCEPTANCE.md.
+- Before deploying any product image, run `deploy/check-product-image.py` inside that image without network access. Database Schema 1.5 alone does not prove the running application supports numeric codes. Never replace a running product image with a build that omits the account changes; preserve concurrent source changes when transferring shared deployment files.
+
+## Locales
+
+- Four explicit locale codes: zh-Hans, zh-Hant, en, ja; unsupported read/template preferences fall back to zh-Hans. Auth/profile writes validate the enum.
+- Schema 1.6 (`0009_account_locale`) adds private account/challenge language preferences without changing existing users, follows, sessions or unsubscribe state.
+- `localization.py` scopes display language to each request, returns additive `_localized` names, converts reviewed Chinese to Traditional Chinese with OpenCC, and retains official original names for Japanese/English when reviewed translations are unavailable. Never rewrite stored canonical names, source evidence, identifiers or editorial overrides for display.
+- Shared messages are exported from genchi.news with `npm run i18n:export`; packaged JSON makes the apps independent at runtime. Email rendering must receive an explicit language and keep text/HTML content consistent.
+- Notification delivery uses the account's saved locale at send time, including dashboard/unsubscribe URLs; do not infer language from an email address. Existing eligibility and delivery uncertainty checks still apply.
+- Deploy the product and notifier code together after migration. Preserve each service's current image and concurrent source changes when preparing overlays.

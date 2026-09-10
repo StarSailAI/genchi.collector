@@ -44,7 +44,7 @@ def main():
 
         from .api import create_app
 
-        uvicorn.run(create_app(catalog), host="0.0.0.0", port=8080, access_log=False)
+        uvicorn.run(create_app(catalog), host="0.0.0.0", port=8080, access_log=False, proxy_headers=False)
     elif args.command == "import-legacy":
         print(json.dumps(import_legacy(catalog)))
     elif args.command == "index-raw":

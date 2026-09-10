@@ -4,6 +4,57 @@ version: 1
 # Additional projects are present in config/catalog.yaml and are enabled in
 # manually approved waves.
 sources:
+  # Aggregators are enabled one by one after remote acceptance. Their broader
+  # discovery scope does not automatically add projects to the curated catalog.
+  - id: collabo-cafe-news
+    enabled: false
+    fetcher: genchi.aggregator
+    sink: postgres
+    schedule: {type: cron, cron: "0 9 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls:
+        - https://collabo-cafe.com/events/category/cafe/
+        - https://collabo-cafe.com/events/category/pop-up-store/
+        - https://collabo-cafe.com/events/category/gengaten-tenjikai/
+        - https://collabo-cafe.com/events/category/event/
+      detail_pattern: '^https://collabo-cafe\.com/events/collabo/[^/?]+/$'
+      list_selector: article.post-list a[href]
+      next_selector: a.next.page-numbers
+      title_selector: h1.single-title
+      content_selector: article > section.entry-content
+      remove_selector: 'script,style,nav,aside,form,iframe,footer,.sharedaddy,.related-posts,.article__by-category,.cc__ad,.adsbygoogle,.card-container,.shopify-products,a[href*="calendar.google.com"],.entry__author,.entry__detail,.entry-author,.gcal-auto,.ad__pc-content'
+      published_selector: time.published
+      max_detail_pages: 12
+      refresh_details_per_run: 4
+    timeout_seconds: 3600
+    retry: {max_attempts: 3, backoff: exponential, base_seconds: 300, max_seconds: 7200}
+    routing:
+      queue: browser
+      capabilities: [browser_api]
+      resources: {browser_api: 1, domain:collabo-cafe.com: 1}
+    tags: [scope:anime-offline, country:JP, timezone:Asia/Tokyo, source:editorial-aggregator]
+
+  - id: anime-hack-events
+    enabled: false
+    fetcher: genchi.aggregator
+    sink: postgres
+    schedule: {type: cron, cron: "30 9 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://anime.eiga.com/event/]
+      detail_pattern: '^https://anime\.eiga\.com/event/[0-9]+/$'
+      title_selector: h1.headTtlL
+      content_selector: .eventDetailInfo > .eventDetailBox
+      updated_selector: .headTtlR
+      max_detail_pages: 12
+      refresh_details_per_run: 4
+    timeout_seconds: 3600
+    retry: {max_attempts: 3, backoff: exponential, base_seconds: 300, max_seconds: 7200}
+    routing:
+      queue: browser
+      capabilities: [browser_api]
+      resources: {browser_api: 1, domain:anime.eiga.com: 1}
+    tags: [scope:anime-offline, country:JP, timezone:Asia/Tokyo, source:editorial-aggregator]
+
   - id: bang-dream-news
     enabled: true
     fetcher: genchi.official_site

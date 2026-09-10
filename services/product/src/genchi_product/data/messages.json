@@ -1,0 +1,1606 @@
+{
+  "发现活动": ["發現活動", "Discover", "イベントを探す"],
+  "按日期找活动": ["按日期找活動", "Find by date", "日付で探す"],
+  "我的日程": ["我的日程", "My schedule", "マイスケジュール"],
+  "语言": ["語言", "Language", "言語"],
+  "个人中心": ["個人中心", "Dashboard", "マイページ"],
+  "登录 / 注册": ["登入 / 註冊", "Log in / Sign up", "ログイン / 登録"],
+  "下一次心动，": ["下一次心動，", "Your next spark,", "次のときめきに、"],
+  "现场见。": ["現場見。", "see you there.", "現地で会おう。"],
+  "下一次心动，现场见。": [
+    "下一次心動，現場見。",
+    "Your next spark, see you there.",
+    "次のときめきに、現地で会おう。"
+  ],
+  "跳转到主要内容": ["跳至主要內容", "Skip to content", "本文へスキップ"],
+  "主要导航": ["主要導覽", "Main navigation", "メインナビゲーション"],
+  "首页": ["首頁", "Home", "ホーム"],
+  "{0} · 首页": ["{0} · 首頁", "{0} · Home", "{0} · ホーム"],
+  "为喜欢安排一趟旅程 ↗": [
+    "為喜歡安排一趟旅程 ↗",
+    "Plan a trip for what you love ↗",
+    "好きに会いに行く旅へ ↗"
+  ],
+  "日程以官方最新公告为准 · 日本时间 JST": [
+    "日程以官方最新公告為準 · 日本時間 JST",
+    "Check the latest official announcements · All event times in JST",
+    "最新情報は公式発表をご確認ください · 日時は日本時間（JST）"
+  ],
+  "官方原文": ["官方原文", "Official sources", "公式情報"],
+  "个人中心 · genchi.news": [
+    "個人中心 · genchi.news",
+    "Dashboard · genchi.news",
+    "マイページ · genchi.news"
+  ],
+  "信息暂时加载失败": [
+    "資訊暫時載入失敗",
+    "We couldn’t load this page",
+    "情報を読み込めませんでした"
+  ],
+  "服务可能正在更新，你可以稍后重试。": [
+    "服務可能正在更新，你可以稍後重試。",
+    "The service may be updating. Please try again shortly.",
+    "サービス更新中の可能性があります。しばらくしてから再試行してください。"
+  ],
+  "重新加载": ["重新載入", "Reload", "再読み込み"],
+  "票务平台": ["票務平台", "Ticket platform", "チケット販売サイト"],
+  "日本主要票务平台,大量抽選在此进行。": [
+    "日本主要票務平台，大量抽選在此進行。",
+    "A major Japanese ticket platform for advance lotteries and general sales.",
+    "先行抽選や一般販売を扱う日本の主要チケットサイト。"
+  ],
+  "Lawson 便利店票务系统,大规模一般販売常用。": [
+    "Lawson 便利商店票務系統，常用於一般售票。",
+    "Lawson’s ticket service for concerts and other events.",
+    "コンサートなどのチケットを扱うローソンのサービス。"
+  ],
+  "チケットぴあ": ["チケットぴあ", "Ticket Pia", "チケットぴあ"],
+  "Pia 票务,历史悠久。": [
+    "Pia 票務，歷史悠久。",
+    "An established Japanese ticket platform.",
+    "長年親しまれている日本のチケット販売サイト。"
+  ],
+  "友联": ["相關連結", "Useful links", "関連リンク"],
+  "资讯": ["資訊", "News", "ニュース"],
+  "条 · 官方公告 / 售票动态 / 团体消息": [
+    "則 · 官方公告 / 售票動態 / 團體消息",
+    " updates · Official announcements, ticket news and artist updates",
+    "件 · 公式発表・チケット情報・アーティストニュース"
+  ],
+  "资讯数据尚未接入。当前雏形以演出与票务视图为主。": [
+    "目前尚無資訊，先探索演出與售票安排吧。",
+    "No news yet. Explore events and ticket schedules in the meantime.",
+    "ニュースはまだありません。イベントやチケット情報をご覧ください。"
+  ],
+  "检索": ["搜尋", "Search", "検索"],
+  "官方原文检索": ["官方原文搜尋", "Search official sources", "公式情報を検索"],
+  "官网、官方 X 与票务页面原文 · 未通过活动抽取的信息仍可检索": [
+    "官網、官方 X 與票務頁面原文 · 尚未整理為活動的資訊仍可搜尋",
+    "Search official websites, X posts and ticket pages, including sources not yet listed as events.",
+    "公式サイト・公式 X・チケットページを検索。イベント未整理の情報も見つかります。"
+  ],
+  "检索官方原文": ["搜尋官方原文", "Search official sources", "公式情報を検索"],
+  "输入日文、中文、企划或演出名称": [
+    "輸入日文、中文、企劃或演出名稱",
+    "Search names, projects or performances",
+    "作品名・企画名・公演名を入力"
+  ],
+  "企划": ["企劃", "Project", "作品・企画"],
+  "全部企划": ["全部企劃", "All projects", "すべての作品・企画"],
+  "来源类型": ["來源類型", "Source type", "情報源の種類"],
+  "全部来源": ["全部來源", "All sources", "すべての情報源"],
+  "官网": ["官網", "Official website", "公式サイト"],
+  "官方 X": ["官方 X", "Official X", "公式 X"],
+  "演出": ["演出", "Performance", "公演"],
+  "发行": ["發行", "Release", "リリース"],
+  "国家": ["國家", "Country", "国"],
+  "日本": ["日本", "Japan", "日本"],
+  "全球": ["全球", "Worldwide", "すべての国"],
+  "原文开始日期": ["原文開始日期", "Published from", "公開日（開始）"],
+  "原文结束日期": ["原文結束日期", "Published until", "公開日（終了）"],
+  "共": ["共", "Total ", "全"],
+  "条": ["則", " results", "件"],
+  "没有找到匹配的官方情报。": [
+    "沒有找到符合條件的官方資訊。",
+    "No matching official sources found.",
+    "条件に合う公式情報が見つかりませんでした。"
+  ],
+  "时间未标注": ["時間未標註", "Date not provided", "日時の記載なし"],
+  "未分类": ["未分類", "Uncategorised", "未分類"],
+  "无标题": ["無標題", "Untitled", "タイトルなし"],
+  "← 上一页": ["← 上一頁", "← Previous", "← 前へ"],
+  "下一页 →": ["下一頁 →", "Next →", "次へ →"],
+  "{0} · 活动日历": [
+    "{0} · 活動日曆",
+    "{0} · Event calendar",
+    "{0} · イベントカレンダー"
+  ],
+  "· 开始受付": ["· 受理開始", "· Applications open", "· 受付開始"],
+  "· 受付截止": ["· 受理截止", "· Application deadline", "· 受付締切"],
+  "具体时间待公布。": [
+    "確切時間待公布。",
+    "Exact time to be announced.",
+    "時刻は未発表です。"
+  ],
+  "日本时间 JST。": [
+    "日本時間 JST。",
+    "Japan Standard Time (JST).",
+    "日本標準時（JST）。"
+  ],
+  "日历暂时不可用": [
+    "日曆暫時無法使用",
+    "Calendar temporarily unavailable",
+    "カレンダーは一時的に利用できません"
+  ],
+  "请求来源不匹配": [
+    "請求來源不符",
+    "Request origin does not match",
+    "リクエストの送信元が一致しません"
+  ],
+  "服务暂时不可用，请稍后重试": [
+    "服務暫時無法使用，請稍後再試",
+    "Service temporarily unavailable. Please try again shortly.",
+    "一時的に利用できません。しばらくしてから再試行してください。"
+  ],
+  "{0} 日本二次元现地活动指南：演唱会、快闪店、联动咖啡与完整售票时间线。关注喜欢的系列，及时收到邮件提醒。": [
+    "{0} 日本二次元現地活動指南：演唱會、快閃店、聯名咖啡與完整售票時間線。關注喜歡的系列，及時收到郵件提醒。",
+    "{0} Discover concerts, pop-up shops and collaboration cafés in Japan. Follow your favourites and keep up with ticket dates and email reminders.",
+    "{0} 日本のライブ、ポップアップショップ、コラボカフェを探そう。好きな作品をフォローして、チケット受付や開催情報をメールでチェック。"
+  ],
+  "面包屑导航": ["麵包屑導覽", "Breadcrumbs", "パンくずリスト"],
+  "暂无数据": ["暫無資料", "Nothing here yet", "まだ情報がありません"],
+  "提交未成功，请检查填写内容": [
+    "送出失敗，請檢查填寫內容",
+    "Couldn’t submit. Please check your details.",
+    "送信できませんでした。入力内容をご確認ください。"
+  ],
+  "账户服务暂时不可用，请重试": [
+    "帳戶服務暫時無法使用，請重試",
+    "Account service unavailable. Please try again.",
+    "アカウントサービスを利用できません。再試行してください。"
+  ],
+  "保存中…": ["儲存中…", "Saving…", "保存中…"],
+  "✓ 已关注": ["✓ 已關注", "✓ Following", "✓ フォロー中"],
+  "＋ 关注": ["＋ 關注", "＋ Follow ", "＋ フォロー："],
+  "活动": ["活動", "Event", "イベント"],
+  "系列": ["系列", "Series", "シリーズ"],
+  "查看{0}{1}": ["查看{0}{1}", "View {0}{1}", "{0}{1}を見る"],
+  " · {0} 项安排": [
+    " · {0} 項安排",
+    " · {0} schedule entries",
+    " · {0} 件の予定"
+  ],
+  "其他活动": ["其他活動", "Other events", "その他"],
+  "{0} 项安排": ["{0} 項安排", "{0} schedule entries", "{0} 件の予定"],
+  "完整活动": ["完整活動", "Event details", "イベント詳細"],
+  "已取消": ["已取消", "Cancelled", "中止"],
+  "已延期": ["已延期", "Postponed", "延期"],
+  "举办日期待公布": [
+    "舉辦日期待公布",
+    "Event date to be announced",
+    "開催日は未発表"
+  ],
+  "会场信息待补充": [
+    "會場資訊待補充",
+    "Venue details to follow",
+    "会場情報は準備中"
+  ],
+  " · 共 {0} 个场次": [
+    " · 共 {0} 個場次",
+    " · {0} sessions in total",
+    " · 全 {0} 公演・開催枠"
+  ],
+  "活动状态变更": [
+    "活動狀態變更",
+    "Event status changed",
+    "開催状況に変更あり"
+  ],
+  "下一关键节点": ["下一個關鍵時間", "Next key date", "次の重要な予定"],
+  "历史资料 · 待核验": [
+    "歷史資料 · 待核實",
+    "Archive · Awaiting verification",
+    "過去の情報 · 確認待ち"
+  ],
+  "活动已取消": ["活動已取消", "Event cancelled", "イベントは中止されました"],
+  "活动已延期": ["活動已延期", "Event postponed", "イベントは延期されました"],
+  "查看官方后续安排": [
+    "查看官方後續安排",
+    "Check official updates",
+    "今後の公式発表を確認"
+  ],
+  "本项已取消": [
+    "本項已取消",
+    "This entry is cancelled",
+    "この予定は中止されました"
+  ],
+  "已过去": ["已結束", "Past", "終了"],
+  "正在开放": ["開放中", "Open now", "受付中・開催中"],
+  "待到来": ["即將到來", "Upcoming", "今後の予定"],
+  "· 历史资料待核验": [
+    "· 歷史資料待核實",
+    "· Archive, awaiting verification",
+    "· 過去の情報、確認待ち"
+  ],
+  "日期待公布": ["日期待公布", "Date to be announced", "日程は未発表"],
+  "条件、适用场次与来源": [
+    "條件、適用場次與來源",
+    "Requirements, sessions and sources",
+    "条件・対象公演・情報源"
+  ],
+  "· 有更新": ["· 有更新", "· Updated", "· 更新あり"],
+  "原始名称：": ["原始名稱：", "Original name: ", "原文の名称："],
+  "适用：": ["適用：", "Applies to: ", "対象："],
+  "会场待公布": ["會場待公布", "Venue to be announced", "会場は未発表"],
+  "未单独限定场次": [
+    "未單獨限定場次",
+    "No specific session restrictions",
+    "対象公演の個別指定なし"
+  ],
+  "申请条件：": ["申請條件：", "Requirements: ", "申込条件："],
+  "· 查看原文 ↗": ["· 查看原文 ↗", "· View source ↗", "· 原文を見る ↗"],
+  "来源 ↗": ["來源 ↗", "Source ↗", "情報源 ↗"],
+  "项安排": ["項安排", " schedule entries", "件の予定"],
+  "· 本组日期已过去": [
+    "· 本組日期已結束",
+    "· All dates in this group have passed",
+    "· このグループの予定は終了しました"
+  ],
+  "· 日期待公布": ["· 日期待公布", "· Dates to be announced", "· 日程は未発表"],
+  "有更新": ["有更新", "Updated", "更新あり"],
+  "后续安排": ["後續安排", "What’s next", "今後の予定"],
+  "查看": ["查看", "View", "表示"],
+  "/ 活动详情": ["/ 活動詳情", "/ Event details", "/ イベント詳細"],
+  "线下活动": ["線下活動", "In-person event", "現地イベント"],
+  "原始名称": ["原始名稱", "Original name", "原文の名称"],
+  "下方保留原有安排，请查看官方最新公告及退款说明。": [
+    "下方保留原有安排，請查看官方最新公告及退款說明。",
+    "The original schedule is kept below. Check official updates for revised plans and refunds.",
+    "変更前の予定を掲載しています。最新の案内や払い戻しについては公式発表をご確認ください。"
+  ],
+  "查看官方公告 ↗": [
+    "查看官方公告 ↗",
+    "View official announcement ↗",
+    "公式発表を見る ↗"
+  ],
+  "项安排已取消": ["項安排已取消", " cancelled entries", "件の予定が中止"],
+  "第 {0} 版": ["第 {0} 版", "Revision {0}", "改訂 {0}"],
+  "最近场次": ["最近場次", "Next session", "次の公演・開催枠"],
+  "举办日期": ["舉辦日期", "Event dates", "開催日"],
+  "查看场次": ["查看場次", "View sessions", "公演・開催枠を見る"],
+  "所有场次": ["所有場次", "All sessions", "すべての公演・開催枠"],
+  "待定": ["待定", "To be confirmed", "未定"],
+  "接下来需要留意": [
+    "接下來需要留意",
+    "Keep an eye on",
+    "次にチェックすること"
+  ],
+  "下一关键时间": ["下一個關鍵時間", "Next key date", "次の重要な日時"],
+  "日本时间 JST": ["日本時間 JST", "Japan time · JST", "日本時間 JST"],
+  "还有": ["還有", "Another ", "ほかに"],
+  "个后续日期，查看完整流程 ↓": [
+    "個後續日期，查看完整流程 ↓",
+    " upcoming dates. View the full timeline ↓",
+    "件の予定があります。全体の流れを見る ↓"
+  ],
+  "还有安排尚未公布日期，关注后留意后续更新。": [
+    "還有安排尚未公布日期，關注後留意後續更新。",
+    "Some dates are still to be announced. Follow for updates.",
+    "日程未発表の予定があります。フォローして続報をチェック。"
+  ],
+  "目前没有新的未来时间节点，可查看已收录的安排。": [
+    "目前沒有新的未來時間節點，可查看已收錄的安排。",
+    "No upcoming dates are listed yet. Browse the schedule collected so far.",
+    "今後の日時はまだ登録されていません。掲載済みの予定をご覧ください。"
+  ],
+  "参与流程": ["參加流程", "How to take part", "参加までの流れ"],
+  "收起各组": ["收合各組", "Collapse groups", "グループを閉じる"],
+  "展开全部": ["展開全部", "Expand all", "すべて開く"],
+  "项已收录安排": [
+    "項已收錄安排",
+    " listed schedule entries",
+    "件の登録済み予定"
+  ],
+  " · 当前场次（全活动 {0} 项）": [
+    " · 目前場次（全活動 {0} 項）",
+    " · This session ({0} entries across the event)",
+    " · 選択中の公演（イベント全体で {0} 件）"
+  ],
+  "· 每轮申请与付款分别记录。": [
+    "· 每輪申請與付款分別記錄。",
+    "· Applications and payments are tracked separately for each round.",
+    "· 申込・支払い状況は受付ごとに記録します。"
+  ],
+  "已结束的流程 ·": [
+    "已結束的流程 ·",
+    "Completed groups · ",
+    "終了したグループ ·"
+  ],
+  "组 /": ["組 /", " groups /", "グループ /"],
+  "这个场次暂未收录申请或举办安排。": [
+    "這個場次暫未收錄申請或舉辦安排。",
+    "No application or event schedule is listed for this session yet.",
+    "この公演の受付・開催予定はまだ登録されていません。"
+  ],
+  "关注与提醒": ["關注與提醒", "Following and reminders", "フォローと通知"],
+  "关注作品可自动纳入相关活动。记录本轮参与进度后，日程会突出对应的结果或付款安排。": [
+    "關注作品可自動納入相關活動。記錄本輪參加進度後，日程會突出對應的結果或付款安排。",
+    "Follow a series to include its events. Record your progress for each round to highlight the relevant results and payment dates.",
+    "作品をフォローすると関連イベントが加わります。受付ごとの進捗を記録すると、対応する結果発表や支払予定を確認しやすくなります。"
+  ],
+  "查看我的日程 →": [
+    "查看我的日程 →",
+    "View my schedule →",
+    "マイスケジュールを見る →"
+  ],
+  "管理关注与邮件提醒 →": [
+    "管理關注與郵件提醒 →",
+    "Manage follows and email reminders →",
+    "フォローとメール通知を管理 →"
+  ],
+  "场次与会场": ["場次與會場", "Sessions and venues", "公演・開催枠と会場"],
+  "个场次 · 查看举办日期": [
+    "個場次 · 查看舉辦日期",
+    " sessions · View event dates",
+    "公演・開催枠 · 開催日を見る"
+  ],
+  "会场安排待公布。": [
+    "會場安排待公布。",
+    "Venue details to be announced.",
+    "会場の詳細は未発表です。"
+  ],
+  "来源与更新": ["來源與更新", "Sources and updates", "情報源と更新"],
+  "个来源 ·": ["個來源 ·", " sources ·", "件の情報源 ·"],
+  "项安排已核验": ["項安排已核實", " verified entries", "件の確認済み予定"],
+  "最近收录：": ["最近收錄：", "Last collected: ", "最終取得："],
+  "活动官方页面 ↗": [
+    "活動官方頁面 ↗",
+    "Official event page ↗",
+    "イベント公式ページ ↗"
+  ],
+  "已收录来源": ["已收錄來源", "Collected sources", "登録済みの情報源"],
+  "信息更新记录 · 最近": [
+    "資訊更新記錄 · 最近",
+    "Recent updates · ",
+    "最近の更新履歴 ·"
+  ],
+  "活动介绍": ["活動介紹", "About this event", "イベント紹介"],
+  "审核工作台加载失败": [
+    "審核工作台載入失敗",
+    "Couldn’t load the review workspace",
+    "審査画面を読み込めませんでした"
+  ],
+  "正在验证身份…": ["正在驗證身分…", "Checking access…", "アクセス権を確認中…"],
+  "审核工作台": ["審核工作台", "Review workspace", "審査画面"],
+  "请使用管理员邮箱登录。": [
+    "請使用管理員信箱登入。",
+    "Please log in with an administrator email.",
+    "管理者のメールアドレスでログインしてください。"
+  ],
+  "邮箱登录": ["信箱登入", "Log in with email", "メールでログイン"],
+  "信息审核工作台": ["資訊審核工作台", "Information review", "情報の審査"],
+  "核对原文证据、场次与票务轮次后发布。未经核验的模型候选不会触发时间提醒。": [
+    "核對原文證據、場次與售票輪次後發布。未核實的候選資訊不會觸發時間提醒。",
+    "Check source evidence, sessions and ticket rounds before publishing. Unverified candidates do not trigger timed reminders.",
+    "原文の根拠・公演・受付回を確認してから公開してください。未確認の候補から日時指定の通知は送信されません。"
+  ],
+  "采集任务与邮件队列状态": [
+    "採集任務與郵件佇列狀態",
+    "Collection jobs and mail queue",
+    "収集ジョブとメールキューの状況"
+  ],
+  "待核对信息": ["待核對資訊", "Pending review", "確認待ちの情報"],
+  "刷新": ["重新整理", "Refresh", "更新"],
+  "原始候选与证据": [
+    "原始候選與證據",
+    "Original candidate and evidence",
+    "元の候補と根拠"
+  ],
+  "可修改活动结构后发布": [
+    "可修改活動結構後發布",
+    "Edit event data before publishing",
+    "イベント情報を編集して公開できます"
+  ],
+  "修改活动结构": ["修改活動結構", "Edit event data", "イベント情報を編集"],
+  "填写符合活动结构的 JSON；来源证据与时间精度均为必填核对项": [
+    "填寫符合活動結構的 JSON；來源證據與時間精度均須核對",
+    "Enter valid event JSON. Verify source evidence and time precision.",
+    "イベント形式に沿った JSON を入力し、根拠と日時の精度を確認してください。"
+  ],
+  "查看相关活动 ↗": [
+    "查看相關活動 ↗",
+    "View related event ↗",
+    "関連イベントを見る ↗"
+  ],
+  "核对无误，发布": ["核對無誤，發布", "Approve and publish", "確認して公開"],
+  "拒绝此候选": ["拒絕此候選", "Reject candidate", "候補を却下"],
+  "该记录缺少可发布的结构，需修复抽取问题后重新处理原文。": [
+    "此筆資料缺少可發布的結構，須修復擷取問題後重新處理原文。",
+    "This candidate lacks valid event data. Fix extraction and reprocess the source.",
+    "公開可能なイベント情報がありません。抽出の問題を修正し、原文を再処理してください。"
+  ],
+  "没有等待审核的候选。": [
+    "沒有等待審核的候選。",
+    "No candidates awaiting review.",
+    "審査待ちの候補はありません。"
+  ],
+  "操作未成功，请重试": [
+    "操作失敗，請重試",
+    "Something went wrong. Please try again.",
+    "操作に失敗しました。再試行してください。"
+  ],
+  "验证码暂时无法发送，请稍后重试。": [
+    "驗證碼暫時無法寄送，請稍後再試。",
+    "Couldn’t send a code. Please try again shortly.",
+    "認証コードを送信できませんでした。しばらくしてから再試行してください。"
+  ],
+  "喜欢的事，": ["喜歡的事，", "For everything you love,", "好きなことを、"],
+  "一件也不想错过。": [
+    "一件也不想錯過。",
+    "don’t miss a moment.",
+    "ひとつも見逃さない。"
+  ],
+  "从第一份期待，到下一次相遇。": [
+    "從第一份期待，到下一次相遇。",
+    "From the first spark to the next encounter.",
+    "最初のわくわくから、次の出会いまで。"
+  ],
+  "让每一个想去的现场，都有迹可循。": [
+    "讓每個想去的現場，都有跡可循。",
+    "Keep every place you want to be within reach.",
+    "行きたい現場への一歩を、ここから。"
+  ],
+  "退订邮件提醒": [
+    "取消郵件提醒",
+    "Unsubscribe from reminders",
+    "メール通知の配信停止"
+  ],
+  "查收你的验证码": [
+    "查收你的驗證碼",
+    "Check your email",
+    "認証コードをご確認ください"
+  ],
+  "把喜欢，放进日程。": [
+    "把喜歡，放進日程。",
+    "Make room for what you love.",
+    "好きなことを、予定に。"
+  ],
+  "确认后停止所有活动提醒邮件。可在个人中心随时恢复。": [
+    "確認後將停止所有活動提醒郵件，可隨時在個人中心恢復。",
+    "Confirm to stop all event reminder emails. You can turn them back on in your dashboard.",
+    "確認すると、すべてのイベント通知メールを停止します。マイページからいつでも再開できます。"
+  ],
+  "六位数字验证码已发送至 {0}，15 分钟内有效。": [
+    "六位數字驗證碼已寄至 {0}，15 分鐘內有效。",
+    "A six-digit code has been sent to {0}. It expires in 15 minutes.",
+    "6 桁の認証コードを {0} に送信しました。有効期限は 15 分です。"
+  ],
+  "邮箱登录 / 注册。首次验证后自动创建账户，无需密码。": [
+    "使用信箱登入 / 註冊，首次驗證後自動建立帳戶，無需密碼。",
+    "Log in or sign up with your email. Your first verification creates an account. No password needed.",
+    "メールアドレスでログイン・登録。初回認証時にアカウントを作成します。パスワードは不要です。"
+  ],
+  "已停止所有活动提醒邮件。": [
+    "已停止所有活動提醒郵件。",
+    "All event reminder emails have been stopped.",
+    "すべてのイベント通知メールを停止しました。"
+  ],
+  "登录成功，正在进入个人中心…": [
+    "登入成功，正在進入個人中心…",
+    "Logged in. Opening your dashboard…",
+    "ログインしました。マイページへ移動中…"
+  ],
+  "进入个人中心 →": ["進入個人中心 →", "Go to dashboard →", "マイページへ →"],
+  "邮箱地址": ["電子郵件地址", "Email address", "メールアドレス"],
+  "六位数字验证码": [
+    "六位數字驗證碼",
+    "Six-digit verification code",
+    "6 桁の認証コード"
+  ],
+  "请输入 6 位数字验证码": [
+    "請輸入 6 位數字驗證碼",
+    "Enter your six-digit code",
+    "6 桁の認証コードを入力"
+  ],
+  "{0} 秒后可重新发送": [
+    "{0} 秒後可重新寄送",
+    "Resend in {0}s",
+    "{0} 秒後に再送できます"
+  ],
+  "重新发送验证码": ["重新寄送驗證碼", "Resend code", "コードを再送信"],
+  "更换邮箱": ["更換信箱", "Change email", "メールアドレスを変更"],
+  "处理中…": ["處理中…", "Working…", "処理中…"],
+  "确认退订": ["確認取消訂閱", "Confirm unsubscribe", "配信停止を確認"],
+  "验证并登录 →": ["驗證並登入 →", "Verify and log in →", "認証してログイン →"],
+  "{0} 秒后可发送": [
+    "{0} 秒後可寄送",
+    "Send in {0}s",
+    "{0} 秒後に送信できます"
+  ],
+  "获取验证码 →": [
+    "取得驗證碼 →",
+    "Send verification code →",
+    "認証コードを送信 →"
+  ],
+  "返回发现活动": [
+    "返回發現活動",
+    "Back to discovery",
+    "イベントを探すページへ"
+  ],
+  "关注记录与邮箱仅用于账户和提醒。邮件内可随时退订。": [
+    "關注紀錄與信箱僅用於帳戶和提醒。可隨時透過郵件取消訂閱。",
+    "Your email and follows are used for your account and reminders. You can unsubscribe from any reminder email.",
+    "メールアドレスとフォロー情報はアカウントと通知に使用します。通知メールからいつでも配信停止できます。"
+  ],
+  "关键词": ["關鍵字", "Keywords", "キーワード"],
+  "标签": ["標籤", "Tags", "タグ"],
+  "账户设置": ["帳戶設定", "Account settings", "アカウント設定"],
+  "昵称": ["暱稱", "Display name", "ニックネーム"],
+  "怎么称呼你？": [
+    "怎麼稱呼你？",
+    "What should we call you?",
+    "お名前を教えてください"
+  ],
+  "我的时区": ["我的時區", "My time zone", "タイムゾーン"],
+  "活动时间仍统一以日本时间（JST）展示。": [
+    "活動時間仍統一以日本時間（JST）顯示。",
+    "Event times are always displayed in Japan Standard Time (JST).",
+    "イベントの日時はすべて日本時間（JST）で表示します。"
+  ],
+  "接收关注活动的邮件提醒": [
+    "接收已關注活動的郵件提醒",
+    "Receive email reminders for followed events",
+    "フォロー中のイベントのメール通知を受け取る"
+  ],
+  "保存设置": ["儲存設定", "Save settings", "設定を保存"],
+  "设置已保存": ["設定已儲存", "Settings saved", "設定を保存しました"],
+  "关注选项暂时无法加载": [
+    "關注選項暫時無法載入",
+    "Couldn’t load follow options",
+    "フォローの選択肢を読み込めませんでした"
+  ],
+  "已经关注过了，可以在下方调整提醒设置。": [
+    "已經關注過了，可在下方調整提醒設定。",
+    "You already follow this. Adjust reminder settings below.",
+    "すでにフォローしています。下で通知設定を変更できます。"
+  ],
+  "已关注，相关活动会出现在我的日程中。": [
+    "已關注，相關活動會出現在我的日程中。",
+    "Followed. Related events will appear in your schedule.",
+    "フォローしました。関連イベントがマイスケジュールに表示されます。"
+  ],
+  "我的喜欢，都在这里。": [
+    "我的喜歡，都在這裡。",
+    "All your favourites, in one place.",
+    "好きなものを、ここに。"
+  ],
+  "管理关注，留住每一份期待。": [
+    "管理關注，留住每一份期待。",
+    "Manage your follows and keep the anticipation alive.",
+    "フォローを管理して、楽しみをひとつずつ。"
+  ],
+  "查看我的日程": [
+    "查看我的日程",
+    "View my schedule",
+    "マイスケジュールを見る"
+  ],
+  "正在加载个人中心…": [
+    "正在載入個人中心…",
+    "Loading dashboard…",
+    "マイページを読み込み中…"
+  ],
+  "登录，收藏下一次心动。": [
+    "登入，收藏下一次心動。",
+    "Log in to save your next spark.",
+    "ログインして、次のときめきを。"
+  ],
+  "用邮箱验证码登录，即可管理你的关注。": [
+    "用信箱驗證碼登入，即可管理你的關注。",
+    "Log in with an email code to manage your follows.",
+    "メールの認証コードでログインして、フォローを管理できます。"
+  ],
+  "登录 / 注册 →": ["登入 / 註冊 →", "Log in / Sign up →", "ログイン / 登録 →"],
+  "欢迎回来": ["歡迎回來", "Welcome back", "おかえりなさい"],
+  "已经收藏了": ["已經收藏了", "You’re following ", "フォロー中："],
+  "份喜欢": ["份喜歡", " favourites", "件"],
+  "邮件提醒记录 →": [
+    "郵件提醒紀錄 →",
+    "Email reminder history →",
+    "メール通知の履歴 →"
+  ],
+  "内容管理 →": ["內容管理 →", "Content management →", "コンテンツ管理 →"],
+  "退出登录": ["登出", "Log out", "ログアウト"],
+  "退出所有设备": [
+    "登出所有裝置",
+    "Log out on all devices",
+    "すべての端末からログアウト"
+  ],
+  "我关注的": ["我關注的", "My follows", "フォロー中"],
+  "关注分类": ["關注分類", "Follow categories", "フォローの分類"],
+  "为下一次见面，留一个位置": [
+    "為下一次見面，留一個位置",
+    "Make room for your next encounter",
+    "次の出会いのために"
+  ],
+  "添加{0}关注": ["新增{0}關注", "Follow: {0}", "{0}をフォロー"],
+  "匹配活动标题、简介与系列名称。支持 2–80 个字符。": [
+    "比對活動標題、簡介與系列名稱，支援 2–80 個字元。",
+    "Matches event titles, summaries and series names. Use 2–80 characters.",
+    "イベント名・紹介文・シリーズ名を検索します。2～80 文字で入力してください。"
+  ],
+  "按活动类型关注，发现更多同样喜欢的现场。": [
+    "按活動類型關注，發現更多喜歡的現場。",
+    "Follow event types to discover more of what you love.",
+    "イベントの種類をフォローして、好きな現場をもっと見つけよう。"
+  ],
+  "关注喜欢的作品或系列，新活动与关键安排一起收好。": [
+    "關注喜歡的作品或系列，收好新活動與重要安排。",
+    "Follow your favourite series to keep new events and key dates together.",
+    "好きな作品やシリーズをフォローして、新しいイベントや大切な予定をチェック。"
+  ],
+  "在活动详情页点击「关注活动」，就能在这里统一管理。": [
+    "在活動詳情頁點選「關注活動」，就能在這裡統一管理。",
+    "Choose “Follow event” on an event page to manage it here.",
+    "イベント詳細で「イベントをフォロー」を選ぶと、ここで管理できます。"
+  ],
+  "去发现活动 →": ["去發現活動 →", "Discover events →", "イベントを探す →"],
+  "选择{0}": ["選擇{0}", "Choose {0}", "{0}を選択"],
+  "例如：初音未来、横滨…": [
+    "例如：初音未來、橫濱…",
+    "e.g. Hatsune Miku, Yokohama…",
+    "例：初音ミク、横浜…"
+  ],
+  "正在加载…": ["正在載入…", "Loading…", "読み込み中…"],
+  "选择想关注的{0}": [
+    "選擇想關注的{0}",
+    "Choose {0} to follow",
+    "フォローする{0}を選択"
+  ],
+  "个活动": ["個活動", " events", "件のイベント"],
+  "重试": ["重試", "Try again", "再試行"],
+  "搜索已关注的": ["搜尋已關注的", "Search your follows ", "フォローを検索"],
+  "输入名称筛选…": ["輸入名稱篩選…", "Filter by name…", "名前で絞り込み…"],
+  "没有找到匹配的关注": [
+    "沒有找到符合條件的關注",
+    "No matching follows",
+    "一致するフォローがありません"
+  ],
+  "还没有关注{0}，从一个喜欢开始吧。": [
+    "還沒有關注{0}，從一個喜歡開始吧。",
+    "No {0} followed yet. Start with something you love.",
+    "まだ{0}をフォローしていません。好きなものから始めましょう。"
+  ],
+  "举办日期 · 从": ["舉辦日期 · 從", "Event dates · From", "開催日 · 開始"],
+  "到": ["到", "To", "終了"],
+  "城市 / 都道府县": [
+    "城市 / 都道府縣",
+    "City / Prefecture",
+    "市区町村・都道府県"
+  ],
+  "例如：東京、大阪": [
+    "例如：東京、大阪",
+    "e.g. Tokyo, Osaka",
+    "例：東京、大阪"
+  ],
+  "下一站，": ["下一站，", "Next stop,", "次の旅は、"],
+  "去见喜欢。": ["去見喜歡。", "what you love.", "好きに会いに。"],
+  "这个系列的活动与参与安排，汇总在这里。": [
+    "這個系列的活動與參加安排，都在這裡。",
+    "Events and participation details for this series, all in one place.",
+    "このシリーズのイベントと参加情報をまとめています。"
+  ],
+  "选好在日本停留的日期，发现旅途中可以参加的演出与活动。": [
+    "選好在日本停留的日期，發現旅途中可以參加的演出與活動。",
+    "Choose your dates in Japan and find events to make your trip special.",
+    "日本での滞在日を選んで、旅の途中で参加できる公演やイベントを探そう。"
+  ],
+  "演唱会、快闪店、联动咖啡。找到想去的现场，了解下一步怎么参加。": [
+    "演唱會、快閃店、聯名咖啡。找到想去的現場，了解下一步怎麼參加。",
+    "Concerts, pop-ups and collaboration cafés. Find your next event and how to be there.",
+    "ライブ、ポップアップ、コラボカフェ。行きたい現場と、参加への一歩を見つけよう。"
+  ],
+  "选好日期，出发": [
+    "選好日期，出發",
+    "Pick your dates",
+    "日付を選んで出かけよう"
+  ],
+  "发现心动活动": [
+    "發現心動活動",
+    "Find your next event",
+    "ときめくイベントを探す"
+  ],
+  "浏览全部活动": [
+    "瀏覽全部活動",
+    "Browse all events",
+    "すべてのイベントを見る"
+  ],
+  "按旅行日期找": ["按旅行日期找", "Search travel dates", "旅行の日程から探す"],
+  "系列入口": ["系列入口", "Browse series", "シリーズ一覧"],
+  "从喜欢的系列开始": [
+    "從喜歡的系列開始",
+    "Start with a favourite series",
+    "好きなシリーズから"
+  ],
+  "活动发现": ["活動探索", "Event discovery", "イベント探し"],
+  "你的行程，刚好有好事发生。": [
+    "你的行程，剛好有好事發生。",
+    "Something special, right on your route.",
+    "旅先で、うれしい出会いを。"
+  ],
+  "今天，想赴哪一种约？": [
+    "今天，想赴哪一種約？",
+    "What are you in the mood for?",
+    "今日は、どんな出会いにする？"
+  ],
+  "按活动类型浏览": [
+    "按活動類型瀏覽",
+    "Browse by event type",
+    "種類別にイベントを見る"
+  ],
+  "全部活动": ["全部活動", "All events", "すべて"],
+  "活动 / 作品 / 艺人": [
+    "活動 / 作品 / 藝人",
+    "Event / Series / Artist",
+    "イベント・作品・アーティスト"
+  ],
+  "搜索活动、作品或艺人…": [
+    "搜尋活動、作品或藝人…",
+    "Search events, series or artists…",
+    "イベント・作品・アーティストを検索…"
+  ],
+  "全部系列": ["全部系列", "All series", "すべてのシリーズ"],
+  "查找活动": ["尋找活動", "Find events", "イベントを検索"],
+  "按举办日期、城市筛选": [
+    "按舉辦日期、城市篩選",
+    "Filter by event date and city",
+    "開催日・都市で絞り込む"
+  ],
+  "清除筛选 ×": ["清除篩選 ×", "Clear filters ×", "絞り込みを解除 ×"],
+  "今天": ["今天", "Today", "今日"],
+  "未来 7 天": ["未來 7 天", "Next 7 days", "今後 7 日間"],
+  "未来 30 天": ["未來 30 天", "Next 30 days", "今後 30 日間"],
+  "按活动举办日期筛选 · 日本时间 JST": [
+    "按活動舉辦日期篩選 · 日本時間 JST",
+    "Filter by event dates · Japan time (JST)",
+    "開催日で絞り込み · 日本時間（JST）"
+  ],
+  "旅途中的心动现场": [
+    "旅途中的心動現場",
+    "Events along your journey",
+    "旅の途中のときめき"
+  ],
+  "系列活动": ["系列活動", "Series events", "シリーズのイベント"],
+  "值得期待的现场": [
+    "值得期待的現場",
+    "Events to look forward to",
+    "楽しみな現場を見つけよう"
+  ],
+  "请检查日期范围": [
+    "請檢查日期範圍",
+    "Check the date range",
+    "日付の範囲をご確認ください"
+  ],
+  "{0} 个活动{1}": ["{0} 個活動{1}", "{0} events{1}", "{0} 件のイベント{1}"],
+  " · 本页 {0}–{1}": [
+    " · 本頁 {0}–{1}",
+    " · Showing {0}–{1}",
+    " · {0}～{1} 件を表示"
+  ],
+  "· 日本时间 JST": [
+    "· 日本時間 JST",
+    "· Japan time (JST)",
+    "· 日本時間（JST）"
+  ],
+  "近期活动": ["近期活動", "Upcoming", "今後のイベント"],
+  "全部记录": ["全部紀錄", "All records", "すべての記録"],
+  "最近更新 ↓": ["最近更新 ↓", "Recently updated ↓", "更新順 ↓"],
+  "按最近更新": ["按最近更新", "Sort by latest update", "更新順で表示"],
+  "请输入有效的日期，结束日期不能早于开始日期。": [
+    "請輸入有效日期，結束日期不能早於開始日期。",
+    "Enter valid dates. The end date must not be before the start date.",
+    "正しい日付を入力してください。終了日は開始日以降にしてください。"
+  ],
+  "这一页没有活动": [
+    "這一頁沒有活動",
+    "No events on this page",
+    "このページにイベントはありません"
+  ],
+  "没有找到匹配的活动": [
+    "沒有找到符合條件的活動",
+    "No matching events",
+    "条件に合うイベントがありません"
+  ],
+  "试试其他日期或城市。尚未公布举办日期的活动可以在发现页查看。": [
+    "試試其他日期或城市。尚未公布日期的活動可在探索頁查看。",
+    "Try other dates or cities. Events without announced dates can be found on the discovery page.",
+    "ほかの日付や都市をお試しください。日程未発表のイベントは「イベントを探す」で確認できます。"
+  ],
+  "试试其他系列、类型或日期，也可以检索尚未整理的官方原文。": [
+    "試試其他系列、類型或日期，也可以搜尋尚未整理的官方原文。",
+    "Try another series, type or date, or search official sources not yet listed as events.",
+    "ほかのシリーズ・種類・日付を試すか、未整理の公式情報を検索してください。"
+  ],
+  "重置筛选 →": ["重設篩選 →", "Reset filters →", "絞り込みをリセット →"],
+  "查找官方原文 →": [
+    "搜尋官方原文 →",
+    "Search official sources →",
+    "公式情報を検索 →"
+  ],
+  "活动分页": ["活動分頁", "Event pagination", "イベントのページ切り替え"],
+  "第": ["第", "Page ", "ページ"],
+  "页": ["頁", " ", " "],
+  "导出到自己的日历": [
+    "匯出至自己的日曆",
+    "Export to your calendar",
+    "自分のカレンダーに追加"
+  ],
+  "导出未来 90 天已收录的安排；申请节点与举办日期分别提供。": [
+    "匯出未來 90 天的已收錄安排；申請節點與舉辦日期分別提供。",
+    "Export listed dates for the next 90 days. Event dates and application schedules are available separately.",
+    "今後 90 日間の登録済み予定を書き出します。開催日と受付予定をそれぞれ選べます。"
+  ],
+  "举办日期 ICS ↗": [
+    "舉辦日期 ICS ↗",
+    "Event dates · ICS ↗",
+    "開催日 · ICS ↗"
+  ],
+  "全部申请与举办节点 ICS ↗": [
+    "全部申請與舉辦節點 ICS ↗",
+    "Applications and events · ICS ↗",
+    "受付・開催予定 · ICS ↗"
+  ],
+  "单个活动": ["單一活動", "Individual event", "個別イベント"],
+  "整个系列": ["整個系列", "Whole series", "シリーズ全体"],
+  "活动标签": ["活動標籤", "Event tag", "イベントタグ"],
+  "截止 / 开演前提醒": [
+    "截止 / 開演前提醒",
+    "Reminder before deadline / start",
+    "締切・開演前の通知"
+  ],
+  "关闭提前提醒": ["關閉提前提醒", "No advance reminder", "事前通知なし"],
+  "提前 2 小时": ["提前 2 小時", "2 hours before", "2 時間前"],
+  "提前 24 小时": ["提前 24 小時", "24 hours before", "24 時間前"],
+  "提前 48 小时": ["提前 48 小時", "48 hours before", "48 時間前"],
+  "活动类型": ["活動類型", "Event type", "イベントの種類"],
+  "全部类型": ["全部類型", "All types", "すべての種類"],
+  "包含子系列": ["包含子系列", "Include subseries", "関連する子シリーズを含む"],
+  "取消关注": ["取消關注", "Unfollow", "フォロー解除"],
+  "完整活动 →": ["完整活動 →", "Full event →", "イベント全体を見る →"],
+  "已取消 ·": ["已取消 ·", "Cancelled ·", "中止 ·"],
+  "· 已过去": ["· 已結束", "· Past", "· 終了"],
+  "收起同日安排 ↑": [
+    "收合同日安排 ↑",
+    "Collapse this day ↑",
+    "同日の予定を閉じる ↑"
+  ],
+  "同日还有 {0} 项安排{1}，展开 ↓": [
+    "同日另有 {0} 項安排{1}，展開 ↓",
+    "{0} more entries this day{1} · Expand ↓",
+    "同日にほか {0} 件の予定{1} · 開く ↓"
+  ],
+  "（含 {0} 项截止）": [
+    "（含 {0} 項截止）",
+    " ({0} deadlines)",
+    "（締切 {0} 件を含む）"
+  ],
+  "载入失败，请稍后重试": [
+    "載入失敗，請稍後再試",
+    "Couldn’t load. Please try again shortly.",
+    "読み込めませんでした。しばらくしてから再試行してください。"
+  ],
+  "我的日程，": ["我的日程，", "Your schedule,", "予定を開けば、"],
+  "值得期待。": ["值得期待。", "full of possibility.", "楽しみが待っている。"],
+  "关注喜欢的作品与活动，集中查看申请、截止和现场安排。": [
+    "關注喜歡的作品與活動，集中查看申請、截止和現場安排。",
+    "Follow your favourite series and events to keep applications, deadlines and event dates together.",
+    "好きな作品やイベントをフォローして、申込・締切・開催予定をまとめてチェック。"
+  ],
+  "发现更多活动 →": [
+    "發現更多活動 →",
+    "Discover more events →",
+    "もっとイベントを探す →"
+  ],
+  "邮箱登录 →": ["信箱登入 →", "Log in with email →", "メールでログイン →"],
+  "正在载入个人日程…": [
+    "正在載入個人日程…",
+    "Loading your schedule…",
+    "スケジュールを読み込み中…"
+  ],
+  "重新加载账户": ["重新載入帳戶", "Reload account", "アカウントを再読み込み"],
+  "开始使用个人日程": [
+    "開始使用個人日程",
+    "Start your schedule",
+    "マイスケジュールを始めよう"
+  ],
+  "关注喜欢的系列": [
+    "關注喜歡的系列",
+    "Follow a favourite series",
+    "好きなシリーズをフォロー"
+  ],
+  "这个系列的新活动自动进入关注列表。": [
+    "此系列的新活動會自動加入關注清單。",
+    "New events in this series are added to your follows automatically.",
+    "シリーズの新しいイベントが自動でフォロー一覧に加わります。"
+  ],
+  "查看下一步": ["查看下一步", "See what’s next", "次のステップを確認"],
+  "按日期查看申请开始、截止和现场安排。": [
+    "按日期查看申請開始、截止與現場安排。",
+    "See applications, deadlines and event dates in order.",
+    "受付開始・締切・開催予定を日付順に確認できます。"
+  ],
+  "记录参与进度": ["記錄參加進度", "Track your progress", "参加の進捗を記録"],
+  "已申请看结果，确认中选后留意付款。": [
+    "申請後查看結果，確認中選後留意付款。",
+    "Check results after applying, and payment dates after winning.",
+    "申込後は結果を確認し、当選後は支払期限をチェック。"
+  ],
+  "先浏览活动 →": [
+    "先瀏覽活動 →",
+    "Browse events first →",
+    "まずはイベントを見る →"
+  ],
+  "个人日程栏目": [
+    "個人日程導覽",
+    "Schedule navigation",
+    "スケジュールのメニュー"
+  ],
+  "近期日程": ["近期日程", "Upcoming schedule", "直近の予定"],
+  "关注的活动": ["關注的活動", "Followed events", "フォロー中のイベント"],
+  "关注与提醒设置": [
+    "關注與提醒設定",
+    "Follow and reminder settings",
+    "フォロー・通知設定"
+  ],
+  "日本时间 JST · 每次查看 7 天": [
+    "日本時間 JST · 每次查看 7 天",
+    "Japan time (JST) · 7 days at a time",
+    "日本時間（JST）· 7 日間ごとに表示"
+  ],
+  "← 前 7 天": ["← 前 7 天", "← Previous 7 days", "← 前の 7 日間"],
+  "今天起": ["從今天起", "From today", "今日から"],
+  "后 7 天 →": ["後 7 天 →", "Next 7 days →", "次の 7 日間 →"],
+  "选择日期": ["選擇日期", "Choose dates", "日付を選択"],
+  "起始日期": ["起始日期", "Start date", "開始日"],
+  "日程起始日期": [
+    "日程起始日期",
+    "Schedule start date",
+    "スケジュールの開始日"
+  ],
+  "这段时间有信息变更 ·": [
+    "這段期間有資訊變更 ·",
+    "Updates during this period ·",
+    "この期間の情報変更 ·"
+  ],
+  "· 包含取消或延期": [
+    "· 包含取消或延期",
+    "· Includes cancellations or postponements",
+    "· 中止・延期を含む"
+  ],
+  "项安排 ·": ["項安排 ·", " schedule entries · ", "件の予定 ·"],
+  "这一页没有日程": [
+    "這一頁沒有日程",
+    "No schedule on this page",
+    "このページに予定はありません"
+  ],
+  "这 7 天没有新的日期事项": [
+    "這 7 天沒有新的日期事項",
+    "No new dates in these 7 days",
+    "この 7 日間に新しい予定はありません"
+  ],
+  "从关注一个系列开始": [
+    "從關注一個系列開始",
+    "Start by following a series",
+    "シリーズのフォローから始めよう"
+  ],
+  "可以查看下一周，或进入关注的活动查看完整流程。": [
+    "可查看下一週，或進入關注的活動查看完整流程。",
+    "Check the next week, or open a followed event for its full timeline.",
+    "翌週を確認するか、フォロー中のイベントで全体の流れをご覧ください。"
+  ],
+  "关注系列后，相关活动会自动出现在这里。": [
+    "關注系列後，相關活動會自動出現在這裡。",
+    "Follow a series and its events will appear here automatically.",
+    "シリーズをフォローすると、関連イベントが自動で表示されます。"
+  ],
+  "查看后 7 天 →": [
+    "查看後 7 天 →",
+    "View next 7 days →",
+    "次の 7 日間を見る →"
+  ],
+  "看看学园偶像大师 →": [
+    "看看學園偶像大師 →",
+    "Explore Gakuen IDOLM@STER →",
+    "学園アイドルマスターを見る →"
+  ],
+  "这段时间持续开放或举办": [
+    "這段期間持續開放或舉辦",
+    "Open or ongoing throughout this period",
+    "この期間を通して受付中・開催中"
+  ],
+  "项持续安排 · 截止或结束日期在本周之后": [
+    "項持續安排 · 截止或結束日在本週之後",
+    " ongoing entries · Ending after this week",
+    "件の継続中の予定 · 締切・終了日は今週より後"
+  ],
+  "结束 / 截止": ["結束 / 截止", "Ends / Deadline", "終了・締切"],
+  "再显示": ["再顯示", "Show another ", "さらに表示："],
+  "项（还有": ["項（還有", " entries ( ", "件（残り"],
+  "项）↓": ["項）↓", " remaining) ↓", "件）↓"],
+  "另有": ["另有", "Another ", "ほかに"],
+  "项安排尚未公布日期。": [
+    "項安排尚未公布日期。",
+    " entries have no announced date yet.",
+    "件の予定が日程未発表です。"
+  ],
+  "查看关注的活动 →": [
+    "查看關注的活動 →",
+    "View followed events →",
+    "フォロー中のイベントを見る →"
+  ],
+  "个活动 · 系列关注自动纳入 · 按最近更新": [
+    "個活動 · 系列關注自動納入 · 按最近更新",
+    " events · Includes followed series · Latest updates first",
+    "件のイベント · フォロー中のシリーズを含む · 更新順"
+  ],
+  "暂无活动。": ["暫無活動。", "No events yet.", "まだイベントはありません。"],
+  "个人日程分页": [
+    "個人日程分頁",
+    "Schedule pagination",
+    "スケジュールのページ切り替え"
+  ],
+  " · 共 {0} 组日程": [
+    " · 共 {0} 組日程",
+    " · {0} schedule groups in total",
+    " · 全 {0} グループの予定"
+  ],
+  "· 邮件时区": ["· 郵件時區", "· Email time zone", "· メールのタイムゾーン"],
+  "打开审核工作台 →": [
+    "開啟審核工作台 →",
+    "Open review workspace →",
+    "審査画面を開く →"
+  ],
+  "打开个人中心，管理全部关注与账户设置 →": [
+    "開啟個人中心，管理所有關注與帳戶設定 →",
+    "Open dashboard to manage follows and account settings →",
+    "マイページでフォローとアカウント設定を管理 →"
+  ],
+  "你已退订邮件。日程仍可查看；可在个人中心重新开启邮件提醒。": [
+    "你已取消郵件訂閱。日程仍可查看；可在個人中心重新開啟郵件提醒。",
+    "You’ve unsubscribed from email. Your schedule is still available. Re-enable reminders in your dashboard.",
+    "メール配信は停止中です。スケジュールは引き続き利用できます。マイページから通知を再開できます。"
+  ],
+  "新活动按日汇总；结果提醒针对已申请的轮次，付款提醒针对已确认中选的轮次。只知道日期的安排不发送精确时间提醒。": [
+    "新活動每日彙整；結果提醒適用於已申請的輪次，付款提醒適用於已確認中選的輪次。僅有日期的安排不寄送精確時間提醒。",
+    "New events are grouped daily. Result reminders apply to rounds you entered; payment reminders apply to rounds you confirmed winning. Date-only entries do not trigger timed reminders.",
+    "新着イベントは毎日まとめて通知します。結果通知は申込済みの受付、支払通知は当選を記録した受付が対象です。時刻未定の予定には日時指定の通知を送りません。"
+  ],
+  "还没有关注系列或活动。": [
+    "尚未關注系列或活動。",
+    "No series or events followed yet.",
+    "まだシリーズやイベントをフォローしていません。"
+  ],
+  "添加关注 →": ["新增關注 →", "Add a follow →", "フォローを追加 →"],
+  "最近提醒记录 ·": [
+    "最近提醒紀錄 ·",
+    "Recent reminders · ",
+    "最近の通知履歴 ·"
+  ],
+  "新活动汇总": ["新活動彙整", "New event digest", "新着イベントまとめ"],
+  "申请开放": ["申請開放", "Applications open", "受付開始"],
+  "截止提醒": ["截止提醒", "Deadline reminder", "締切通知"],
+  "结果公布": ["結果公布", "Results announced", "結果発表"],
+  "举办提醒": ["舉辦提醒", "Event reminder", "開催通知"],
+  "信息更新": ["資訊更新", "Information updated", "情報更新"],
+  "待发送": ["待寄送", "Pending", "送信待ち"],
+  "发送中": ["寄送中", "Sending", "送信中"],
+  "已交给邮件服务": [
+    "已交付郵件服務",
+    "Accepted by mail service",
+    "メールサービスに送信済み"
+  ],
+  "投递状态待核对": [
+    "投遞狀態待核對",
+    "Delivery status under review",
+    "配信状況を確認中"
+  ],
+  "暂无提醒记录。": [
+    "暫無提醒紀錄。",
+    "No reminders yet.",
+    "まだ通知履歴はありません。"
+  ],
+  "流程节点": ["流程節點", "Schedule entry", "予定"],
+  "场次": ["場次", "Session", "公演・開催枠"],
+  "作品 / 系列": ["作品 / 系列", "Title / Series", "作品・シリーズ"],
+  "名称库加载失败，请重试": [
+    "名稱庫載入失敗，請重試",
+    "Couldn’t load the name catalogue. Please try again.",
+    "名称一覧を読み込めませんでした。再試行してください。"
+  ],
+  "名称已保存；后续采集会保留这项修订，原文改变时重新核对。": [
+    "名稱已儲存；後續採集會保留此修訂，原文變更時重新核對。",
+    "Name saved. Future collection preserves this edit until the original name changes.",
+    "名称を保存しました。原文の名称が変わるまで、この修正は以後の収集でも維持されます。"
+  ],
+  "名称规范与审核": ["名稱規範與審核", "Name review", "名称の統一・審査"],
+  " · {0} 项{1}": [" · {0} 項{1}", " · {0} entries{1}", " · {0} 件{1}"],
+  "名称": ["名稱", "Names", "名称"],
+  "待核对": ["待核對", "Pending review", "確認待ち"],
+  "优先使用简体中文，保留品牌、作品和习惯专名。通用词条在项目词表中维护；这里修订单条展示名称。": [
+    "優先使用簡體中文，保留品牌、作品與慣用專名。通用詞條在專案詞表中維護；此處修訂單筆展示名稱。",
+    "This catalogue edits Simplified Chinese display names. Preserve brands and established proper names. Shared terms belong in the project glossary.",
+    "ここでは簡体字中国語の表示名を編集します。ブランド名や定着した固有名詞を保持してください。共通の用語はプロジェクトの用語集で管理します。"
+  ],
+  "搜索原名或展示名称": [
+    "搜尋原名或展示名稱",
+    "Search original or display name",
+    "原文名・表示名を検索"
+  ],
+  "搜索": ["搜尋", "Search", "検索"],
+  "包括已规范名称": [
+    "包含已規範名稱",
+    "Include reviewed names",
+    "確認済みの名称も含む"
+  ],
+  "正在加载名称…": ["正在載入名稱…", "Loading names…", "名称を読み込み中…"],
+  "已规范": ["已規範", "Reviewed", "確認済み"],
+  "展示名称": ["展示名稱", "Display name", "表示名"],
+  "正在保存…": ["正在儲存…", "Saving…", "保存中…"],
+  "核对并保存名称": [
+    "核對並儲存名稱",
+    "Review and save name",
+    "確認して名称を保存"
+  ],
+  "当前没有匹配的名称。": [
+    "目前沒有符合條件的名稱。",
+    "No matching names.",
+    "一致する名称はありません。"
+  ],
+  "上一页": ["上一頁", "Previous", "前へ"],
+  "下一页": ["下一頁", "Next", "次へ"],
+  "让下一段旅途，多一点心动。": [
+    "讓下一段旅途，多一點心動。",
+    "A little more excitement on your next journey.",
+    "次の旅に、もうひとつのときめきを。"
+  ],
+  "每一份期待，都有自己的位置。": [
+    "每一份期待，都有自己的位置。",
+    "A place for everything you look forward to.",
+    "楽しみのひとつひとつに、居場所を。"
+  ],
+  "屏幕之外，我们现场见。": [
+    "螢幕之外，我們現場見。",
+    "Beyond the screen, see you there.",
+    "画面の向こうへ。現地で会おう。"
+  ],
+  "目的地：喜欢的现场": [
+    "目的地：喜歡的現場",
+    "Destination: what you love",
+    "行き先は、好きな現場"
+  ],
+  "为喜欢，留一个位置": [
+    "為喜歡，留一個位置",
+    "Make room for what you love",
+    "好きなことに、居場所を"
+  ],
+  "这一站，为热爱出发": [
+    "這一站，為熱愛出發",
+    "Your next stop starts with a spark",
+    "この一歩を、好きのために"
+  ],
+  "登录后记录本轮进度": [
+    "登入後記錄本輪進度",
+    "Log in to track this round",
+    "ログインして今回の進捗を記録"
+  ],
+  "，安排对应的结果与付款提醒。": [
+    "，安排對應的結果與付款提醒。",
+    " and set relevant result and payment reminders.",
+    "し、結果発表や支払の通知を設定できます。"
+  ],
+  "我的本轮进度": [
+    "我的本輪進度",
+    "My progress for this round",
+    "今回の受付の進捗"
+  ],
+  "已保存，个人日程已更新": [
+    "已儲存，個人日程已更新",
+    "Saved. Your schedule is updated.",
+    "保存しました。スケジュールを更新しました。"
+  ],
+  "尚未记录": ["尚未記錄", "Not recorded", "未記録"],
+  "仅记录自己的进度，申请与付款请前往官方渠道。": [
+    "僅記錄自己的進度，申請與付款請前往官方管道。",
+    "This only records your progress. Apply and pay through official channels.",
+    "ここでは進捗のみ記録します。申込・支払いは公式窓口で行ってください。"
+  ],
+  "現地情報": ["現地情報", "現地情報", "現地情報"],
+  "genchi.news 現地情報": [
+    "genchi.news 現地情報",
+    "genchi.news 現地情報",
+    "genchi.news 現地情報"
+  ],
+  "日": ["日", "Sun", "日"],
+  "月": ["一", "Mon", "月"],
+  "火": ["二", "Tue", "火"],
+  "水": ["三", "Wed", "水"],
+  "木": ["四", "Thu", "木"],
+  "金": ["五", "Fri", "金"],
+  "土": ["六", "Sat", "土"],
+  "时间待公布": ["時間待公布", "Time to be announced", "時刻は未発表"],
+  "· 时间待公布": ["· 時間待公布", "· Time to be announced", "· 時刻は未発表"],
+  "申请 / 售票开始": [
+    "申請 / 售票開始",
+    "Applications / sales open",
+    "申込・販売開始"
+  ],
+  "申请 / 售票截止": [
+    "申請 / 售票截止",
+    "Application / sales deadline",
+    "申込・販売締切"
+  ],
+  "预约开始": ["預約開始", "Reservations open", "予約開始"],
+  "预约截止": ["預約截止", "Reservation deadline", "予約締切"],
+  "商品贩售开始": ["商品販售開始", "Merchandise sales open", "グッズ販売開始"],
+  "商品贩售截止": ["商品販售截止", "Merchandise sales end", "グッズ販売終了"],
+  "付款开始": ["付款開始", "Payment opens", "支払受付開始"],
+  "付款截止": ["付款截止", "Payment deadline", "支払期限"],
+  "活动开始": ["活動開始", "Event starts", "イベント開始"],
+  "活动结束": ["活動結束", "Event ends", "イベント終了"],
+  "结束": ["結束", "Ends", "終了"],
+  "/ 截止": ["/ 截止", "/ Deadline", "/ 締切"],
+  "有兴趣": ["有興趣", "Interested", "興味あり"],
+  "已申请": ["已申請", "Applied", "申込済み"],
+  "已确认中选": ["已確認中選", "Won (confirmed)", "当選を確認済み"],
+  "已购票": ["已購票", "Ticket purchased", "購入済み"],
+  "中选者需付款 · 请确认本轮结果": [
+    "中選者須付款 · 請確認本輪結果",
+    "Payment required for winners · Check this round’s result",
+    "当選者は支払いが必要です · 今回の結果を確認してください"
+  ],
+  "已申请者留意 · 参与状态未确认": [
+    "已申請者請留意 · 參加狀態未確認",
+    "For applicants · Participation not confirmed",
+    "申込者向け · 参加状況は未確認"
+  ],
+  "参与状态未记录": [
+    "參加狀態未記錄",
+    "Participation not recorded",
+    "参加状況は未記録"
+  ],
+  "日程待补充": ["日程待補充", "Schedule to follow", "予定は準備中"],
+  "查看已收录的信息": [
+    "查看已收錄資訊",
+    "View collected information",
+    "登録済みの情報を見る"
+  ],
+  "查看完整流程": ["查看完整流程", "View full timeline", "全体の流れを見る"],
+  "现场与举办安排": [
+    "現場與舉辦安排",
+    "Event and venue schedule",
+    "現地・開催の予定"
+  ],
+  "周边与商品贩售": ["周邊與商品販售", "Merchandise sales", "グッズ販売"],
+  "公告与后续联动": [
+    "公告與後續合作",
+    "Announcements and related events",
+    "お知らせ・関連企画"
+  ],
+  "官方": ["官方", "Official", "公式"],
+  "认证服务配置未完成": [
+    "認證服務設定未完成",
+    "Authentication service is not configured",
+    "認証サービスの設定が完了していません"
+  ],
+  "请求来源暂时不可用": [
+    "請求來源暫時無法使用",
+    "Request source temporarily unavailable",
+    "リクエストの送信元を一時的に確認できません"
+  ],
+  "请求内容过大": [
+    "請求內容過大",
+    "Request is too large",
+    "リクエストが大きすぎます"
+  ],
+  "待公布": ["待公布", "To be announced", "未発表"],
+  "{0}{1} · 时间待公布": [
+    "{0}{1} · 時間待公布",
+    "{0}{1} · Time to be announced",
+    "{0}{1} · 時刻は未発表"
+  ],
+  "查看活动时间线": [
+    "查看活動時間線",
+    "View event timeline",
+    "イベントの時系列を見る"
+  ],
+  "受付中 ·": ["受理中 ·", "Open now ·", "受付中 ·"],
+  "截止": ["截止", "Deadline", "締切"],
+  "演唱会": ["演唱會", "Concerts", "ライブ"],
+  "音乐节": ["音樂節", "Festivals", "フェス"],
+  "快闪店": ["快閃店", "Pop-ups", "ポップアップ"],
+  "联动咖啡": ["聯名咖啡", "Collab cafés", "コラボカフェ"],
+  "展览": ["展覽", "Exhibitions", "展示"],
+  "见面会": ["見面會", "Meetups", "ファンイベント"],
+  "商品贩售": ["商品販售", "Merchandise", "グッズ販売"],
+  "售票 / 抽选": ["售票 / 抽選", "Tickets / Lottery", "チケット・抽選"],
+  "预约": ["預約", "Reservation", "予約"],
+  "付款": ["付款", "Payment", "支払い"],
+  "周边贩售": ["周邊販售", "Merchandise sales", "グッズ販売"],
+  "入场": ["入場", "Doors open", "開場"],
+  "开演": ["開演", "Performance starts", "開演"],
+  "举办期间": ["舉辦期間", "Event period", "開催期間"],
+  "公告": ["公告", "Announcement", "お知らせ"],
+  "活动详情": ["活動詳情", "Event details", "イベント詳細"],
+  "这个页面暂时找不到了": [
+    "找不到這個頁面",
+    "This page couldn’t be found",
+    "ページが見つかりません"
+  ],
+  "链接可能已更新，去发现下一次心动吧。": [
+    "連結可能已更新，去發現下一次心動吧。",
+    "The link may have changed. Find your next event instead.",
+    "リンクが変更された可能性があります。次のときめきを探しに行こう。"
+  ],
+  "请输入有效的邮箱地址": [
+    "請輸入有效的電子郵件地址",
+    "Enter a valid email address",
+    "有効なメールアドレスを入力してください"
+  ],
+  "请先验证邮箱并登录": [
+    "請先驗證信箱並登入",
+    "Please verify your email and log in",
+    "メール認証を行ってログインしてください"
+  ],
+  "登录已失效，请重新验证邮箱": [
+    "登入已失效，請重新驗證信箱",
+    "Your session has expired. Please log in again",
+    "ログインの有効期限が切れました。もう一度認証してください"
+  ],
+  "请求较频繁，请稍后再试": [
+    "操作過於頻繁，請稍後再試",
+    "Too many requests. Please try again later",
+    "操作が多すぎます。しばらくしてから再試行してください"
+  ],
+  "此邮箱暂时无法登录": [
+    "此信箱暫時無法登入",
+    "This email address can’t log in right now",
+    "このメールアドレスでは現在ログインできません"
+  ],
+  "验证码已失效，请重新获取": [
+    "驗證碼已失效，請重新取得",
+    "This code has expired. Request a new one",
+    "コードの有効期限が切れました。再送信してください"
+  ],
+  "请选择有效的时区": [
+    "請選擇有效的時區",
+    "Choose a valid time zone",
+    "有効なタイムゾーンを選択してください"
+  ],
+  "请求来源验证失败": [
+    "請求來源驗證失敗",
+    "Request source verification failed",
+    "リクエストの送信元を確認できませんでした"
+  ],
+  "验证码暂时发送失败，请稍后重新获取": [
+    "驗證碼寄送失敗，請稍後重新取得",
+    "Couldn’t send your code. Please try again shortly",
+    "コードを送信できませんでした。しばらくしてから再送信してください"
+  ],
+  "验证码错误或已失效，请重新获取": [
+    "驗證碼錯誤或已失效，請重新取得",
+    "The code is incorrect or expired. Request a new one",
+    "コードが正しくないか期限切れです。再送信してください"
+  ],
+  "验证码不正确，请检查后重试": [
+    "驗證碼不正確，請檢查後再試",
+    "Incorrect code. Please check and try again",
+    "コードが正しくありません。確認して再入力してください"
+  ],
+  "需要管理员权限": [
+    "需要管理員權限",
+    "Administrator access required",
+    "管理者権限が必要です"
+  ],
+  "没有找到此活动": [
+    "找不到此活動",
+    "Event not found",
+    "イベントが見つかりません"
+  ],
+  "昵称不能包含控制字符": [
+    "暱稱不能含有控制字元",
+    "Display names can’t contain control characters",
+    "ニックネームに制御文字は使えません"
+  ],
+  "结束日期不能早于开始日期": [
+    "結束日期不能早於開始日期",
+    "The end date must not be before the start date",
+    "終了日は開始日以降にしてください"
+  ],
+  "退订链接无效": [
+    "取消訂閱連結無效",
+    "Invalid unsubscribe link",
+    "配信停止リンクが無効です"
+  ],
+  "请选择 1 至 31 天的日程": [
+    "請選擇 1 至 31 天的日程",
+    "Choose a schedule between 1 and 31 days",
+    "1～31 日間の予定を選択してください"
+  ],
+  "该条目不存在或已经审核": [
+    "此項目不存在或已審核",
+    "This item doesn’t exist or has already been reviewed",
+    "この項目は存在しないか、審査済みです"
+  ],
+  "请检查邮箱地址和六位数字验证码": [
+    "請檢查信箱地址與六位數字驗證碼",
+    "Check your email address and six-digit code",
+    "メールアドレスと 6 桁の認証コードをご確認ください"
+  ],
+  "旧链接未找到": [
+    "找不到舊連結",
+    "Old link not found",
+    "旧リンクが見つかりません"
+  ],
+  "日期范围必须在 1 至 120 天之间": [
+    "日期範圍須為 1 至 120 天",
+    "The date range must be between 1 and 120 days",
+    "日付の範囲は 1～120 日間にしてください"
+  ],
+  "关注已达到 500 项，请先整理现有关注": [
+    "已關注 500 項，請先整理現有關注",
+    "You’re following 500 items. Remove some before adding more",
+    "フォローが 500 件に達しました。追加する前に整理してください"
+  ],
+  "请指定中选的票务轮次": [
+    "請指定中選的售票輪次",
+    "Choose the ticket round you won",
+    "当選した受付を指定してください"
+  ],
+  "票务轮次不存在": [
+    "售票輪次不存在",
+    "Ticket round not found",
+    "受付が見つかりません"
+  ],
+  "名称记录不存在": [
+    "名稱紀錄不存在",
+    "Name record not found",
+    "名称の記録が見つかりません"
+  ],
+  "请选择已有活动类型标签": [
+    "請選擇現有活動類型標籤",
+    "Choose an existing event type tag",
+    "既存のイベント種類タグを選択してください"
+  ],
+  "关注主体不存在": [
+    "關注對象不存在",
+    "Follow target not found",
+    "フォロー対象が見つかりません"
+  ],
+  "关键词需要 2 至 80 个可见字符": [
+    "關鍵字須為 2 至 80 個可見字元",
+    "Keywords must contain 2–80 visible characters",
+    "キーワードは表示可能な 2～80 文字で入力してください"
+  ],
+  "原始名称已更新，请重新核对": [
+    "原始名稱已更新，請重新核對",
+    "The original name changed. Please review it again",
+    "原文の名称が更新されました。再確認してください"
+  ],
+  "展示名称须为 1 至 1000 字": [
+    "展示名稱須為 1 至 1000 字",
+    "Display names must contain 1–1000 characters",
+    "表示名は 1～1000 文字で入力してください"
+  ],
+  "genchi.news 登录验证码": [
+    "genchi.news 登入驗證碼",
+    "Your genchi.news verification code",
+    "genchi.news 認証コード"
+  ],
+  "你的登录验证码": [
+    "你的登入驗證碼",
+    "Your verification code",
+    "ログイン認証コード"
+  ],
+  "你的登录验证码已准备好，请在 {minutes} 分钟内使用。": [
+    "你的登入驗證碼已備妥，請在 {minutes} 分鐘內使用。",
+    "Your verification code is ready. Use it within {minutes} minutes.",
+    "認証コードをお送りします。{minutes} 分以内にご利用ください。"
+  ],
+  "请回到刚才的页面输入验证码，": [
+    "請返回剛才的頁面輸入驗證碼，",
+    "Return to the page and enter this code",
+    "元のページでコードを入力し、"
+  ],
+  "完成登录或注册。": [
+    "完成登入或註冊。",
+    "to log in or create your account.",
+    "ログインまたは登録を完了してください。"
+  ],
+  "{minutes} 分钟内有效 · 仅可使用一次": [
+    "{minutes} 分鐘內有效 · 僅可使用一次",
+    "Valid for {minutes} minutes · Single use",
+    "有効期限 {minutes} 分 · 1 回のみ使用可能"
+  ],
+  "{minutes} 分钟内有效，仅可使用一次。": [
+    "{minutes} 分鐘內有效，僅可使用一次。",
+    "Valid for {minutes} minutes. Use this code only once.",
+    "有効期限は {minutes} 分です。1 回のみ使用できます。"
+  ],
+  "首次验证成功后将自动创建账户。": [
+    "首次驗證成功後將自動建立帳戶。",
+    "Your first verification automatically creates an account.",
+    "初回認証時にアカウントを自動作成します。"
+  ],
+  "请勿将验证码分享给他人。": [
+    "請勿將驗證碼分享給他人。",
+    "Do not share this code with anyone.",
+    "このコードを他の人に教えないでください。"
+  ],
+  "如果这不是你的操作，请忽略此邮件。": [
+    "如果這不是你的操作，請忽略此郵件。",
+    "If you didn’t request this, you can ignore this email.",
+    "お心当たりがない場合は、このメールを無視してください。"
+  ],
+  "为喜欢的事，留一个位置。": [
+    "為喜歡的事，留一個位置。",
+    "Make room for what you love.",
+    "好きなことに、居場所を。"
+  ],
+  "你关注的新活动 · Genchi": [
+    "你關注的新活動 · Genchi",
+    "New events you follow · Genchi",
+    "フォロー中の新着イベント · Genchi"
+  ],
+  "管理关注": ["管理關注", "Manage follows", "フォローを管理"],
+  "退订所有提醒": [
+    "取消所有提醒",
+    "Unsubscribe from all reminders",
+    "すべての通知を配信停止"
+  ],
+  "最新状态": ["最新狀態", "Latest status", "最新の状況"],
+  "活动信息更新": [
+    "活動資訊更新",
+    "Event information updated",
+    "イベント情報を更新"
+  ],
+  "更新后的开始时间": [
+    "更新後的開始時間",
+    "Updated start time",
+    "変更後の開始日時"
+  ],
+  "更新后的截止时间": [
+    "更新後的截止時間",
+    "Updated deadline",
+    "変更後の締切日時"
+  ],
+  "请查看最新时间、状态和来源：": [
+    "請查看最新時間、狀態與來源：",
+    "Check the latest dates, status and sources:",
+    "最新の日時・状況・情報源をご確認ください："
+  ],
+  "开始申请": ["開始申請", "Applications open", "申込受付開始"],
+  "活动提醒": ["活動提醒", "Event reminder", "イベント通知"],
+  "开始": ["開始", "Starts", "開始"],
+  "你的时区": ["你的時區", "Your time zone", "あなたのタイムゾーン"],
+  "适用条件": ["適用條件", "Requirements (source text)", "対象条件（原文）"],
+  "活动详情与官方依据": [
+    "活動詳情與官方依據",
+    "Event details and official sources",
+    "イベント詳細・公式情報"
+  ],
+  "官方入口": ["官方入口", "Official page", "公式ページ"],
+  "本邮件仅提示结果发表，请自行前往官方平台确认是否中选。": [
+    "此郵件僅提醒結果已公布，請自行至官方平台確認是否中選。",
+    "This email only announces that results are available. Check the official platform to see whether you won.",
+    "結果発表のお知らせです。当落は公式サイトでご確認ください。"
+  ],
+  "原文（简体中文）": [
+    "原文（簡體中文）",
+    "Source text (Simplified Chinese)",
+    "原文（簡体字中国語）"
+  ],
+  "邮件语言": ["郵件語言", "Email language", "メールの言語"],
+  "用于活动提醒邮件，网站语言可在页眉切换。": [
+    "用於活動提醒郵件，網站語言可在頁首切換。",
+    "Used for event reminder emails. Change the website language in the header.",
+    "イベント通知メールに使用します。サイトの言語はヘッダーで切り替えられます。"
+  ]
+}

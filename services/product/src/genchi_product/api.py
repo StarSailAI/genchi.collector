@@ -1,44 +1,42 @@
 from __future__ import annotations
 
-import hashlib
 import os
 import secrets
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 from svix.webhooks import Webhook, WebhookVerificationError
 
+from .auth import COOKIE, account, clear_cookie, register_auth_routes, valid_timezone
+from .auth import digest as digest
 from .domain import KINDS, ActivityInput
 from .inbound import enqueue_received
+from .localization import (
+    LOCALES,
+    Locale,
+    LocalizedJSONResponse,
+    locale_of,
+    localize_catalog,
+    request_locale,
+    translate,
+)
 from .naming import change_summary, sync_name
-from .notifications import enqueue, signing_key, verify_unsubscribe
+from .notifications import verify_unsubscribe
 from .presentation import agenda_groups, followed_ids
 from .store import Catalog, uid
+from .subscriptions import KIND_LABELS, normalize_keyword
 
 # DATE anchors are only for sorting; the public precision and calendar values remain DATE.
 NEXT_ACTION_AT = """(CASE WHEN COALESCE(m.starts_at,m.starts_on::timestamp AT TIME ZONE 'Asia/Tokyo')>NOW()
   THEN COALESCE(m.starts_at,m.starts_on::timestamp AT TIME ZONE 'Asia/Tokyo')
   ELSE COALESCE(m.ends_at,(m.ends_on+1)::timestamp AT TIME ZONE 'Asia/Tokyo',m.starts_at,(m.starts_on+1)::timestamp AT TIME ZONE 'Asia/Tokyo') END)"""
-
-
-def digest(value: str) -> str:
-    return hashlib.sha256(value.encode()).hexdigest()
-
-
-def account(request: Request, conn):
-    token = request.cookies.get("genchi_session", "")
-    user = conn.execute(
-        """SELECT a.* FROM genchi_private.sessions s JOIN genchi_private.accounts a ON a.id=s.account_id
-        WHERE s.token_hash=%s AND s.expires_at>NOW() AND a.verified_at IS NOT NULL""",
-        (digest(token),),
-    ).fetchone()
-    if not user:
-        raise HTTPException(401, "请先验证邮箱并登录")
-    return user
 
 
 def admin(request: Request, conn):
@@ -116,28 +114,9 @@ def hydrate(conn, rows):
     return rows
 
 
-class LoginBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    email: str = Field(min_length=5, max_length=254, pattern=r"^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$")
-    timezone: str = "Asia/Shanghai"
-
-    @field_validator("timezone")
-    @classmethod
-    def valid_timezone(cls, value):
-        try:
-            ZoneInfo(value)
-        except Exception as exc:
-            raise ValueError("Invalid timezone") from exc
-        return value
-
-
-class TokenBody(BaseModel):
-    token: str = Field(min_length=20, max_length=200)
-
-
 class FollowBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    target_type: str = Field(pattern="^(SUBJECT|ACTIVITY)$")
+    target_type: str = Field(pattern="^(SUBJECT|ACTIVITY|KEYWORD|TAG)$")
     target_id: str = Field(min_length=1, max_length=200)
     reminder_hours: int = 24
     include_children: bool = True
@@ -164,6 +143,24 @@ class ParticipationBody(BaseModel):
     round_key: str = Field(default="", max_length=2000)
 
 
+class ProfileBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    display_name: str = Field(max_length=60)
+    timezone: str = Field(max_length=80)
+    unsubscribed: bool
+    locale: Locale | None = None
+
+    _timezone = field_validator("timezone")(valid_timezone)
+
+    @field_validator("display_name")
+    @classmethod
+    def name(cls, value):
+        value = value.strip()
+        if value and not value.isprintable():
+            raise ValueError("昵称不能包含控制字符")
+        return value
+
+
 class ReviewBody(BaseModel):
     approve: bool
     activity: ActivityInput | None = None
@@ -179,18 +176,68 @@ class NameBody(BaseModel):
 
 def create_app(catalog: Catalog | None = None):
     catalog = catalog or Catalog()
-    app = FastAPI(title="Genchi Product", version="0.2.0")
+    app = FastAPI(
+        title="Genchi Product", version="0.2.0", default_response_class=LocalizedJSONResponse
+    )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, exc: RequestValidationError):
+        if request.url.path.startswith("/auth/"):
+            return JSONResponse(
+                {"detail": translate("请检查邮箱地址和六位数字验证码")},
+                status_code=422,
+                headers={"Cache-Control": "no-store"},
+            )
+        return await request_validation_exception_handler(request, exc)
+
+    @app.exception_handler(HTTPException)
+    async def http_error(request: Request, exc: HTTPException):
+        return JSONResponse(
+            {"detail": translate(exc.detail) if isinstance(exc.detail, str) else exc.detail},
+            status_code=exc.status_code,
+            headers=exc.headers,
+        )
+
+    @app.middleware("http")
+    async def language_context(request: Request, call_next):
+        locale = locale_of(
+            request.query_params.get("locale") or request.headers.get("X-Genchi-Locale")
+        )
+        token = request_locale.set(locale)
+        projection = localize_catalog.set(
+            request.method == "GET" and not request.url.path.startswith(("/admin", "/health"))
+        )
+        try:
+            response = await call_next(request)
+            response.headers["Content-Language"] = locale
+            response.headers.append("Vary", "X-Genchi-Locale")
+            return response
+        finally:
+            request_locale.reset(token)
+            localize_catalog.reset(projection)
 
     @app.middleware("http")
     async def origin_guard(request: Request, call_next):
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             origin = request.headers.get("Origin")
             expected = os.getenv("PUBLIC_SITE_URL", "http://localhost:13000").rstrip("/")
-            if origin and origin.rstrip("/") != expected:
+            protected = request.url.path.startswith("/me") or request.url.path in {
+                "/auth/login",
+                "/auth/verify",
+                "/auth/logout",
+                "/auth/logout-all",
+            }
+            if (
+                (protected and origin != expected)
+                or (origin and origin.rstrip("/") != expected)
+                or request.headers.get("Sec-Fetch-Site") == "cross-site"
+            ):
                 return Response("Origin not allowed", status_code=403)
         response = await call_next(request)
         if request.url.path.startswith(("/auth", "/me", "/admin")):
             response.headers["Cache-Control"] = "no-store"
+        if response.status_code == 401 and request.cookies.get(COOKIE):
+            clear_cookie(response)
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
 
@@ -200,13 +247,15 @@ def create_app(catalog: Catalog | None = None):
             contract = conn.execute(
                 'SELECT major,minor FROM "SchemaContract" WHERE id=1'
             ).fetchone()
-            ready = bool(contract and contract["major"] == 1 and contract["minor"] >= 4)
+            ready = bool(contract and contract["major"] == 1 and contract["minor"] >= 6)
             if not ready:
-                raise HTTPException(503, "Catalog schema 1.4 required")
+                raise HTTPException(503, "Catalog schema 1.6 required")
             return {
                 "ok": True,
                 "schema": f"{contract['major']}.{contract['minor']}",
                 "service": "genchi-product",
+                "auth_method": "email_code",
+                "locales": list(LOCALES),
             }
 
     @app.post("/webhooks/resend")
@@ -388,7 +437,7 @@ def create_app(catalog: Catalog | None = None):
             params = (end, start, mode, subject, subject)
             total = conn.execute("SELECT count(*) AS count " + query, params).fetchone()["count"]
             rows = conn.execute(
-                """SELECT m.*,COALESCE(a.title_zh,a.title) AS activity_title,a.kind AS activity_kind,a.status AS activity_status,
+                """SELECT m.*,a.title AS activity_title_original,COALESCE(a.title_zh,a.title) AS activity_title,a.kind AS activity_kind,a.status AS activity_status,
                 COALESCE((SELECT jsonb_agg(s.subject_slug) FROM catalog_activity_subjects s WHERE s.activity_id=a.id),'[]') AS subjects """
                 + query
                 + " ORDER BY COALESCE(m.starts_at,(m.starts_on::timestamp AT TIME ZONE 'Asia/Tokyo')),m.id LIMIT %s OFFSET %s",
@@ -404,88 +453,7 @@ def create_app(catalog: Catalog | None = None):
                 "timezone": "Asia/Tokyo",
             }
 
-    @app.post("/auth/login")
-    def login(body: LoginBody):
-        signing_key()
-        email = body.email.strip().lower()
-        token = secrets.token_urlsafe(36)
-        with catalog.connect() as conn, conn.transaction():
-            rate = conn.execute(
-                """INSERT INTO genchi_private.auth_limits(key) VALUES(%s) ON CONFLICT(key)
-                DO UPDATE SET attempts=CASE WHEN auth_limits.window_start<NOW()-INTERVAL '1 hour' THEN 1 ELSE auth_limits.attempts+1 END,
-                window_start=CASE WHEN auth_limits.window_start<NOW()-INTERVAL '1 hour' THEN NOW() ELSE auth_limits.window_start END RETURNING attempts""",
-                (digest(email),),
-            ).fetchone()
-            if rate["attempts"] > 6:
-                raise HTTPException(429, "请求较频繁，请稍后再试")
-            user = conn.execute(
-                """INSERT INTO genchi_private.accounts(id,email,timezone) VALUES(%s,%s,%s)
-                ON CONFLICT(email) DO UPDATE SET email=EXCLUDED.email RETURNING *""",
-                (uid(), email, body.timezone),
-            ).fetchone()
-            conn.execute(
-                "DELETE FROM genchi_private.login_tokens WHERE account_id=%s", (user["id"],)
-            )
-            conn.execute(
-                "INSERT INTO genchi_private.login_tokens(token_hash,account_id,expires_at) VALUES(%s,%s,NOW()+INTERVAL '20 minutes')",
-                (digest(token), user["id"]),
-            )
-            link = (
-                os.getenv("PUBLIC_SITE_URL", "http://localhost:13000")
-                + "/zh-Hans/verify?token="
-                + token
-            )
-            enqueue(
-                conn,
-                account_id=user["id"],
-                kind="LOGIN",
-                dedup_key=f"login:{digest(token)}",
-                due_at=datetime.now(UTC),
-                payload={
-                    "token_hash": digest(token),
-                    "text": f"请确认是你正在登录 Genchi。此链接 20 分钟内有效，只能使用一次：\n\n{link}\n\n如果并非本人操作，请忽略此邮件。",
-                },
-            )
-        return {"sent": True}
-
-    @app.post("/auth/verify")
-    def verify(body: TokenBody, response: Response):
-        session = secrets.token_urlsafe(40)
-        with catalog.connect() as conn, conn.transaction():
-            token = conn.execute(
-                "DELETE FROM genchi_private.login_tokens WHERE token_hash=%s AND expires_at>NOW() RETURNING account_id",
-                (digest(body.token),),
-            ).fetchone()
-            if not token:
-                raise HTTPException(400, "链接已过期或已使用，请重新获取登录邮件")
-            conn.execute(
-                "UPDATE genchi_private.accounts SET verified_at=COALESCE(verified_at,NOW()) WHERE id=%s",
-                (token["account_id"],),
-            )
-            conn.execute(
-                "INSERT INTO genchi_private.sessions VALUES(%s,%s,NOW()+INTERVAL '30 days')",
-                (digest(session), token["account_id"]),
-            )
-        response.set_cookie(
-            "genchi_session",
-            session,
-            max_age=30 * 86400,
-            httponly=True,
-            secure=os.getenv("PUBLIC_SITE_URL", "").startswith("https:"),
-            samesite="lax",
-            path="/",
-        )
-        return {"ok": True}
-
-    @app.post("/auth/logout")
-    def logout(request: Request, response: Response):
-        with catalog.connect() as conn:
-            conn.execute(
-                "DELETE FROM genchi_private.sessions WHERE token_hash=%s",
-                (digest(request.cookies.get("genchi_session", "")),),
-            )
-        response.delete_cookie("genchi_session", path="/")
-        return {"ok": True}
+    register_auth_routes(app, catalog)
 
     @app.post("/auth/unsubscribe")
     def unsubscribe(token: str = Query(..., max_length=200)):
@@ -501,25 +469,58 @@ def create_app(catalog: Catalog | None = None):
     @app.get("/me")
     def me(request: Request):
         with catalog.connect() as conn:
+            conn.autocommit = True
+            conn.execute("DELETE FROM genchi_private.sessions WHERE expires_at<=NOW()")
             user = account(request, conn)
             follows = conn.execute(
-                """SELECT f.*,COALESCE(a.title_zh,a.title,s.name_zh,s.name) AS name FROM genchi_private.follows f
+                """SELECT f.*,COALESCE(a.title,s.name,f.target_id) AS name_original,COALESCE(a.title_zh,a.title,s.name_zh,s.name,f.target_id) AS name FROM genchi_private.follows f
                 LEFT JOIN catalog_activities a ON f.target_type='ACTIVITY' AND a.id=f.target_id
                 LEFT JOIN catalog_subjects s ON f.target_type='SUBJECT' AND s.slug=f.target_id WHERE f.account_id=%s ORDER BY f.created_at DESC""",
                 (user["id"],),
             ).fetchall()
+            for follow in follows:
+                if follow["target_type"] == "TAG":
+                    follow["name"] = KIND_LABELS.get(follow["target_id"], follow["target_id"])
             participation = conn.execute(
                 "SELECT activity_id,round_key,status FROM genchi_private.participation WHERE account_id=%s",
                 (user["id"],),
             ).fetchall()
             return {
+                "id": user["id"],
                 "email": user["email"],
+                "display_name": user["display_name"],
+                "created_at": user["created_at"],
                 "timezone": user["timezone"],
+                "locale": user["locale"],
                 "unsubscribed": user["unsubscribed"],
                 "is_admin": user["email"] == os.getenv("ADMIN_EMAIL", ""),
                 "follows": follows,
                 "participation": participation,
             }
+
+    @app.put("/me")
+    def profile(body: ProfileBody, request: Request):
+        with catalog.connect() as conn:
+            user = account(request, conn)
+            conn.execute(
+                "UPDATE genchi_private.accounts SET display_name=%s,timezone=%s,unsubscribed=%s,locale=COALESCE(%s,locale),updated_at=NOW() WHERE id=%s",
+                (body.display_name, body.timezone, body.unsubscribed, body.locale, user["id"]),
+            )
+        return {"ok": True}
+
+    @app.get("/tags")
+    def tags():
+        with catalog.connect() as conn:
+            counts = {
+                row["kind"]: row["n"]
+                for row in conn.execute(
+                    "SELECT kind,count(*) n FROM catalog_activities WHERE publication='PUBLISHED' AND attendance IN ('OFFLINE','HYBRID') GROUP BY kind"
+                ).fetchall()
+            }
+        return [
+            {"slug": slug, "name": name, "activity_count": counts.get(slug, 0)}
+            for slug, name in KIND_LABELS.items()
+        ]
 
     @app.put("/me/follows")
     def follow(body: FollowBody, request: Request):
@@ -527,10 +528,34 @@ def create_app(catalog: Catalog | None = None):
             user = account(request, conn)
             if body.target_type == "ACTIVITY":
                 body.target_id = public_activity(conn, body.target_id)["id"]
+            elif body.target_type == "KEYWORD":
+                try:
+                    body.target_id = normalize_keyword(body.target_id)
+                except ValueError as exc:
+                    raise HTTPException(422, str(exc)) from None
+            elif body.target_type == "TAG":
+                if body.target_id not in KIND_LABELS:
+                    raise HTTPException(422, "请选择已有活动类型标签")
             elif not conn.execute(
                 "SELECT slug FROM catalog_subjects WHERE slug=%s", (body.target_id,)
             ).fetchone():
                 raise HTTPException(404, "关注主体不存在")
+            conn.execute(
+                "SELECT id FROM genchi_private.accounts WHERE id=%s FOR UPDATE", (user["id"],)
+            )
+            exists = conn.execute(
+                "SELECT id FROM genchi_private.follows WHERE account_id=%s AND target_type=%s AND target_id=%s",
+                (user["id"], body.target_type, body.target_id),
+            ).fetchone()
+            if (
+                not exists
+                and conn.execute(
+                    "SELECT count(*) n FROM genchi_private.follows WHERE account_id=%s",
+                    (user["id"],),
+                ).fetchone()["n"]
+                >= 500
+            ):
+                raise HTTPException(422, "关注已达到 500 项，请先整理现有关注")
             row = conn.execute(
                 """INSERT INTO genchi_private.follows(id,account_id,target_type,target_id,reminder_hours,include_children,kinds,cities)
                 VALUES(%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(account_id,target_type,target_id)
@@ -546,9 +571,6 @@ def create_app(catalog: Catalog | None = None):
                     Jsonb(body.kinds),
                     Jsonb(body.cities),
                 ),
-            )
-            conn.execute(
-                "UPDATE genchi_private.accounts SET unsubscribed=FALSE WHERE id=%s", (user["id"],)
             )
             return row.fetchone()
 
@@ -589,8 +611,8 @@ def create_app(catalog: Catalog | None = None):
         with catalog.connect() as conn:
             user = account(request, conn)
             return conn.execute(
-                """SELECT q.id,q.kind,q.status,q.due_at,q.sent_at,COALESCE(a.title_zh,a.title) AS activity_title,q.activity_id,
-                COALESCE(m.title_zh,m.title) AS milestone_title FROM genchi_private.mail_queue q LEFT JOIN catalog_activities a ON a.id=q.activity_id
+                """SELECT q.id,q.kind,q.status,q.due_at,q.sent_at,a.title AS activity_title_original,COALESCE(a.title_zh,a.title) AS activity_title,q.activity_id,
+                m.title AS milestone_title_original,COALESCE(m.title_zh,m.title) AS milestone_title FROM genchi_private.mail_queue q LEFT JOIN catalog_activities a ON a.id=q.activity_id
                 LEFT JOIN catalog_milestones m ON m.id=q.milestone_id WHERE q.account_id=%s AND q.kind<>'LOGIN'
                 ORDER BY q.created_at DESC LIMIT 100""",
                 (user["id"],),
@@ -636,7 +658,7 @@ def create_app(catalog: Catalog | None = None):
             user = account(request, conn)
             ids = followed_ids(conn, user["id"])
             nodes = conn.execute(
-                """SELECT m.*,COALESCE(a.title_zh,a.title) AS activity_title,a.kind AS activity_kind,a.status AS activity_status,
+                """SELECT m.*,a.title AS activity_title_original,COALESCE(a.title_zh,a.title) AS activity_title,a.kind AS activity_kind,a.status AS activity_status,
                 COALESCE((SELECT jsonb_agg(occurrence_id) FROM catalog_milestone_scopes s WHERE s.milestone_id=m.id),'[]') AS occurrence_ids,
                 EXISTS(SELECT 1 FROM catalog_evidence e WHERE e.milestone_id=m.id AND e.verified) AS verified
                 FROM catalog_milestones m JOIN catalog_activities a ON a.id=m.activity_id
@@ -649,7 +671,7 @@ def create_app(catalog: Catalog | None = None):
             ).fetchall()
             groups, ongoing, undated = agenda_groups(nodes, participation, from_date, to_date)
             updates = conn.execute(
-                """SELECT DISTINCT ON (a.id) a.id AS activity_id,COALESCE(a.title_zh,a.title) AS activity_title,a.status,
+                """SELECT DISTINCT ON (a.id) a.id AS activity_id,a.title AS activity_title_original,COALESCE(a.title_zh,a.title) AS activity_title,a.status,
                 c.summary,c.created_at,count(*) OVER(PARTITION BY a.id) AS change_count
                 FROM catalog_changes c JOIN catalog_activities a ON a.id=c.activity_id
                 WHERE a.id=ANY(%s) AND c.notify AND c.kind NOT IN ('NEW_ACTIVITY','PUBLISHED')

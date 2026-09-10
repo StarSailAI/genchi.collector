@@ -6,6 +6,7 @@ from datetime import date, datetime
 
 from .domain import JST
 from .naming import title
+from .subscriptions import DIRECT_FOLLOW_MATCH
 
 
 def followed_ids(conn, account_id: str) -> list[str]:
@@ -14,7 +15,7 @@ def followed_ids(conn, account_id: str) -> list[str]:
     return [
         r["id"]
         for r in conn.execute(
-            """WITH RECURSIVE topics AS (
+            f"""WITH RECURSIVE topics AS (
           SELECT f.id AS follow_id,f.target_id AS slug,f.include_children
           FROM genchi_private.follows f WHERE f.account_id=%s AND f.target_type='SUBJECT'
           UNION SELECT t.follow_id,s.slug,t.include_children FROM topics t
@@ -22,7 +23,7 @@ def followed_ids(conn, account_id: str) -> list[str]:
         ) SELECT a.id FROM catalog_activities a
         WHERE a.publication='PUBLISHED' AND a.attendance IN ('OFFLINE','HYBRID')
           AND EXISTS(SELECT 1 FROM genchi_private.follows f WHERE f.account_id=%s
-            AND ((f.target_type='ACTIVITY' AND f.target_id=a.id) OR
+            AND ({DIRECT_FOLLOW_MATCH} OR
               (f.target_type='SUBJECT' AND EXISTS(SELECT 1 FROM catalog_activity_subjects s
                 JOIN topics t ON t.slug=s.subject_slug AND t.follow_id=f.id WHERE s.activity_id=a.id)))
             AND (jsonb_array_length(f.kinds)=0 OR f.kinds ? a.kind)
@@ -101,6 +102,7 @@ def agenda_groups(nodes: list[dict], participation: list[dict], start: date, end
                     "date": point["date"],
                     "activity_id": node["activity_id"],
                     "activity_title": node["activity_title"],
+                    "activity_title_original": node.get("activity_title_original", node["activity_title"]),
                     "activity_kind": node["activity_kind"],
                     "activity_status": node["activity_status"],
                     "actions": [],

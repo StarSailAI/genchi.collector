@@ -151,11 +151,19 @@ services:
       PRODUCT_ADMIN_TOKEN: ${PRODUCT_ADMIN_TOKEN:?Set PRODUCT_ADMIN_TOKEN in .env}
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-http://localhost:13000}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@genchi.local}
+      PRODUCT_PROXY_SECRET: ${PRODUCT_PROXY_SECRET:?Set the same PRODUCT_PROXY_SECRET as genchi.news}
+      AUTH_REGISTRATION_OPEN: ${AUTH_REGISTRATION_OPEN:-true}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURITY: ${SMTP_SECURITY:-none}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-Genchi <hello@genchi.local>}
       RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
     ports: ["127.0.0.1:${PRODUCT_PORT:-18080}:8080"]
     networks: [collector, genchi-data]
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import json,urllib.request; result=json.load(urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)); assert result.get('auth_method') == 'email_code'"]
       interval: 10s
       timeout: 5s
       retries: 6

@@ -19,6 +19,7 @@ dependencies = [
 ]
 
 [project.entry-points."allfeeds.fetchers"]
+aggregator = "genchi_fetchers:AggregatorFetcher"
 x_profile = "genchi_fetchers:XProfileFetcher"
 official_site = "genchi_fetchers:OfficialSiteFetcher"
 asobi_ticket = "genchi_fetchers:AsobiTicketFetcher"

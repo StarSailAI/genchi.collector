@@ -45,6 +45,7 @@ def test_resend_smtp_uses_verified_tls_and_stable_idempotency_key(monkeypatch):
     }.items():
         monkeypatch.setenv(key, value)
     with patch("genchi_product.notifications.smtplib.SMTP_SSL") as smtp:
+        smtp.return_value.__enter__.return_value.send_message.return_value = {}
         smtp_send("recipient@example.test", "A reminder", "Body", "stable-mail-id", "account-id")
     args, kwargs = smtp.call_args
     assert args == ("smtp.resend.com", 465)
@@ -115,6 +116,8 @@ def catalog(monkeypatch):
         runpy.run_path(str(Path("services/normalizer/alembic/versions/0007_inbound_mail.py")))[
             "upgrade"
         ]()
+        runpy.run_path(str(Path("services/normalizer/alembic/versions/0008_email_code_auth.py")))["upgrade"]()
+        runpy.run_path(str(Path("services/normalizer/alembic/versions/0009_account_locale.py")))["upgrade"]()
     with psycopg.connect(DSN, autocommit=True) as conn:
         conn.execute(f'CREATE SCHEMA "{schema}"')
     try:
@@ -188,6 +191,50 @@ def test_date_precision_rejects_invented_clock_and_naive_times():
         Moment(precision="TIME", starts_at=NOW, ends_at=NOW - timedelta(hours=1))
     assert legacy_time(datetime(2030, 1, 1, 15, tzinfo=UTC)).precision == "DATE"
     assert EvidenceInput(excerpt="source", url="javascript:alert(1)").url is None
+
+
+def test_cross_publisher_activity_and_round_merge_preserves_evidence(catalog):
+    first = activity("official:event")
+    first.url = "https://official.test/live/2030"
+    first.milestones[0].url = "https://tickets.test/2030"
+    original = catalog.publish(first, historical=True)
+    second = first.model_copy(deep=True)
+    second.source_key = "publisher:article"
+    second.title = "学園アイドルマスター TEST LIVE チケット情報"
+    second.url += "?utm_source=publisher"
+    second.evidence.source_id = "publisher"
+    second.milestones[0].source_key = "article:round"
+    second.milestones[0].round_key = "先行抽选"
+    second.milestones[0].evidence.source_id = "publisher"
+    assert catalog.publish(second, historical=True) == original
+    assert catalog.publish(second, historical=True) == original
+    with catalog.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) n FROM catalog_activities").fetchone()["n"] == 1
+        assert conn.execute("SELECT COUNT(*) n FROM catalog_occurrences").fetchone()["n"] == 1
+        assert conn.execute("SELECT COUNT(*) n FROM catalog_milestones").fetchone()["n"] == 2
+        assert conn.execute("SELECT COUNT(DISTINCT source_id) n FROM catalog_evidence").fetchone()["n"] == 2
+        assert conn.execute("SELECT COUNT(*) n FROM catalog_external_ids WHERE key LIKE '%article:round'").fetchone()["n"] == 1
+
+
+def test_reused_official_url_does_not_merge_another_edition_or_ticket_product(catalog):
+    first = activity("official:one")
+    first.url = "https://official.test/live/tour"
+    first.milestones[0].url = "https://tickets.test/round"
+    first.milestones[0].details = {"price_jpy": 10000}
+    original = catalog.publish(first, historical=True)
+    second = first.model_copy(deep=True)
+    second.source_key = "publisher:two"
+    second.title = "学園アイドルマスター ANOTHER LIVE"
+    second.time.starts_at += timedelta(days=120)
+    assert catalog.publish(second, historical=True) != original
+    third = first.model_copy(deep=True)
+    third.source_key = "publisher:three"
+    third.milestones[0].source_key = "vip-round"
+    third.milestones[0].round_key = "VIP"
+    third.milestones[0].details = {"price_jpy": 20000}
+    assert catalog.publish(third, historical=True) == original
+    with catalog.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) n FROM catalog_milestones WHERE activity_id=%s AND kind='TICKET'", (original,)).fetchone()["n"] == 2
 
 
 def test_replay_timezone_correction_and_year_identity(catalog):
@@ -383,8 +430,10 @@ def test_payment_requires_explicit_same_round_win(catalog):
         assert render_mail(conn, job, user, NOW)
 
 
-def test_auth_tokens_once_csrf_and_private_isolation(catalog):
-    client = TestClient(create_app(catalog))
+def test_auth_tokens_once_csrf_and_private_isolation(catalog, monkeypatch):
+    sent = []
+    monkeypatch.setattr("genchi_product.auth.smtp_send", lambda *args, **kwargs: sent.append(args))
+    client = TestClient(create_app(catalog), headers={"Origin": "http://localhost:13000"})
     assert client.get("/me").status_code == 401
     assert client.get("/admin/reviews").status_code == 401
     assert (
@@ -396,13 +445,10 @@ def test_auth_tokens_once_csrf_and_private_isolation(catalog):
         == 403
     )
     assert client.post("/auth/login", json={"email": "one@example.test"}).status_code == 200
-    with catalog.connect() as conn:
-        raw = conn.execute(
-            "SELECT payload FROM genchi_private.mail_queue WHERE kind='LOGIN'"
-        ).fetchone()["payload"]["text"]
-        token = re.search(r"token=([\w-]+)", raw).group(1)
-    assert client.post("/auth/verify", json={"token": token}).status_code == 200
-    assert client.post("/auth/verify", json={"token": token}).status_code == 400
+    code = re.search(r"\b[0-9]{6}\b", sent[0][2]).group(0)
+    body = {"email": "one@example.test", "code": code}
+    assert client.post("/auth/verify", json=body).status_code == 200
+    assert client.post("/auth/verify", json=body).status_code == 400
     assert client.get("/me").json()["email"] == "one@example.test"
     assert client.get("/admin/reviews").status_code == 403
     own = client.put("/me/follows", json={"target_type": "SUBJECT", "target_id": "gakumas"}).json()[
@@ -438,7 +484,7 @@ def test_calendar_keeps_in_month_deadline_for_earlier_window(catalog):
         precision="TIME", starts_at=NOW - timedelta(days=10), ends_at=NOW + timedelta(days=2)
     )
     catalog.publish(item)
-    response = TestClient(create_app(catalog)).get(
+    response = TestClient(create_app(catalog), headers={"Origin": "http://localhost:13000"}).get(
         "/calendar", params={"from_date": "2030-06-01", "to_date": "2030-07-01"}
     )
     assert response.status_code == 200
@@ -660,7 +706,7 @@ def test_official_grouping_merges_legacy_sessions_and_keeps_links(catalog):
             conn.execute("SELECT target_id FROM genchi_private.follows").fetchone()["target_id"]
             == old_one
         )
-    response = TestClient(create_app(catalog)).get("/activities/" + old_two)
+    response = TestClient(create_app(catalog), headers={"Origin": "http://localhost:13000"}).get("/activities/" + old_two)
     assert response.status_code == 200
     assert response.json()["id"] == old_one
     assert len(response.json()["milestones"]) >= 3
@@ -697,7 +743,7 @@ def test_discovery_orders_future_opening_before_later_deadline(catalog):
     )
     first_id = catalog.publish(first)
     second_id = catalog.publish(second)
-    result = TestClient(create_app(catalog)).get("/activities").json()["items"]
+    result = TestClient(create_app(catalog), headers={"Origin": "http://localhost:13000"}).get("/activities").json()["items"]
     assert [a["id"] for a in result] == [first_id, second_id]
 
 
@@ -709,7 +755,7 @@ def agenda_client(catalog, account_id="agenda-user"):
             "INSERT INTO genchi_private.sessions VALUES(%s,%s,NOW()+INTERVAL '1 hour')",
             (digest(token), account_id),
         )
-    client = TestClient(create_app(catalog))
+    client = TestClient(create_app(catalog), headers={"Origin": "http://localhost:13000"})
     client.cookies.set("genchi_session", token)
     return client
 
@@ -832,7 +878,7 @@ def test_agenda_progress_is_round_scoped_resettable_and_private(catalog):
     )
     assert {a["node"]["kind"] for a in actions()} == {"TICKET", "RESULT", "PAYMENT"}
     assert all(a["participation"] is None for a in actions())
-    assert TestClient(create_app(catalog)).get("/me/agenda", params=params).status_code == 401
+    assert TestClient(create_app(catalog), headers={"Origin": "http://localhost:13000"}).get("/me/agenda", params=params).status_code == 401
     assert client.get("/me/agenda", params={**params, "to_date": "2030-08-01"}).status_code == 422
     with catalog.connect() as conn:
         conn.execute("UPDATE genchi_private.accounts SET unsubscribed=TRUE")
@@ -848,7 +894,7 @@ def test_discovery_filters_event_dates_and_city_on_same_occurrence(catalog):
     second.city = "Osaka"
     second.time = Moment(precision="DATE", starts_on="2030-06-10", ends_on="2030-06-12")
     assert catalog.publish(second) == first_id
-    client = TestClient(create_app(catalog))
+    client = TestClient(create_app(catalog), headers={"Origin": "http://localhost:13000"})
 
     def ids(**params):
         response = client.get("/activities", params=params)
@@ -991,7 +1037,7 @@ def test_names_backfill_preserves_identity_facts_notifications_and_replay(catalo
         assert (
             conn.execute("SELECT count(*) n FROM catalog_name_history").fetchone()["n"] == history
         )
-    client = TestClient(create_app(catalog))
+    client = TestClient(create_app(catalog), headers={"Origin": "http://localhost:13000"})
     for q in ["学園アイドルマスター", "学园偶像大师"]:
         assert client.get("/activities", params={"q": q, "view": "all"}).json()["total"] == 1
     assert client.get("/activities/" + aid).json()["milestones"][0]["title_zh"]
@@ -1007,7 +1053,7 @@ def test_name_editor_requires_admin_rejects_stale_source_and_survives_replay(cat
     item = activity()
     item.title = "知らない祭典"
     aid = catalog.publish(item)
-    client = TestClient(create_app(catalog))
+    client = TestClient(create_app(catalog), headers={"Origin": "http://localhost:13000"})
     payload = dict(
         entity_type="ACTIVITY", entity_id=aid, source_text=item.title, display_text="祭典专名"
     )

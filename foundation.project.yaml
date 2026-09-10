@@ -1,0 +1,52 @@
+schema_version: 1.0.0
+project:
+  name: genchi
+  environment: existing
+  backend_stack: python-fastapi-sqlalchemy
+  frontend_stack: nextjs
+  public_origin: https://genchi.news
+modules:
+  core-web:
+    enabled: true
+    spec_version: 0.1.0
+  session:
+    enabled: true
+    spec_version: 0.1.0
+    transport: cookie
+    duration_days: 30
+  email:
+    enabled: true
+    spec_version: 0.2.0
+    provider: smtp
+    delivery_mode: hybrid
+  auth:
+    enabled: true
+    spec_version: 0.1.0
+    mode: passwordless-email
+    identity_owner: local
+    registration_policy: open
+    captcha_policy: none
+decisions:
+  accepted_defaults:
+    - auth.mode
+    - auth.identity_owner
+    - auth.registration_policy
+    - auth.email_code.ttl_minutes
+    - session.transport
+    - session.duration_days
+    - session.cookie.same_site
+    - session.cookie.domain_scope
+    - email.global_quota_policy
+  overrides:
+    - decision: auth.captcha_policy
+      value: none
+      reason: Reuse shared PostgreSQL email, source, verification and global quotas with signed proxy attribution; no new external captcha dependency.
+      approved_by: implementation-default
+    - decision: email.provider
+      value: smtp
+      reason: Preserve the existing SMTP adapter and isolated Mailpit acceptance environment.
+      approved_by: existing-project-configuration
+    - decision: email.delivery_mode
+      value: hybrid
+      reason: Authentication waits for SMTP acceptance; existing activity notifications retain their durable outbox.
+      approved_by: implementation-default
