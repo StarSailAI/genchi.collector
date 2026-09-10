@@ -867,21 +867,33 @@ def test_multiple_node_updates_are_bundled_per_activity(catalog):
         assert jobs[0]["due_at"] == NOW + timedelta(minutes=5)
 
 
-def test_discovery_orders_future_opening_before_later_deadline(catalog):
+def test_discovery_supports_nearest_event_action_and_recent_orders(catalog):
     first = activity("first")
     first.title = "First ticket opens earlier"
+    first.time = Moment(precision="TIME", starts_at=NOW + timedelta(days=30))
     first.milestones[0].time = Moment(
         precision="TIME", starts_at=NOW + timedelta(days=1), ends_at=NOW + timedelta(days=10)
     )
     second = activity("second")
     second.title = "Second ticket opens later"
+    second.time = Moment(precision="TIME", starts_at=NOW + timedelta(days=20))
     second.milestones[0].time = Moment(
         precision="TIME", starts_at=NOW + timedelta(days=2), ends_at=NOW + timedelta(days=5)
     )
     first_id = catalog.publish(first)
     second_id = catalog.publish(second)
-    result = TestClient(create_app(catalog), headers={"Origin": "http://localhost:13000"}).get("/activities").json()["items"]
-    assert [a["id"] for a in result] == [first_id, second_id]
+    client = TestClient(create_app(catalog), headers={"Origin": "http://localhost:13000"})
+    nearest = client.get("/activities").json()["items"]
+    assert [a["id"] for a in nearest] == [second_id, first_id]
+    action = client.get("/activities", params={"sort": "action"}).json()["items"]
+    assert [a["id"] for a in action] == [first_id, second_id]
+    with catalog.connect() as conn:
+        conn.execute(
+            "UPDATE catalog_activities SET updated_at=NOW()+INTERVAL '1 hour' WHERE id=%s",
+            (first_id,),
+        )
+    recent = client.get("/activities", params={"sort": "recent"}).json()["items"]
+    assert [a["id"] for a in recent] == [first_id, second_id]
 
 
 def agenda_client(catalog, account_id="agenda-user"):

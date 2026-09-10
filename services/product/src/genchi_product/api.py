@@ -322,7 +322,7 @@ def create_app(catalog: Catalog | None = None):
         kind: str = "",
         city: str = "",
         view: str = "upcoming",
-        sort: str = "action",
+        sort: str = "event",
         page: int = Query(1, ge=1, le=10000),
         limit: int = Query(24, ge=1, le=100),
         from_date: date | None = None,
@@ -371,9 +371,11 @@ def create_app(catalog: Catalog | None = None):
                     "(NOT EXISTS(SELECT 1 FROM catalog_occurrences o WHERE o.activity_id=a.id) OR EXISTS(SELECT 1 FROM catalog_occurrences o WHERE o.activity_id=a.id AND (o.precision='TBD' OR COALESCE(o.ends_at,o.ends_on::timestamptz,o.starts_at,o.starts_on::timestamptz)>=date_trunc('day',NOW() AT TIME ZONE 'Asia/Tokyo') AT TIME ZONE 'Asia/Tokyo')))"
                 )
             where = " AND ".join(clauses)
-            order = {"recent": "a.updated_at DESC,a.id", "event": "event_on NULLS LAST,a.id"}.get(
-                sort, "action_at NULLS LAST,a.updated_at DESC,a.id"
-            )
+            order = {
+                "recent": "a.updated_at DESC,a.id",
+                "event": "event_on NULLS LAST,a.id",
+                "action": "action_at NULLS LAST,a.updated_at DESC,a.id",
+            }.get(sort, "event_on NULLS LAST,a.id")
             total = conn.execute(
                 f"SELECT count(*) AS count FROM catalog_activities a WHERE {where}", params
             ).fetchone()["count"]
