@@ -61,6 +61,71 @@ def audit(catalog: Catalog, limit: int = 50) -> dict:
     return result
 
 
+def official_link_candidates(conn) -> list[dict]:
+    """Exact official-title matches whose complete extracted date set already exists."""
+    return conn.execute("""
+        WITH candidates AS (
+          SELECT r.url AS source_url,r.external_id,r.content_hash,r.content,
+            rv.payload->'activity'->>'title' AS title,
+            COALESCE((rv.payload->'activity'->'time'->>'starts_on')::date,
+              ((rv.payload->'activity'->'time'->>'starts_at')::timestamptz
+                AT TIME ZONE 'Asia/Tokyo')::date) AS event_day
+          FROM catalog_reviews rv JOIN allfeeds.resources r ON r.id=rv.resource_id
+          WHERE r.source_id='bang-dream-events' AND rv.status='PENDING'
+        ), matches AS (
+          SELECT a.id,a.title,a.official_url,c.*,
+            EXISTS(SELECT 1 FROM catalog_occurrences o
+              WHERE o.activity_id=a.id AND o.status<>'SUPERSEDED'
+              AND c.event_day BETWEEN
+                COALESCE(o.starts_on,(o.starts_at AT TIME ZONE 'Asia/Tokyo')::date)
+                AND COALESCE(o.ends_on,(o.ends_at AT TIME ZONE 'Asia/Tokyo')::date,
+                  o.starts_on,(o.starts_at AT TIME ZONE 'Asia/Tokyo')::date)) AS day_matches
+          FROM candidates c JOIN catalog_activities a
+            ON a.title=c.title AND a.publication='PUBLISHED'
+          WHERE a.official_url ~* '^https?://([^/]+\\.)?bandori\\.fans/'
+            AND c.event_day IS NOT NULL
+        )
+        SELECT id,title,official_url AS previous_url,max(source_url) AS source_url,
+          max(external_id) AS external_id,max(content_hash) AS content_hash,
+          left(max(content),4000) AS excerpt,
+          array_agg(DISTINCT event_day::text ORDER BY event_day::text) AS dates
+        FROM matches GROUP BY id,title,official_url
+        HAVING bool_and(day_matches)
+          AND count(DISTINCT source_url)=1
+        ORDER BY title
+    """).fetchall()
+
+
+def repair_community_links(catalog: Catalog, *, apply: bool) -> dict:
+    """Replace a community canonical URL only after an exact official title/date match."""
+    with catalog.connect() as conn, conn.transaction():
+        candidates = official_link_candidates(conn)
+        result = {"count": len(candidates), "candidates": candidates, "applied": apply}
+        if not apply:
+            return result
+        for candidate in candidates:
+            evidence_id = fingerprint(
+                f"{candidate['id']}|official-link|{candidate['source_url']}|{candidate['content_hash']}"
+            )
+            conn.execute("""
+                INSERT INTO catalog_evidence(id,activity_id,source_id,external_id,version_hash,
+                  url,excerpt,field_path,method,verified)
+                VALUES(%s,%s,'bang-dream-events',%s,%s,%s,%s,'official_url',
+                  'rule:official-exact-title-date',TRUE)
+                ON CONFLICT(id) DO UPDATE SET verified=TRUE,observed_at=NOW()
+            """, (evidence_id,candidate["id"],candidate["external_id"],candidate["content_hash"],
+                    candidate["source_url"],candidate["excerpt"]))
+            conn.execute("UPDATE catalog_activities SET official_url=%s,updated_at=NOW() WHERE id=%s",
+                         (candidate["source_url"],candidate["id"]))
+            conn.execute("""INSERT INTO catalog_changes(
+                activity_id,kind,summary,before_value,after_value,notify)
+                VALUES(%s,'DATA_REPAIRED','以标题及完整日期集合匹配的官方活动页替换社区链接',%s,%s,FALSE)""",
+                (candidate["id"],Jsonb({"official_url":candidate["previous_url"]}),
+                 Jsonb({"official_url":candidate["source_url"],"dates":candidate["dates"],
+                        "evidence_id":evidence_id})))
+        return result
+
+
 def repair_aniera(catalog: Catalog, *, apply: bool) -> dict:
     """Repair the reviewed golden case without broad or title-only deletion."""
     with catalog.connect() as conn, conn.transaction():
@@ -128,9 +193,16 @@ def main() -> None:
     audit_parser.add_argument("--limit", type=int, default=50)
     repair_parser = sub.add_parser("repair-aniera")
     repair_parser.add_argument("--apply", action="store_true")
+    links_parser = sub.add_parser("repair-community-links")
+    links_parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
     catalog = Catalog()
-    result = audit(catalog, args.limit) if args.command == "audit" else repair_aniera(catalog, apply=args.apply)
+    if args.command == "audit":
+        result = audit(catalog, args.limit)
+    elif args.command == "repair-aniera":
+        result = repair_aniera(catalog, apply=args.apply)
+    else:
+        result = repair_community_links(catalog, apply=args.apply)
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
 
 

@@ -54,3 +54,16 @@ It replaces the community URL with the organizer URL, records RAISE A SUILEN as 
 verified BanG Dream performer relation, and supersedes shuttle transport mistakenly modeled as
 festival occurrences. Superseded occurrences and their orphaned milestones remain in the database
 for provenance but are hidden from public presentation.
+
+The conservative historical link repair only considers published activities whose canonical URL is
+still on `bandori.fans`. It requires an exact title match to a collected BanG Dream official event
+page and requires every extracted official date to be covered by an existing active occurrence.
+The preview and apply commands are:
+
+```bash
+python -m genchi_product.quality repair-community-links
+python -m genchi_product.quality repair-community-links --apply
+```
+
+This rule replaces the canonical link and adds verified official evidence. It leaves the detailed
+candidate in review and does not infer performer or ownership relations.
