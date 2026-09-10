@@ -96,7 +96,11 @@ allfeeds-control config-validate --sources config/sources.yaml
 - 参与状态未记录时，结果 / 付款事项带条件提示；记录申请、中选或购票后，已完成的相应事项不再占据个人日程。邮件发送前执行同样的轮次判断；修改另一轮不会抑制本轮提醒。DELETE `/me/participation/{id}?round_key=...` 可恢复为未记录。
 - `/calendar` 保留 ICS 使用的节点读取接口，新增 `total/page/limit`。网站循环取完分页，不静默截取前 2,000 项。
 
-上述读取 API 与参与状态撤销沿用原有表结构；当前完整版本包含名称规范、收信转发、邮箱验证码登录、账户语言与采集日报迁移，SchemaContract 为 1.7。
+上述读取 API 与参与状态撤销沿用原有表结构；当前完整版本包含名称规范、收信转发、邮箱验证码登录、账户语言、采集日报、Agent API 与系列关联证据，SchemaContract 为 1.9。
+
+## 系列关联证据（SchemaContract 1.9）
+
+`catalog_activity_subjects` 除筛选关系外，还保存关联类型、出演者或合作方、适用日期或场次、证据及核验状态。综合音乐节可因某一组合出演而与作品系列相关，但不会因此被误写为该系列直属活动。历史关系保持未核验，逐步通过官方公告补证。
 
 ## 名称规范（SchemaContract 1.3）
 

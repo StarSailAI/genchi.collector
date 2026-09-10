@@ -5,6 +5,7 @@ import json
 import re
 import time
 import unicodedata
+import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from html import unescape
@@ -2220,6 +2221,7 @@ class OfficialSiteConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     start_urls: tuple[str, ...]
+    sitemap_urls: tuple[str, ...] = ()
     link_pattern: str
     list_item_selector: str | None = None
     detail_link_selector: str = "a[href]"
@@ -2236,6 +2238,7 @@ class OfficialSiteConfig(BaseModel):
     max_pages: int = Field(default=2, ge=1, le=20)
     backfill_max_pages: int = Field(default=30, ge=1, le=100)
     max_items: int = Field(default=100, ge=1, le=5000)
+    resource_kind: str = "official_news"
 
     @field_validator("start_urls")
     @classmethod
@@ -2270,7 +2273,9 @@ class OfficialSiteFetcher(FetcherPlugin):
     ) -> FetchReport:
         config = OfficialSiteConfig.model_validate(request.config)
         pattern = re.compile(config.link_pattern)
-        allowed_hosts = tuple(sorted({urlsplit(url).hostname or "" for url in config.start_urls}))
+        allowed_hosts = tuple(sorted({
+            urlsplit(url).hostname or "" for url in (*config.start_urls, *config.sitemap_urls)
+        }))
         direct = SafeHttpClient(
             user_agent="GenchiCollector/0.1 (+https://genchi.news)",
             timeout_seconds=45,
@@ -2294,6 +2299,27 @@ class OfficialSiteFetcher(FetcherPlugin):
         pending = list(config.start_urls)
         visited_pages: set[str] = set()
         detail_urls: list[str] = []
+        sitemap_dates: dict[str, datetime] = {}
+        for sitemap_url in config.sitemap_urls:
+            response = direct.get(
+                sitemap_url,
+                allowed_content_types=("application/xml", "text/xml", "application/xhtml+xml"),
+            )
+            try:
+                root = ET.fromstring(response.text)
+            except ET.ParseError as exc:
+                raise TransientError(f"invalid official sitemap: {sitemap_url}") from exc
+            for node in root.findall("{*}url"):
+                location = node.findtext("{*}loc", "").strip()
+                if not location or not pattern.search(location):
+                    continue
+                if location not in detail_urls:
+                    detail_urls.append(location)
+                modified = _time(node.findtext("{*}lastmod", "").strip())
+                if modified:
+                    sitemap_dates[location] = modified
+                if len(detail_urls) >= config.max_items:
+                    break
         while pending and len(visited_pages) < max_pages and len(detail_urls) < config.max_items:
             page_url = pending.pop(0)
             if page_url in visited_pages:
@@ -2352,6 +2378,9 @@ class OfficialSiteFetcher(FetcherPlugin):
                 published_on = published_at.date().isoformat()
             else:
                 published_at = _time(published_raw)
+            published_at = published_at or sitemap_dates.get(detail_url)
+            if not published_on and detail_url in sitemap_dates and published_at:
+                published_on = published_at.date().isoformat()
             # Keep the source heading/date with its own body. Exclude related
             # articles/navigation via source-specific content selectors.
             content = "\n".join(value for value in (title, published_on, content) if value)
@@ -2363,11 +2392,21 @@ class OfficialSiteFetcher(FetcherPlugin):
             cover = _meta(soup, "og:image", "twitter:image")
             if cover:
                 media.append({"type": "image", "url": urljoin(final_url, cover)})
+            body = soup.select_one(config.content_selector) or soup.select_one("main")
+            outbound_links = []
+            if body:
+                for link in body.select("a[href]"):
+                    href = urljoin(final_url, str(link.get("href") or ""))
+                    if href.startswith(("https://", "http://")):
+                        outbound_links.append({
+                            "url": href,
+                            "label": link.get_text(" ", strip=True)[:500],
+                        })
             external_id = hashlib.sha256(final_url.encode()).hexdigest()
             context.emit(
                 ResourceRecord(
                     external_id=f"web:{external_id}",
-                    kind="official_news",
+                    kind=config.resource_kind,
                     url=final_url,
                     title=title,
                     content=content,
@@ -2378,6 +2417,7 @@ class OfficialSiteFetcher(FetcherPlugin):
                     attributes={
                         "media": media,
                         "source_type": "official_site",
+                        "outbound_links": outbound_links,
                         "published_precision": "DATE" if published_on else "TIME" if published_at else "TBD",
                         "published_on": published_on,
                     },
@@ -2386,7 +2426,8 @@ class OfficialSiteFetcher(FetcherPlugin):
             )
         return FetchReport(
             details={
-                "list_pages": len(visited_pages), "detail_urls": len(detail_urls),
+                "list_pages": len(visited_pages), "sitemaps": len(config.sitemap_urls),
+                "detail_urls": len(detail_urls),
                 "missing_details": missing_details,
             }
         )

@@ -145,6 +145,17 @@ class EvidenceInput(BaseModel):
         return canonical_url(value)
 
 
+class SubjectRelationInput(BaseModel):
+    """A source-grounded reason that an activity is relevant to a subject."""
+
+    model_config = ConfigDict(extra="forbid")
+    subject_slug: str = Field(min_length=1, max_length=200)
+    relation_kind: Literal["DIRECT", "PERFORMER", "COLLABORATION", "CAST", "SOURCE_SCOPE"]
+    participant_name: str | None = Field(default=None, max_length=500)
+    scope_note: str | None = Field(default=None, max_length=500)
+    evidence: EvidenceInput
+
+
 class MilestoneInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_key: str
@@ -182,6 +193,7 @@ class ActivityInput(BaseModel):
     summary: str | None = None
     url: str | None = None
     subject_slugs: list[str] = Field(default_factory=list)
+    subject_relations: list[SubjectRelationInput] = Field(default_factory=list)
     time: Moment = Field(default_factory=Moment)
     occurrence_key: str | None = None
     venue: str | None = None
@@ -198,4 +210,7 @@ class ActivityInput(BaseModel):
         self.url = canonical_url(self.url)
         if online_only(self.title):
             self.attendance = "ONLINE"
+        self.subject_slugs = list(dict.fromkeys(
+            [*self.subject_slugs, *(relation.subject_slug for relation in self.subject_relations)]
+        ))
         return self

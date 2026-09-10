@@ -70,12 +70,13 @@ def hydrate(conn, rows):
         return []
     ids = [row["id"] for row in rows]
     subjects = conn.execute(
-        """SELECT l.activity_id,s.* FROM catalog_activity_subjects l
+        """SELECT l.activity_id,l.relation_kind,l.participant_name,l.scope_note,
+        l.evidence_id,l.verified AS relation_verified,s.* FROM catalog_activity_subjects l
         JOIN catalog_subjects s ON s.slug=l.subject_slug WHERE l.activity_id=ANY(%s)""",
         (ids,),
     ).fetchall()
     occurrences = conn.execute(
-        "SELECT * FROM catalog_occurrences WHERE activity_id=ANY(%s) ORDER BY COALESCE(starts_at,starts_on::timestamptz) NULLS LAST",
+        "SELECT * FROM catalog_occurrences WHERE activity_id=ANY(%s) AND status<>'SUPERSEDED' ORDER BY COALESCE(starts_at,starts_on::timestamptz) NULLS LAST",
         (ids,),
     ).fetchall()
     nodes = conn.execute(
@@ -267,9 +268,9 @@ def create_app(catalog: Catalog | None = None):
             contract = conn.execute(
                 'SELECT major,minor FROM "SchemaContract" WHERE id=1'
             ).fetchone()
-            ready = bool(contract and contract["major"] == 1 and contract["minor"] >= 8)
+            ready = bool(contract and contract["major"] == 1 and contract["minor"] >= 9)
             if not ready:
-                raise HTTPException(503, "Catalog schema 1.8 required")
+                raise HTTPException(503, "Catalog schema 1.9 required")
             return {
                 "ok": True,
                 "schema": f"{contract['major']}.{contract['minor']}",

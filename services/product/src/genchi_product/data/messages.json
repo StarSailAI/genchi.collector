@@ -12,6 +12,36 @@
     "Your next spark, see you there.",
     "次のときめきに、現地で会おう。"
   ],
+  "支持主流 Agent 接入": [
+    "支援主流 Agent 接入",
+    "Works with leading Agents",
+    "主要な Agent に対応"
+  ],
+  "Codex · Claude Code · OpenClaw · Hermes 等": [
+    "Codex · Claude Code · OpenClaw · Hermes 等",
+    "Codex · Claude Code · OpenClaw · Hermes and more",
+    "Codex · Claude Code · OpenClaw · Hermes など"
+  ],
+  "喜欢的每一步，都不会错过。": [
+    "喜歡的每一步，都不會錯過。",
+    "Never miss what comes next.",
+    "好きを追う、その一歩も見逃さない。"
+  ],
+  "“我会在东京停留三天，帮我安排可以参加的活动。”": [
+    "「我會在東京停留三天，幫我安排可以參加的活動。」",
+    "“I’ll be in Tokyo for three days. Find events I can attend.”",
+    "「東京に3日間滞在するので、参加できるイベントを組んで。」"
+  ],
+  "“整理我关注的活动，在开售和截止前提醒我。”": [
+    "「整理我關注的活動，在開售和截止前提醒我。」",
+    "“Organize the events I follow and remind me before sales and deadlines.”",
+    "「フォロー中のイベントを整理して、発売や締切の前に教えて。」"
+  ],
+  "“关注这个系列，有新活动或票务截止时提醒我。”": [
+    "「關注這個系列，有新活動或票務截止時提醒我。」",
+    "“Follow this series and alert me about new events and ticket deadlines.”",
+    "「このシリーズをフォローして、新着イベントやチケット締切を教えて。」"
+  ],
   "跳转到主要内容": ["跳至主要內容", "Skip to content", "本文へスキップ"],
   "主要导航": ["主要導覽", "Main navigation", "メインナビゲーション"],
   "首页": ["首頁", "Home", "ホーム"],
@@ -794,6 +824,8 @@
   "全部记录": ["全部紀錄", "All records", "すべての記録"],
   "最近更新 ↓": ["最近更新 ↓", "Recently updated ↓", "更新順 ↓"],
   "按最近更新": ["按最近更新", "Sort by latest update", "更新順で表示"],
+  "时间最近": ["時間最近", "Nearest date", "開催日が近い順"],
+  "最新更新": ["最新更新", "Latest updates", "更新が新しい順"],
   "请输入有效的日期，结束日期不能早于开始日期。": [
     "請輸入有效日期，結束日期不能早於開始日期。",
     "Enter valid dates. The end date must not be before the start date.",
@@ -1598,9 +1630,97 @@
     "原文（簡体字中国語）"
   ],
   "邮件语言": ["郵件語言", "Email language", "メールの言語"],
+  "今天抓取到新的时间": [
+    "今天擷取到新的時間",
+    "New schedule information collected today",
+    "本日、新しい日時情報を取得"
+  ],
   "用于活动提醒邮件，网站语言可在页眉切换。": [
     "用於活動提醒郵件，網站語言可在頁首切換。",
     "Used for event reminder emails. Change the website language in the header.",
     "イベント通知メールに使用します。サイトの言語はヘッダーで切り替えられます。"
-  ]
+  ],
+  "告诉你的 Agent": ["告訴你的 Agent", "Tell your Agent", "Agent に伝える"],
+  "“关注学园偶像大师，有新活动或票务截止时提醒我。”": [
+    "「關注學園偶像大師，有新活動或票務截止時提醒我。」",
+    "“Follow Gakuen IDOLM@STER and alert me about new events or ticket deadlines.”",
+    "「学園アイドルマスターをフォローして、新しいイベントやチケット締切を知らせて。」"
+  ],
+  "连接我的 Agent": ["連接我的 Agent", "Connect my Agent", "Agent を接続"],
+  "让喜欢的消息主动来找你": [
+    "讓喜歡的消息主動來找你",
+    "Let updates about what you love come to you",
+    "好きなものの情報を、向こうから"
+  ],
+  "连接 Genchi，让你的 Agent 查询最新活动、管理订阅，并留意售票、抽选和开演时间。": [
+    "連接 Genchi，讓你的 Agent 查詢最新活動、管理訂閱，並留意售票、抽選和開演時間。",
+    "Connect Genchi so your Agent can find new events, manage subscriptions, and watch ticket, lottery, and show times.",
+    "Genchi に接続すると、Agent が最新イベントや購読を管理し、販売・抽選・開演日時を確認できます。"
+  ],
+  "你可以对 Agent 说": [
+    "你可以對 Agent 說",
+    "You can tell your Agent",
+    "Agent にはこう伝えられます"
+  ],
+  "“关注学园偶像大师。每天告诉我新活动和即将截止的票务安排。”": [
+    "「關注學園偶像大師。每天告訴我新活動和即將截止的票務安排。」",
+    "“Follow Gakuen IDOLM@STER. Tell me daily about new events and ticket deadlines.”",
+    "「学園アイドルマスターをフォローして、新しいイベントと締切間近のチケット情報を毎日教えて。」"
+  ],
+  "连接你的 Agent": ["連接你的 Agent", "Connect your Agent", "Agent を接続"],
+  "支持远程 MCP 与 REST API。完整密钥只会在创建时显示一次。": [
+    "支援遠端 MCP 與 REST API。完整密鑰只會在建立時顯示一次。",
+    "Supports remote MCP and REST API. The full key is shown only once when created.",
+    "リモート MCP と REST API に対応しています。完全なキーは作成時に一度だけ表示されます。"
+  ],
+  "密钥名称": ["密鑰名稱", "Key name", "キー名"],
+  "例如：我的 OpenClaw": [
+    "例如：我的 OpenClaw",
+    "For example: My OpenClaw",
+    "例：自分の OpenClaw"
+  ],
+  "创建中…": ["建立中…", "Creating…", "作成中…"],
+  "创建 API Key": ["建立 API Key", "Create API key", "API Key を作成"],
+  "请立即保存这枚密钥": [
+    "請立即儲存這枚密鑰",
+    "Save this key now",
+    "このキーを今すぐ保存してください"
+  ],
+  "关闭后无法再次查看；遗失时请撤销并创建新密钥。": [
+    "關閉後無法再次查看；遺失時請撤銷並建立新密鑰。",
+    "You cannot view it again after closing. Revoke and create a new key if it is lost.",
+    "閉じると再表示できません。紛失した場合は取り消して新しいキーを作成してください。"
+  ],
+  "已复制": ["已複製", "Copied", "コピーしました"],
+  "复制密钥": ["複製密鑰", "Copy key", "キーをコピー"],
+  "查看 MCP 接入配置": [
+    "查看 MCP 接入設定",
+    "View MCP setup",
+    "MCP 接続設定を見る"
+  ],
+  "将密钥保存为环境变量 GENCHI_API_KEY，然后连接以下地址：": [
+    "將密鑰儲存為環境變數 GENCHI_API_KEY，然後連接以下位址：",
+    "Save the key as GENCHI_API_KEY, then connect to this address:",
+    "キーを環境変数 GENCHI_API_KEY に保存し、次のアドレスへ接続してください："
+  ],
+  "我的 API Key": ["我的 API Key", "My API keys", "自分の API Key"],
+  "已撤销": ["已撤銷", "Revoked", "取り消し済み"],
+  "已连接": ["已連接", "Connected", "接続済み"],
+  "尚未使用": ["尚未使用", "Not used yet", "未使用"],
+  "撤销": ["撤銷", "Revoke", "取り消す"],
+  "还没有连接 Agent。": [
+    "尚未連接 Agent。",
+    "No Agent connected yet.",
+    "まだ Agent が接続されていません。"
+  ],
+  "API Key 暂时无法加载": [
+    "暫時無法載入 API Key",
+    "API keys are temporarily unavailable",
+    "API Key を一時的に読み込めません"
+  ],
+  "因 {participant} 出演而与 {subject} 相关": ["因 {participant} 出演而與 {subject} 相關","Related to {subject} through a performance by {participant}","{participant}の出演により{subject}に関連"],
+  "因 {participant} 参与而与 {subject} 相关": ["因 {participant} 參與而與 {subject} 相關","Related to {subject} through the participation of {participant}","{participant}の参加により{subject}に関連"],
+  "与 {subject} 的联动活动": ["與 {subject} 的聯動活動","A collaboration with {subject}","{subject}とのコラボイベント"],
+  "相关成员": ["相關成員","a related member","関連メンバー"],
+  "官方信息已核验": ["官方資訊已核驗","Verified against official information","公式情報で確認済み"]
 }

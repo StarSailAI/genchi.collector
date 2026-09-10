@@ -50,7 +50,7 @@ class Catalog:
         )
 
     @staticmethod
-    def evidence(conn, activity_id: str, value: EvidenceInput, milestone_id: str | None = None):
+    def evidence(conn, activity_id: str, value: EvidenceInput, milestone_id: str | None = None) -> str:
         evidence_id = fingerprint(
             "|".join(
                 [
@@ -86,6 +86,7 @@ class Catalog:
                 value.observed_at or datetime.now(UTC),
             ),
         )
+        return evidence_id
 
     @staticmethod
     def change(conn, activity_id, milestone_id, kind, summary, before, after, historical):
@@ -231,13 +232,34 @@ class Catalog:
                     "UPDATE catalog_activities SET title=%s,revision=revision+1,updated_at=NOW() WHERE id=%s",
                     (item.title, activity_id),
                 )
+        activity_evidence_id = self.evidence(conn, activity_id, item.evidence)
+        relations = {relation.subject_slug: relation for relation in item.subject_relations}
         for slug in item.subject_slugs:
-            conn.execute(
-                """INSERT INTO catalog_activity_subjects(activity_id,subject_slug)
-                SELECT %s,slug FROM catalog_subjects WHERE slug=%s ON CONFLICT DO NOTHING""",
-                (activity_id, slug),
+            relation = relations.get(slug)
+            relation_evidence_id = (
+                self.evidence(conn, activity_id, relation.evidence) if relation else activity_evidence_id
             )
-        self.evidence(conn, activity_id, item.evidence)
+            conn.execute(
+                """INSERT INTO catalog_activity_subjects(
+                    activity_id,subject_slug,relation_kind,participant_name,scope_note,evidence_id,verified)
+                SELECT %s,slug,%s,%s,%s,%s,%s FROM catalog_subjects WHERE slug=%s
+                ON CONFLICT(activity_id,subject_slug) DO UPDATE SET
+                  relation_kind=EXCLUDED.relation_kind,
+                  participant_name=EXCLUDED.participant_name,
+                  scope_note=EXCLUDED.scope_note,
+                  evidence_id=EXCLUDED.evidence_id,
+                  verified=EXCLUDED.verified
+                WHERE EXCLUDED.verified OR NOT catalog_activity_subjects.verified""",
+                (
+                    activity_id,
+                    relation.relation_kind if relation else "SOURCE_SCOPE",
+                    relation.participant_name if relation else None,
+                    relation.scope_note if relation else None,
+                    relation_evidence_id,
+                    relation.evidence.verified if relation else item.evidence.verified,
+                    slug,
+                ),
+            )
         occurrence_id = None
         if item.occurrence_key:
             clock = (
@@ -552,7 +574,17 @@ class Catalog:
             (old_id,),
         )
         conn.execute(
-            "INSERT INTO catalog_activity_subjects SELECT %s,subject_slug FROM catalog_activity_subjects WHERE activity_id=%s ON CONFLICT DO NOTHING",
+            """INSERT INTO catalog_activity_subjects(
+                activity_id,subject_slug,relation_kind,participant_name,scope_note,evidence_id,verified)
+            SELECT %s,subject_slug,relation_kind,participant_name,scope_note,evidence_id,verified
+            FROM catalog_activity_subjects WHERE activity_id=%s
+            ON CONFLICT(activity_id,subject_slug) DO UPDATE SET
+              relation_kind=EXCLUDED.relation_kind,
+              participant_name=EXCLUDED.participant_name,
+              scope_note=EXCLUDED.scope_note,
+              evidence_id=EXCLUDED.evidence_id,
+              verified=EXCLUDED.verified
+            WHERE EXCLUDED.verified AND NOT catalog_activity_subjects.verified""",
             (target_id, old_id),
         )
         conn.execute(

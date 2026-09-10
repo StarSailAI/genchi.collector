@@ -115,6 +115,47 @@ def test_official_site_discovers_and_parses_detail(monkeypatch):
     assert records[0].attributes["media"][0]["url"] == "https://example.com/cover.jpg"
 
 
+def test_official_site_discovers_event_from_sitemap_with_provenance_links(monkeypatch):
+    sitemap = """<?xml version="1.0"?>
+    <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url>
+      <loc>https://example.com/events/festival/</loc>
+      <lastmod>2026-07-10T12:06:01+09:00</lastmod>
+    </url></urlset>"""
+    pages = {
+        "https://example.com/events/": "<main></main>",
+        "https://example.com/events.xml": sitemap,
+        "https://example.com/events/festival/": """
+          <h1>フェス出演決定</h1><article>UNIT Aが出演
+          <a href="https://organizer.example/festival">公式サイト</a></article>
+        """,
+    }
+
+    class Response:
+        def __init__(self, url):
+            self.url, self.text = url, pages[url]
+
+    monkeypatch.setattr(
+        "genchi_fetchers.fetchers.SafeHttpClient.get",
+        lambda self, url, **kwargs: Response(url),
+    )
+    records = []
+    report = OfficialSiteFetcher().fetch(context(records), FetchRequest(
+        task_id=2, source_id="official-events", operation="fetch", tags=(), config={
+            "start_urls": ["https://example.com/events/"],
+            "sitemap_urls": ["https://example.com/events.xml"],
+            "link_pattern": r"^https://example\.com/events/[^/]+/$",
+            "title_selector": "h1", "content_selector": "article",
+            "published_selector": None, "resource_kind": "official_event",
+        },
+    ))
+    assert report.details["sitemaps"] == 1
+    assert records[0].kind == "official_event"
+    assert records[0].published_at.isoformat() == "2026-07-10T12:06:01+09:00"
+    assert records[0].attributes["outbound_links"] == [
+        {"url": "https://organizer.example/festival", "label": "公式サイト"}
+    ]
+
+
 def test_rule_category_and_stable_ids():
     assert _category("チケット先行受付を開始") == "EVENT"
     assert _category("New Album Release") == "RELEASE"

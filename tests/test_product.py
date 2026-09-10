@@ -1276,6 +1276,15 @@ def test_extraction_injects_shared_glossary_and_keeps_original_names(monkeypatch
                 "title": "学園アイドルマスター 新しいライブ",
                 "title_zh": "学园偶像大师全新演唱会",
                 "evidence": document,
+                "affiliations": [
+                    {
+                        "subject_slug": "gakumas",
+                        "relation_kind": "DIRECT",
+                        "participant_name": None,
+                        "scope_note": None,
+                        "evidence": "学園アイドルマスター 新しいライブ。",
+                    }
+                ],
                 "milestones": [
                     {
                         "title": "アソビストア一般会員先行",
@@ -1311,13 +1320,15 @@ def test_extraction_injects_shared_glossary_and_keeps_original_names(monkeypatch
             "content_hash": "one",
             "content": document,
         },
-        [],
+        [{"slug": "gakumas", "name": "学園アイドルマスター", "name_zh": "学园偶像大师", "aliases": ["学マス"]}],
     )
     system = captured["json"]["messages"][0]["content"]
     assert load_glossary()["version"] in system and "animate" in system
     assert "一般贩售" in system and "学园偶像大师" in system
     assert items[0].title == payload["activities"][0]["title"]
     assert items[0].title_zh == "学园偶像大师全新演唱会"
+    assert items[0].subject_relations[0].subject_slug == "gakumas"
+    assert items[0].subject_relations[0].evidence.field_path == "subjects.gakumas"
     assert items[0].milestones[0].round_key == "アソビストア一般会員先行"
     assert items[0].milestones[0].title == "アソビストア一般会員先行"
     assert items[0].publication == "REVIEW" and not items[0].evidence.verified

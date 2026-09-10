@@ -236,6 +236,33 @@ sources:
     backfill_enabled: true
     backfill_window_seconds: 2678400
 
+  - id: bang-dream-events
+    enabled: true
+    fetcher: genchi.official_site
+    sink: postgres
+    schedule: {type: cron, cron: "10 3 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://bang-dream.com/events/]
+      sitemap_urls: [https://bang-dream.com/sitemap-posttype-events.2026.xml]
+      link_pattern: '^https://bang-dream\.com/events/[^/]+/$'
+      list_item_selector: .p-live-event-list__item
+      detail_link_selector: a.p-live-event-list__item-link
+      next_selector: a.next.c-pagination-pager__arrow:not(.disabled)
+      title_selector: .p-live-event-detail__header-title
+      content_selector: .p-live-event-detail__content
+      published_selector: null
+      resource_kind: official_event
+      max_pages: 1
+      backfill_max_pages: 2
+      max_items: 100
+    retry: {max_attempts: 4, backoff: exponential, base_seconds: 30, max_seconds: 1800}
+    routing:
+      queue: web
+      resources: {domain:bang-dream.com: 2}
+    tags: [project:bang-dream, country:JP, timezone:Asia/Tokyo, source:official-franchise]
+    backfill_enabled: true
+    backfill_window_seconds: 2678400
+
   - id: girls-band-cry-news
     enabled: true
     fetcher: genchi.official_site

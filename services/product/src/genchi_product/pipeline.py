@@ -19,6 +19,7 @@ from .domain import (
     EvidenceInput,
     MilestoneInput,
     Moment,
+    SubjectRelationInput,
     canonical_url,
     fingerprint,
     normalize,
@@ -28,7 +29,7 @@ from .matching import event_reference, find_activity_matches
 from .store import Catalog
 
 LOGGER = logging.getLogger(__name__)
-PROMPT_VERSION = "catalog-v2.9-ticket-precision"
+PROMPT_VERSION = "catalog-v3.0-subject-provenance"
 
 
 def precise(value, end=None) -> Moment:
@@ -213,6 +214,8 @@ def extract_text(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
     schema_hint = """{"activities":[{"title":"原文活动正式名，原样保留","title_zh":"规范的简体中文展示名称候选","kind":"LIVE|FESTIVAL|POPUP|CAFE|EXHIBITION|MEETUP|GOODS|OTHER",
     "summary":"简短中文说明","attendance":"OFFLINE|ONLINE|HYBRID|UNKNOWN","status":"ANNOUNCED|SCHEDULED|POSTPONED|CANCELED",
     "official_url":null,"venue":null,"city":null,"evidence_id":"B1",
+    "affiliations":[{"subject_slug":"只能取自给定系列清单","relation_kind":"DIRECT|PERFORMER|COLLABORATION|CAST",
+    "participant_name":"明确出演者、角色或合作方；没有则为null","scope_note":"明确关联日期、场次或范围；没有则为null","evidence_id":"B1"}],
     "time":{"precision":"TIME|DATE|TBD","starts_at":null,"ends_at":null,"starts_on":null,"ends_on":null,"timezone":"Asia/Tokyo"},
     "milestones":[{"kind":"TICKET|RESERVATION|GOODS|RESULT|PAYMENT|DOORS|START|PERIOD|UPDATE|ANNOUNCEMENT",
     "title":"节点原文名","title_zh":"规范中文节点名候选","round":"原文中稳定的受付轮次名称或null","url":null,"eligibility":null,
@@ -248,11 +251,24 @@ def extract_text(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
         "artist names and named concert themes. Do not concatenate original and translated copies. "
         "Use 一般贩售, 事前贩售, 先行抽选, 申请, 先到先得 and 付款截止 consistently. "
         "Never translate an unknown proper name speculatively. "
+        "An activity can be relevant to a series without being owned by that series. For every explicit series relationship, "
+        "return an affiliation: DIRECT for the series' own event, PERFORMER when its artist/unit performs at a broader event, "
+        "COLLABORATION for a commercial tie-in, and CAST for a named cast appearance. "
+        "Use only a subject_slug from the supplied catalog. The evidence block must explicitly support the relationship. "
+        "Do not infer a relationship from the publisher, navigation, related links, or a broad source tag. "
         "Return activities=[] if there is no relevant activity. No markdown. Shape: "
         + schema_hint
+        + "\nAllowed subject catalog:\n"
+        + "\n".join(
+            f"- {subject['slug']}: {subject.get('name') or ''} / {subject.get('name_zh') or ''}; aliases={json.dumps(subject.get('aliases') or [], ensure_ascii=False)}"
+            for subject in subjects
+        )
         + ("\nSome source images have not been transcribed. Extract only the supplied text; image-only facts remain unknown."
            if (resource.get("attributes") or {}).get("image_details_pending") else "")
-        + f"\nSource URL: {resource.get('url')}\nTitle: {resource.get('title')}\nDocument:\n"
+        + f"\nSource URL: {resource.get('url')}\nTitle: {resource.get('title')}"
+        + "\nSource-provided outbound links: "
+        + json.dumps((resource.get("attributes") or {}).get("outbound_links") or [], ensure_ascii=False)
+        + "\nDocument:\n"
         + "\n\n".join(f"[{key}]\n{value}" for key, value in evidence_blocks(text).items())
     )
     endpoint = base.rstrip("/")
@@ -424,6 +440,26 @@ def _text_candidates(content: str, resource: dict, subjects: list[dict]) -> list
             published_at=resource.get("published_at"),
             observed_at=resource.get("observed_at"),
         )
+        known_subjects = {subject["slug"] for subject in subjects}
+        relations = []
+        for relation_index, relation in enumerate(raw.get("affiliations") or []):
+            if not isinstance(relation, dict):
+                raise ValueError(f"活动[{index}]关联[{relation_index}]结构不正确")
+            slug = relation.get("subject_slug")
+            if slug not in known_subjects:
+                raise ValueError(f"活动[{index}]关联[{relation_index}]包含未知系列 {slug}")
+            proof = selected_evidence(text, relation)
+            if not proof:
+                raise ValueError(f"活动[{index}]关联[{relation_index}]缺少可定位的原文证据")
+            relation = dict(relation)
+            relation.pop("evidence", None)
+            relation.pop("evidence_id", None)
+            relations.append(SubjectRelationInput(
+                **relation,
+                evidence=ev.model_copy(update={
+                    "excerpt": proof[:4000], "field_path": f"subjects.{slug}"
+                }),
+            ))
         moment = Moment.model_validate(raw.get("time") or {})
         header = calendar_header(resource)
         if header and moment.anchor() in {"TBD", header["day"]} and (
@@ -484,6 +520,7 @@ def _text_candidates(content: str, resource: dict, subjects: list[dict]) -> list
                 subject_slugs=subjects_for(
                     raw["title"] + " " + str(resource.get("title") or ""), subjects
                 ),
+                subject_relations=relations,
                 time=moment,
                 occurrence_key=source_key if moment.precision != "TBD" else None,
                 venue=raw.get("venue"),
