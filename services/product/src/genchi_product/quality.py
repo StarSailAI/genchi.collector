@@ -83,7 +83,6 @@ def repair_aniera(catalog: Catalog, *, apply: bool) -> dict:
             "applied": apply,
         }
         if not apply:
-            conn.rollback()
             return result
         evidence_id = fingerprint(f"{ANIERA_ID}|bang-dream|{ANIERA_OFFICIAL}|{ANIERA_PROOF}")
         conn.execute("""
