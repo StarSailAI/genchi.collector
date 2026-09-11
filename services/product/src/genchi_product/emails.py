@@ -125,6 +125,7 @@ def render_notification_email(
     eyebrow: str,
     heading: str,
     intro: str = "",
+    report_rows: list[tuple[str, int]] | None = None,
     items: list[tuple[str, str | None]] | None = None,
     facts: list[tuple[str, str]] | None = None,
     cta_label: str,
@@ -143,6 +144,9 @@ def render_notification_email(
     subject, eyebrow, heading, intro, cta_label = map(
         _line, (subject, eyebrow, heading, intro, cta_label)
     )
+    report_rows = [(_line(label), count) for label, count in (report_rows or [])]
+    if any(type(count) is not int or count < 1 for _, count in report_rows):
+        raise ValueError("Notification report counts must be positive integers")
     items = [(_line(label), _safe_link(url) if url else None) for label, url in (items or [])]
     facts = [(_line(label), _line(value)) for label, value in (facts or []) if value]
 
@@ -152,6 +156,11 @@ def render_notification_email(
     text_parts = ["genchi.news 現地情報", eyebrow, heading]
     if intro:
         text_parts.append(intro)
+    if report_rows:
+        text_parts.append(
+            f"{t('变更内容')}\t{t('记录数')}\n"
+            + "\n".join(f"{label}\t{count}" for label, count in report_rows)
+        )
     if items:
         text_parts.append(
             "\n".join(f"• {label}" + (f"\n  {url}" if url else "") for label, url in items)
@@ -179,6 +188,26 @@ def render_notification_email(
             else safe_label
         )
 
+    report_block = ""
+    if report_rows:
+        rows = "".join(
+            '<tr>'
+            f'<td style="padding:13px 14px;border-top:1px solid #eeeef4;color:#252535;font-size:14px;font-weight:600;line-height:1.6;">{escape(label)}</td>'
+            f'<td align="right" style="width:72px;padding:13px 14px;border-top:1px solid #eeeef4;color:#d32650;font-size:15px;font-weight:700;line-height:1.6;white-space:nowrap;">{count}</td>'
+            '</tr>'
+            for label, count in report_rows
+        )
+        report_block = (
+            '<table role="table" aria-label="' + escape(t("变更内容"), quote=True) + '" width="100%" '
+            'cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" '
+            'style="margin:22px 0 0;border:1px solid #e6e7ef;border-radius:12px;border-spacing:0;overflow:hidden;background-color:#ffffff;">'
+            '<tr bgcolor="#fff3f6">'
+            f'<th align="left" scope="col" style="padding:10px 14px;color:#70717f;font-size:11px;font-weight:700;line-height:1.5;letter-spacing:.5px;">{escape(t("变更内容"))}</th>'
+            f'<th align="right" scope="col" style="width:72px;padding:10px 14px;color:#70717f;font-size:11px;font-weight:700;line-height:1.5;letter-spacing:.5px;white-space:nowrap;">{escape(t("记录数"))}</th>'
+            '</tr>'
+            + rows
+            + '</table>'
+        )
     items_block = ""
     if items:
         rows = "".join(
@@ -224,6 +253,7 @@ def render_notification_email(
             if intro
             else ""
         ),
+        report_block=report_block,
         items_block=items_block,
         facts_block=facts_block,
         cta_url=escape(cta_url, quote=True),

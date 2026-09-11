@@ -1750,5 +1750,7 @@
     "另有 {count} 類更新，請在活動詳情中查看。",
     "There are {count} more update types. See the event page for details.",
     "ほか {count} 種類の更新があります。イベント詳細をご確認ください。"
-  ]
+  ],
+  "变更内容": ["變更內容", "Change", "変更内容"],
+  "记录数": ["紀錄數", "Records", "件数"]
 }

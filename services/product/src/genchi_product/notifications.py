@@ -312,7 +312,10 @@ def render_mail(conn, job, user, now):
         )
         changes = job["payload"].get("changes", [])
         groups = grouped_changes(changes)
-        items = [(localized_change(summary, count, locale), None) for summary, count in groups[:8]]
+        report_rows = [
+            (localized_change(summary, 1, locale), count) for summary, count in groups[:8]
+        ]
+        items = []
         if len(groups) > 8:
             items.append(
                 (t("另有 {count} 类更新，请在活动详情中查看。", count=len(groups) - 8), None)
@@ -339,6 +342,7 @@ def render_mail(conn, job, user, now):
                 "这次共更新 {count} 项记录，已为你合并相同内容。",
                 count=len(changes),
             ),
+            report_rows=report_rows,
             items=items,
             facts=facts,
             cta_label=t("活动详情与官方依据"),

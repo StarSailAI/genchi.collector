@@ -54,7 +54,7 @@ changes = [
 groups = grouped_changes(changes)
 if groups != [("更新：活动开始", 14), ("更新：开放入场", 14)]:
     raise SystemExit("Product image does not aggregate repeated activity changes.")
-items = [(localized_change(summary, count, "zh-Hans"), None) for summary, count in groups]
+report_rows = [(localized_change(summary, 1, "zh-Hans"), count) for summary, count in groups]
 notification = render_notification_email(
     "活动信息更新 · 示例活动",
     locale="zh-Hans",
@@ -62,12 +62,16 @@ notification = render_notification_email(
     eyebrow="活动信息更新",
     heading="示例活动",
     intro="这次共更新 28 项记录，已为你合并相同内容。",
-    items=items,
+    report_rows=report_rows,
     cta_label="活动详情与官方依据",
     cta_url="https://example.test/zh-Hans/activities/example",
     unsubscribe_url="https://example.test/zh-Hans/unsubscribe?token=test-only",
 )
-for expected in ("更新：活动开始（14 项）", "更新：开放入场（14 项）"):
+if "变更内容\t记录数" not in notification.text or 'role="table"' not in notification.html:
+    raise SystemExit("Product image notification is missing the readable report table.")
+for expected in ("更新：活动开始", "更新：开放入场"):
     if notification.text.count(expected) != 1 or notification.html.count(expected) != 1:
         raise SystemExit("Product image notification content is not aggregated consistently.")
+if notification.text.count("\t14") != 2 or notification.html.count(">14</td>") != 2:
+    raise SystemExit("Product image notification report does not show grouped counts.")
 print("Product image includes branded, aggregated activity notifications.")

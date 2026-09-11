@@ -102,7 +102,8 @@ def test_notification_template_is_branded_compact_and_escapes_dynamic_content():
         eyebrow="Event information updated",
         heading='<script>alert("title")</script>',
         intro="Repeated entries have been grouped.",
-        items=[("Doors open (14 entries)", None), ("Event starts", "https://example.test/en/a/1")],
+        report_rows=[("Updated: Doors open", 14), ("Updated: Event starts", 14)],
+        items=[("Open event page", "https://example.test/en/a/1")],
         facts=[("Updated start time", "2026-09-23 15:30 JST")],
         cta_label="Event details and official sources",
         cta_url="https://example.test/en/activities/1",
@@ -114,10 +115,29 @@ def test_notification_template_is_branded_compact_and_escapes_dynamic_content():
     visible = "".join(parsed.text)
     assert '<script>alert("title")</script>' in visible
     assert "<script>" not in rendered.html
-    assert "Doors open (14 entries)" in rendered.text and "Doors open (14 entries)" in visible
+    assert "Change\tRecords" in rendered.text
+    assert "Updated: Doors open\t14" in rendered.text
+    assert "Updated: Doors open" in visible and visible.count("14") == 2
+    assert "<th" in rendered.html and 'role="table"' in rendered.html
     assert "2026-09-23 15:30 JST" in rendered.text and "2026-09-23 15:30 JST" in visible
     assert "https://example.test/en/activities/1" in parsed.links
     assert not set(parsed.tags) & {"script", "img", "iframe", "form", "link"}
+
+
+@pytest.mark.parametrize("count", [0, -1, True, 1.5, "14"])
+def test_notification_report_rejects_invalid_counts(count):
+    with pytest.raises(ValueError, match="positive integers"):
+        render_notification_email(
+            "Activity update",
+            locale="en",
+            site_url="https://example.test",
+            eyebrow="Update",
+            heading="Event",
+            report_rows=[("Doors open", count)],
+            cta_label="Details",
+            cta_url="https://example.test/en/activities/1",
+            unsubscribe_url="https://example.test/en/unsubscribe?token=test-only",
+        )
 
 
 def test_repeated_collection_changes_are_grouped_before_rendering():

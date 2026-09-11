@@ -911,10 +911,11 @@ def test_multiple_node_updates_are_bundled_per_activity(catalog):
         user = conn.execute("SELECT * FROM genchi_private.accounts WHERE id='user-one'").fetchone()
         rendered = render_mail(conn, job, user, NOW)
         assert rendered is not None and len(rendered) == 3
-        assert rendered[1].count("更新：活动开始（14 项）") == 1
-        assert rendered[1].count("更新：开放入场（14 项）") == 1
+        assert "变更内容\t记录数" in rendered[1]
+        assert rendered[1].count("更新：活动开始\t14") == 1
+        assert rendered[1].count("更新：开放入场\t14") == 1
         assert "更新后的开始时间" not in rendered[1]
-        assert "<html" in rendered[2] and "genchi<span" in rendered[2]
+        assert "<html" in rendered[2] and 'role="table"' in rendered[2]
 
 
 def test_discovery_supports_nearest_event_action_and_recent_orders(catalog):
