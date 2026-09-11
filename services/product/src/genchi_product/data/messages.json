@@ -1722,5 +1722,33 @@
   "因 {participant} 参与而与 {subject} 相关": ["因 {participant} 參與而與 {subject} 相關","Related to {subject} through the participation of {participant}","{participant}の参加により{subject}に関連"],
   "与 {subject} 的联动活动": ["與 {subject} 的聯動活動","A collaboration with {subject}","{subject}とのコラボイベント"],
   "相关成员": ["相關成員","a related member","関連メンバー"],
-  "官方信息已核验": ["官方資訊已核驗","Verified against official information","公式情報で確認済み"]
+  "官方信息已核验": ["官方資訊已核驗", "Verified against official information", "公式情報で確認済み"],
+  "新增": ["新增", "Added", "追加"],
+  "更新": ["更新", "Updated", "更新"],
+  "开放入场": ["開放入場", "Doors open", "開場"],
+  "{action}：{item}": [
+    "{action}：{item}",
+    "{action}: {item}",
+    "{action}：{item}"
+  ],
+  "{action}：{item}（{count} 项）": [
+    "{action}：{item}（{count} 項）",
+    "{action}: {item} ({count} entries)",
+    "{action}：{item}（{count} 件）"
+  ],
+  "{item}（{count} 项）": [
+    "{item}（{count} 項）",
+    "{item} ({count} entries)",
+    "{item}（{count} 件）"
+  ],
+  "这次共更新 {count} 项记录，已为你合并相同内容。": [
+    "這次共更新 {count} 項紀錄，已為你合併相同內容。",
+    "This update contains {count} records. Repeated items have been grouped for you.",
+    "今回は {count} 件の更新があります。同じ内容はまとめて表示しています。"
+  ],
+  "另有 {count} 类更新，请在活动详情中查看。": [
+    "另有 {count} 類更新，請在活動詳情中查看。",
+    "There are {count} more update types. See the event page for details.",
+    "ほか {count} 種類の更新があります。イベント詳細をご確認ください。"
+  ]
 }

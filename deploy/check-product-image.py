@@ -1,7 +1,10 @@
 """Run inside the release image without credentials, network or a database."""
 
+from importlib.resources import files
+
 from genchi_product.api import create_app
-from genchi_product.emails import render_login_email
+from genchi_product.emails import render_login_email, render_notification_email
+from genchi_product.notifications import grouped_changes, localized_change
 
 # Route registration must not query the database. A truthy sentinel avoids
 # constructing the production Catalog or requiring DATABASE_URL.
@@ -33,5 +36,38 @@ if set(properties.get("locale", {}).get("enum", [])) != {"zh-Hans", "zh-Hant", "
     raise SystemExit("Product image is missing four-language authentication.")
 
 for locale in ("zh-Hans", "zh-Hant", "en", "ja"):
-    assert f'lang="{locale}"' in render_login_email("004281", expires_minutes=15, site_url="https://example.test", locale=locale).html
+    assert (
+        f'lang="{locale}"'
+        in render_login_email(
+            "004281", expires_minutes=15, site_url="https://example.test", locale=locale
+        ).html
+    )
 print("Product image supports four-language catalogue and email rendering.")
+
+notification_template = files("genchi_product").joinpath("templates/notification.html")
+if not notification_template.is_file():
+    raise SystemExit("Product image is missing the activity notification template.")
+changes = [
+    *({"summary": "更新：活动开始"} for _ in range(14)),
+    *({"summary": "更新：开放入场"} for _ in range(14)),
+]
+groups = grouped_changes(changes)
+if groups != [("更新：活动开始", 14), ("更新：开放入场", 14)]:
+    raise SystemExit("Product image does not aggregate repeated activity changes.")
+items = [(localized_change(summary, count, "zh-Hans"), None) for summary, count in groups]
+notification = render_notification_email(
+    "活动信息更新 · 示例活动",
+    locale="zh-Hans",
+    site_url="https://example.test",
+    eyebrow="活动信息更新",
+    heading="示例活动",
+    intro="这次共更新 28 项记录，已为你合并相同内容。",
+    items=items,
+    cta_label="活动详情与官方依据",
+    cta_url="https://example.test/zh-Hans/activities/example",
+    unsubscribe_url="https://example.test/zh-Hans/unsubscribe?token=test-only",
+)
+for expected in ("更新：活动开始（14 项）", "更新：开放入场（14 项）"):
+    if notification.text.count(expected) != 1 or notification.html.count(expected) != 1:
+        raise SystemExit("Product image notification content is not aggregated consistently.")
+print("Product image includes branded, aggregated activity notifications.")

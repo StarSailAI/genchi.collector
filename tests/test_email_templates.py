@@ -6,8 +6,8 @@ from html.parser import HTMLParser
 from unittest.mock import patch
 
 import pytest
-from genchi_product.emails import render_login_email
-from genchi_product.notifications import smtp_send
+from genchi_product.emails import render_login_email, render_notification_email
+from genchi_product.notifications import grouped_changes, localized_change, smtp_send
 
 
 class Markup(HTMLParser):
@@ -92,3 +92,40 @@ def test_smtp_sends_html_with_plain_text_fallback_without_changing_reminders(mon
         reminder = connection.send_message.call_args.args[0]
         assert reminder.get_content_type() == "text/plain"
         assert reminder.get_content().strip() == "Existing plain text"
+
+
+def test_notification_template_is_branded_compact_and_escapes_dynamic_content():
+    rendered = render_notification_email(
+        "Activity update",
+        locale="en",
+        site_url="https://example.test",
+        eyebrow="Event information updated",
+        heading='<script>alert("title")</script>',
+        intro="Repeated entries have been grouped.",
+        items=[("Doors open (14 entries)", None), ("Event starts", "https://example.test/en/a/1")],
+        facts=[("Updated start time", "2026-09-23 15:30 JST")],
+        cta_label="Event details and official sources",
+        cta_url="https://example.test/en/activities/1",
+        official_url="https://official.example.test/event",
+        unsubscribe_url="https://example.test/en/unsubscribe?token=test-only",
+    )
+    parsed = Markup()
+    parsed.feed(rendered.html)
+    visible = "".join(parsed.text)
+    assert '<script>alert("title")</script>' in visible
+    assert "<script>" not in rendered.html
+    assert "Doors open (14 entries)" in rendered.text and "Doors open (14 entries)" in visible
+    assert "2026-09-23 15:30 JST" in rendered.text and "2026-09-23 15:30 JST" in visible
+    assert "https://example.test/en/activities/1" in parsed.links
+    assert not set(parsed.tags) & {"script", "img", "iframe", "form", "link"}
+
+
+def test_repeated_collection_changes_are_grouped_before_rendering():
+    changes = [
+        *({"summary": "更新：活动开始"} for _ in range(14)),
+        *({"summary": "更新：开放入场"} for _ in range(14)),
+    ]
+    assert grouped_changes(changes) == [("更新：活动开始", 14), ("更新：开放入场", 14)]
+    assert localized_change("更新：开放入场", 14, "zh-Hans") == "更新：开放入场（14 项）"
+    assert localized_change("更新：开放入场", 14, "en") == "Updated: Doors open (14 entries)"
+    assert localized_change("更新：开放入场", 14, "ja") == "更新：開場（14 件）"

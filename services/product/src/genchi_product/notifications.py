@@ -5,12 +5,14 @@ import hmac
 import os
 import smtplib
 import ssl
+from collections import Counter
 from datetime import UTC, datetime, time, timedelta
 from email.message import EmailMessage
 from zoneinfo import ZoneInfo
 
 from psycopg.types.json import Jsonb
 
+from .emails import render_notification_email
 from .localization import display_title, locale_of, translate
 from .naming import change_summary
 from .presentation import relevant
@@ -218,7 +220,7 @@ def plan(catalog: Catalog, now: datetime | None = None):
                     if not any(item["id"] == change["id"] for item in items):
                         items.append({"id": change["id"], "summary": change["summary"]})
                     current.update(
-                        summary=f"本次收录 {len(items)} 项信息更新",
+                        summary="活动信息更新",
                         changes=items,
                         before=change["before_value"],
                         after=change["after_value"],
@@ -236,6 +238,25 @@ def format_time(value, timezone="Asia/Tokyo"):
     return value.astimezone(ZoneInfo(timezone)).strftime("%Y-%m-%d %H:%M") if value else "尚未公布"
 
 
+def grouped_changes(changes: list[dict]) -> list[tuple[str, int]]:
+    """Keep first-seen order while collapsing repeated normalization records."""
+    counts = Counter(change_summary(item.get("summary", "活动信息更新")) for item in changes)
+    return list(counts.items())
+
+
+def localized_change(summary: str, count: int, locale: str) -> str:
+    prefix, separator, item = summary.partition("：")
+    if separator and prefix in {"新增", "更新"}:
+        action = translate(prefix, locale)
+        label = translate(item, locale)
+        key = "{action}：{item}（{count} 项）" if count > 1 else "{action}：{item}"
+        return translate(key, locale, action=action, item=label, count=count)
+    label = translate(summary, locale)
+    return (
+        translate("{item}（{count} 项）", locale, item=label, count=count) if count > 1 else label
+    )
+
+
 def render_mail(conn, job, user, now):
     site = os.environ.get("PUBLIC_SITE_URL", "http://localhost:13000").rstrip("/")
     if job["kind"] == "LOGIN":
@@ -245,21 +266,37 @@ def render_mail(conn, job, user, now):
         return None
     locale = locale_of(user.get("locale"))
 
-    def t(key):
-        return translate(key, locale)
+    def t(key, **values):
+        return translate(key, locale, **values)
 
-    footer = f"\n\n{t('管理关注')}：{site}/{locale}/dashboard\n{t('退订所有提醒')}：{site}/{locale}/unsubscribe?token={unsubscribe_token(user['id'])}"
+    unsubscribe_url = f"{site}/{locale}/unsubscribe?token={unsubscribe_token(user['id'])}"
     if job["kind"] == "DIGEST":
-        lines = []
+        items = []
         for activity_id in job["payload"].get("activity_ids", []):
             if eligible_follows(conn, activity_id, user["id"]):
                 activity = conn.execute(
                     "SELECT title,title_zh FROM catalog_activities WHERE id=%s", (activity_id,)
                 ).fetchone()
-                lines.append(
-                    f"{display_title(activity, locale)}\n{site}/{locale}/activities/{activity_id}"
+                items.append(
+                    (
+                        display_title(activity, locale),
+                        f"{site}/{locale}/activities/{activity_id}",
+                    )
                 )
-        return (t("你关注的新活动 · Genchi"), "\n\n".join(lines) + footer) if lines else None
+        if not items:
+            return None
+        rendered = render_notification_email(
+            t("你关注的新活动 · Genchi"),
+            locale=locale,
+            site_url=site,
+            eyebrow=t("新活动汇总"),
+            heading=t("你关注的新活动 · Genchi"),
+            items=items,
+            cta_label=t("查看我的日程"),
+            cta_url=f"{site}/{locale}/following?tab=activities",
+            unsubscribe_url=unsubscribe_url,
+        )
+        return rendered.subject, rendered.text, rendered.html
     follows = eligible_follows(conn, job["activity_id"], user["id"])
     if not follows:
         return None
@@ -273,24 +310,42 @@ def render_mail(conn, job, user, now):
         status_label = {"CANCELED": t("已取消"), "POSTPONED": t("已延期")}.get(
             activity["status"], ""
         )
-        details = f"{t('最新状态')}：{status_label}\n" if status_label else ""
-        details += "".join(
-            f"• {change_summary(item['summary'])}\n"
-            for item in job["payload"].get("changes", [])[:15]
-        )
+        changes = job["payload"].get("changes", [])
+        groups = grouped_changes(changes)
+        items = [(localized_change(summary, count, locale), None) for summary, count in groups[:8]]
+        if len(groups) > 8:
+            items.append(
+                (t("另有 {count} 类更新，请在活动详情中查看。", count=len(groups) - 8), None)
+            )
+        facts = [(t("最新状态"), status_label)] if status_label else []
         after = job["payload"].get("after")
-        if isinstance(after, dict):
+        # A bundled payload retains only the final raw before/after pair. Showing it
+        # beside many changes would imply that it describes all of them.
+        if len(changes) == 1 and isinstance(after, dict):
             for key, label in (
                 ("starts_at", t("更新后的开始时间")),
                 ("ends_at", t("更新后的截止时间")),
             ):
                 if after.get(key):
-                    details += f"{label}：{format_time(datetime.fromisoformat(after[key]))} JST\n"
-        return (
-            f"{t('活动信息更新')}{('（' + status_label + '）') if status_label else ''} · {display_title(activity, locale)}",
-            f"{change_summary(job['payload']['summary'])}\n{details}{t('请查看最新时间、状态和来源：')}\n{link}"
-            + footer,
+                    facts.append((label, f"{format_time(datetime.fromisoformat(after[key]))} JST"))
+        subject = f"{t('活动信息更新')}{('（' + status_label + '）') if status_label else ''} · {display_title(activity, locale)}"
+        rendered = render_notification_email(
+            subject,
+            locale=locale,
+            site_url=site,
+            eyebrow=t("活动信息更新"),
+            heading=display_title(activity, locale),
+            intro=t(
+                "这次共更新 {count} 项记录，已为你合并相同内容。",
+                count=len(changes),
+            ),
+            items=items,
+            facts=facts,
+            cta_label=t("活动详情与官方依据"),
+            cta_url=link,
+            unsubscribe_url=unsubscribe_url,
         )
+        return rendered.subject, rendered.text, rendered.html
     node = conn.execute(
         "SELECT * FROM catalog_milestones WHERE id=%s FOR UPDATE", (job["milestone_id"],)
     ).fetchone()
@@ -331,18 +386,35 @@ def render_mail(conn, job, user, now):
         "UPCOMING": t("活动提醒"),
     }
     heading = f"{labels.get(job['kind'], t('活动提醒'))} · {display_title(node, locale)}"
-    body = f"{display_title(activity, locale)}\n{heading}\n{t('开始')}：{format_time(node['starts_at'])} JST\n"
+    facts = [(t("开始"), f"{format_time(node['starts_at'])} JST")]
     if node["ends_at"]:
-        body += f"{t('截止')}：{format_time(node['ends_at'])} JST\n"
-    body += f"{t('你的时区')}：{format_time(deadline, user['timezone'])} ({user['timezone']})\n"
+        facts.append((t("截止"), f"{format_time(node['ends_at'])} JST"))
+    facts.append(
+        (
+            t("你的时区"),
+            f"{format_time(deadline, user['timezone'])} ({user['timezone']})",
+        )
+    )
     if node["eligibility"]:
-        body += f"{t('适用条件')}：{node['eligibility']}\n"
-    body += f"\n{t('活动详情与官方依据')}：{link}\n"
-    if node["url"]:
-        body += f"{t('官方入口')}：{node['url']}\n"
+        facts.append((t("适用条件"), node["eligibility"]))
+    items = []
     if node["kind"] == "RESULT":
-        body += t("本邮件仅提示结果发表，请自行前往官方平台确认是否中选。") + "\n"
-    return heading, body + footer
+        items.append((t("本邮件仅提示结果发表，请自行前往官方平台确认是否中选。"), None))
+    rendered = render_notification_email(
+        heading,
+        locale=locale,
+        site_url=site,
+        eyebrow=labels.get(job["kind"], t("活动提醒")),
+        heading=display_title(activity, locale),
+        intro=display_title(node, locale),
+        items=items,
+        facts=facts,
+        cta_label=t("活动详情与官方依据"),
+        cta_url=link,
+        official_url=node["url"],
+        unsubscribe_url=unsubscribe_url,
+    )
+    return rendered.subject, rendered.text, rendered.html
 
 
 def deliver_one(catalog: Catalog, *, now: datetime | None = None, transport=None) -> bool:
@@ -403,7 +475,17 @@ def deliver_one(catalog: Catalog, *, now: datetime | None = None, transport=None
                     (job["id"],),
                 )
                 return True
-            (transport or smtp_send)(user["email"], content[0], content[1], job["id"], user["id"])
+            if transport:
+                transport(user["email"], content[0], content[1], job["id"], user["id"])
+            else:
+                smtp_send(
+                    user["email"],
+                    content[0],
+                    content[1],
+                    job["id"],
+                    user["id"],
+                    html=content[2],
+                )
             conn.execute(
                 "UPDATE genchi_private.mail_queue SET status='SENT',sent_at=NOW(),lease_token=NULL,last_error=NULL WHERE id=%s",
                 (job["id"],),

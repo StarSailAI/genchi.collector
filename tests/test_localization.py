@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from fastapi.testclient import TestClient
 from genchi_product.api import create_app
-from genchi_product.emails import render_login_email
+from genchi_product.emails import render_login_email, render_notification_email
 from genchi_product.localization import LOCALES, localized_catalog, translate
 from genchi_product.notifications import render_mail
 from test_product import NOW, activity, subscribe
@@ -29,6 +29,27 @@ def test_mail_has_matching_language_text_and_html(locale):
     assert "004281" not in message.subject and "004281" not in repr(message)
     if locale in {"en", "ja"}:
         assert "验证码" not in message.html
+
+
+@pytest.mark.parametrize("locale", LOCALES)
+def test_notification_mail_has_matching_language_and_safe_links(locale):
+    message = render_notification_email(
+        translate("活动信息更新", locale),
+        locale=locale,
+        site_url="https://example.test",
+        eyebrow=translate("活动信息更新", locale),
+        heading="Official Event",
+        intro=translate("这次共更新 {count} 项记录，已为你合并相同内容。", locale, count=28),
+        items=[(translate("开放入场", locale), None)],
+        cta_label=translate("活动详情与官方依据", locale),
+        cta_url=f"https://example.test/{locale}/activities/one",
+        unsubscribe_url=f"https://example.test/{locale}/unsubscribe?token=test-only",
+    )
+    assert f'lang="{locale}"' in message.html
+    assert translate("活动信息更新", locale) in message.text
+    assert translate("活动信息更新", locale) in message.html
+    assert f"/{locale}/activities/one" in message.text
+    assert "$" not in message.html and "{count}" not in message.html
 
 
 def test_unknown_mail_locale_falls_back_explicitly():
