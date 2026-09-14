@@ -283,12 +283,30 @@ def test_keyword_tag_follow_matching_and_privacy(catalog, mail):
 def test_agent_key_is_one_time_scoped_revocable_and_mcp_compatible(catalog, mail):
     c = client(catalog)
     verify(c, send(c, mail))
-    created = c.post("/me/api-keys", json={"name": "My Agent"})
+    created = c.post(
+        "/me/api-keys",
+        json={
+            "name": "My Agent",
+            "scopes": [
+                "activities:read",
+                "updates:read",
+                "agenda:read",
+                "subscriptions:read",
+                "subscriptions:write",
+            ],
+        },
+    )
     assert created.status_code == 201, created.text
     key = created.json()
     assert key["secret"].startswith("gch_live_")
     assert key["secret"] not in str(c.get("/me/api-keys").json())
     headers = {"Authorization": "Bearer " + key["secret"]}
+
+    connection = c.get("/agent/v1/me", headers=headers)
+    assert connection.status_code == 200
+    assert connection.json()["name"] == "My Agent"
+    assert connection.json()["prefix"] == key["prefix"]
+    assert "secret" not in connection.text
 
     subscriptions = c.get("/agent/v1/subscriptions", headers=headers)
     assert subscriptions.status_code == 200 and subscriptions.json()["items"] == []
@@ -319,7 +337,12 @@ def test_agent_key_is_one_time_scoped_revocable_and_mcp_compatible(catalog, mail
         headers=headers,
         json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
     ).json()["result"]["tools"]
-    assert "get_latest_updates" in {tool["name"] for tool in tools}
+    by_name = {tool["name"]: tool for tool in tools}
+    assert {"get_connection_info", "get_latest_updates"} <= set(by_name)
+    subscription_schema = by_name["create_subscription"]["inputSchema"]["properties"]
+    assert {"reminder_hours", "include_children", "kinds", "cities"} <= set(
+        subscription_schema
+    )
 
     assert c.delete("/me/api-keys/" + key["id"]).status_code == 200
     assert c.get("/agent/v1/subscriptions", headers=headers).status_code == 401
@@ -348,6 +371,65 @@ def test_agent_key_scope_is_enforced(catalog, mail):
     assert c.get("/agent/v1/activities", headers=headers).status_code == 200
     denied = c.get("/agent/v1/subscriptions", headers=headers)
     assert denied.status_code == 403 and "subscriptions:read" in denied.text
+
+
+def test_agent_key_defaults_to_read_only(catalog, mail):
+    c = client(catalog)
+    verify(c, send(c, mail))
+    created = c.post("/me/api-keys", json={"name": "Daily monitor"})
+    assert created.status_code == 201
+    key = created.json()
+    assert set(key["scopes"]) == {
+        "activities:read",
+        "updates:read",
+        "agenda:read",
+        "subscriptions:read",
+    }
+    headers = {"Authorization": "Bearer " + key["secret"]}
+    assert c.get("/agent/v1/subscriptions", headers=headers).status_code == 200
+    denied = c.post(
+        "/agent/v1/subscriptions",
+        headers=headers,
+        json={"target_type": "SUBJECT", "target_id": "gakumas"},
+    )
+    assert denied.status_code == 403 and "subscriptions:write" in denied.text
+
+
+def test_agent_update_cursor_can_start_now_and_advance_without_matches(catalog, mail):
+    c = client(catalog)
+    verify(c, send(c, mail))
+    key = c.post("/me/api-keys", json={"name": "Monitor"}).json()["secret"]
+    headers = {"Authorization": "Bearer " + key}
+
+    initial = c.get(
+        "/agent/v1/updates", headers=headers, params={"cursor": "now"}
+    ).json()
+    assert initial["items"] == [] and initial["has_more"] is False
+
+    catalog.publish(activity(key="upstream:after-monitor-start"))
+    advanced = c.get(
+        "/agent/v1/updates",
+        headers=headers,
+        params={"cursor": initial["next_cursor"], "mode": "following"},
+    ).json()
+    assert advanced["items"] == []
+    assert advanced["next_cursor"] != initial["next_cursor"]
+
+    unchanged = c.get(
+        "/agent/v1/updates",
+        headers=headers,
+        params={"cursor": advanced["next_cursor"], "mode": "following"},
+    ).json()
+    assert unchanged["items"] == []
+    assert unchanged["next_cursor"] == advanced["next_cursor"]
+
+    historical = c.get(
+        "/agent/v1/updates", headers=headers, params={"mode": "all"}
+    ).json()
+    assert historical["items"]
+    assert c.get(
+        "/agent/v1/updates", headers=headers, params={"cursor": "invalid"}
+    ).status_code == 422
 
 
 def test_https_cookie_session_expiry_and_all_devices(catalog, mail, monkeypatch):

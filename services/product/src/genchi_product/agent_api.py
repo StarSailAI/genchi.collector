@@ -33,7 +33,8 @@ ALL_SCOPES = {
     "subscriptions:read",
     "subscriptions:write",
 }
-DEFAULT_SCOPES = sorted(ALL_SCOPES)
+READ_SCOPES = ALL_SCOPES - {"subscriptions:write"}
+DEFAULT_SCOPES = sorted(READ_SCOPES)
 
 
 class KeyCreate(BaseModel):
@@ -100,7 +101,7 @@ def _key_view(row):
     }
 
 
-def _identity(request: Request, catalog, scope: str):
+def _identity(request: Request, catalog, scope: str | None):
     raw = request.headers.get("Authorization", "")
     raw = raw[7:] if raw.startswith("Bearer ") else ""
     matched = KEY_PATTERN.fullmatch(raw)
@@ -120,7 +121,7 @@ def _identity(request: Request, catalog, scope: str):
     if not hmac.compare_digest(candidate, expected) or not row or row["disabled_at"]:
         raise HTTPException(401, "无效的 API Key", headers={"WWW-Authenticate": "Bearer"})
     request.state.agent_identity = row
-    if scope not in row["scopes"]:
+    if scope and scope not in row["scopes"]:
         raise HTTPException(403, f"API Key 缺少权限：{scope}")
     rate_limit(
         catalog,
@@ -136,6 +137,17 @@ def _identity(request: Request, catalog, scope: str):
             (row["id"],),
         )
     return row
+
+
+def _connection_view(row):
+    return {
+        "name": row["name"],
+        "prefix": row["prefix"],
+        "scopes": row["scopes"],
+        "created_at": row["created_at"],
+        "expires_at": row["expires_at"],
+        "last_used_at": row["last_used_at"],
+    }
 
 
 def _cursor_encode(value: int) -> str:
@@ -159,6 +171,47 @@ def _cursor_decode(value: str) -> int:
         return int(position)
     except (ValueError, UnicodeError):
         raise HTTPException(422, "无效的更新游标") from None
+
+
+def _read_updates(catalog, identity, cursor: str, mode: str, limit: int):
+    if mode not in {"following", "all"}:
+        raise HTTPException(422, "未知更新模式")
+    with catalog.connect() as conn:
+        high_water = conn.execute(
+            "SELECT COALESCE(MAX(id),0) AS id FROM catalog_changes"
+        ).fetchone()["id"]
+        if cursor == "now":
+            position = high_water
+            rows = []
+        else:
+            position = _cursor_decode(cursor)
+            ids = followed_ids(conn, identity["account_id"]) if mode == "following" else None
+            rows = (
+                []
+                if ids == []
+                else conn.execute(
+                    """SELECT c.id,c.activity_id,c.milestone_id,c.kind,c.summary,c.before_value,
+                c.after_value,c.created_at,COALESCE(a.title_zh,a.title) activity_title,
+                a.title activity_title_original,a.kind activity_kind,a.status activity_status
+                FROM catalog_changes c JOIN catalog_activities a ON a.id=c.activity_id
+                WHERE c.id>%s AND c.id<=%s AND a.publication='PUBLISHED'
+                  AND a.attendance IN ('OFFLINE','HYBRID')
+                  AND (%s::text[] IS NULL OR a.id=ANY(%s::text[]))
+                ORDER BY c.id LIMIT %s""",
+                    (position, high_water, ids, ids, limit + 1),
+                ).fetchall()
+            )
+        has_more = len(rows) > limit
+        items = rows[:limit]
+        for item in items:
+            item["summary"] = change_summary(item["summary"])
+        next_position = items[-1]["id"] if has_more else max(position, high_water)
+        return {
+            "items": items,
+            "next_cursor": _cursor_encode(next_position),
+            "has_more": has_more,
+            "timezone": "Asia/Tokyo",
+        }
 
 
 def _list_follows(conn, account_id: str):
@@ -340,6 +393,10 @@ def register_agent_routes(app: FastAPI, catalog, hydrate, public_activity):
                 raise HTTPException(404, "API Key 不存在")
             return {"ok": True}
 
+    @app.get("/agent/v1/me")
+    def agent_me(request: Request):
+        return _connection_view(_identity(request, catalog, None))
+
     @app.get("/agent/v1/subscriptions")
     def subscriptions(request: Request):
         identity = _identity(request, catalog, "subscriptions:read")
@@ -372,35 +429,7 @@ def register_agent_routes(app: FastAPI, catalog, hydrate, public_activity):
         mode: str = Query("following", pattern="^(following|all)$"),
     ):
         identity = _identity(request, catalog, "updates:read")
-        position = _cursor_decode(cursor)
-        with catalog.connect() as conn:
-            ids = followed_ids(conn, identity["account_id"]) if mode == "following" else None
-            rows = (
-                []
-                if ids == []
-                else conn.execute(
-                    """SELECT c.id,c.activity_id,c.milestone_id,c.kind,c.summary,c.before_value,
-                c.after_value,c.created_at,COALESCE(a.title_zh,a.title) activity_title,
-                a.title activity_title_original,a.kind activity_kind,a.status activity_status
-                FROM catalog_changes c JOIN catalog_activities a ON a.id=c.activity_id
-                WHERE c.id>%s AND a.publication='PUBLISHED'
-                  AND a.attendance IN ('OFFLINE','HYBRID')
-                  AND (%s::text[] IS NULL OR a.id=ANY(%s::text[]))
-                ORDER BY c.id LIMIT %s""",
-                    (position, ids, ids, limit + 1),
-                ).fetchall()
-            )
-            has_more = len(rows) > limit
-            items = rows[:limit]
-            for item in items:
-                item["summary"] = change_summary(item["summary"])
-            next_position = items[-1]["id"] if items else position
-            return {
-                "items": items,
-                "next_cursor": _cursor_encode(next_position),
-                "has_more": has_more,
-                "timezone": "Asia/Tokyo",
-            }
+        return _read_updates(catalog, identity, cursor, mode, limit)
 
     @app.get("/agent/v1/activities")
     def agent_activities(
@@ -495,6 +524,12 @@ def register_agent_routes(app: FastAPI, catalog, hydrate, public_activity):
 
     tool_specs = [
         (
+            "get_connection_info",
+            "检查当前 API Key 的权限与有效期",
+            {},
+            True,
+        ),
+        (
             "search_activities",
             "查询日本线下活动",
             {"q": {"type": "string"}, "subject": {"type": "string"}, "kind": {"type": "string"}},
@@ -525,6 +560,22 @@ def register_agent_routes(app: FastAPI, catalog, hydrate, public_activity):
                     "enum": ["SUBJECT", "ACTIVITY", "KEYWORD", "TAG"],
                 },
                 "target_id": {"type": "string"},
+                "reminder_hours": {
+                    "type": "integer",
+                    "enum": [0, 2, 24, 48],
+                    "default": 24,
+                },
+                "include_children": {"type": "boolean", "default": True},
+                "kinds": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": sorted(KINDS)},
+                    "maxItems": 8,
+                },
+                "cities": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 20,
+                },
             },
             False,
         ),
@@ -551,7 +602,7 @@ def register_agent_routes(app: FastAPI, catalog, hydrate, public_activity):
     def mcp(request: Request, body: dict):
         method, request_id = body.get("method"), body.get("id")
         if method == "initialize":
-            _identity(request, catalog, "activities:read")
+            _identity(request, catalog, None)
             result = {
                 "protocolVersion": "2025-06-18",
                 "capabilities": {"tools": {"listChanged": False}},
@@ -559,10 +610,10 @@ def register_agent_routes(app: FastAPI, catalog, hydrate, public_activity):
                 "instructions": "Use Genchi for structured Japanese offline-event facts. Preserve JST, date precision and official evidence. Never invent missing times. Ask before changing subscriptions unless the user already requested it.",
             }
         elif method == "notifications/initialized":
-            _identity(request, catalog, "activities:read")
+            _identity(request, catalog, None)
             return Response(status_code=202)
         elif method == "tools/list":
-            _identity(request, catalog, "activities:read")
+            _identity(request, catalog, None)
             result = {
                 "tools": [
                     {
@@ -596,7 +647,9 @@ def register_agent_routes(app: FastAPI, catalog, hydrate, public_activity):
                 (body.get("params") or {}).get("arguments") or {},
             )
             name = params.get("name")
-            if name == "search_activities":
+            if name == "get_connection_info":
+                value = _connection_view(_identity(request, catalog, None))
+            elif name == "search_activities":
                 identity = _identity(request, catalog, "activities:read")
                 del identity
                 clauses, values = (
@@ -641,24 +694,13 @@ def register_agent_routes(app: FastAPI, catalog, hydrate, public_activity):
                     value = row
             elif name == "get_latest_updates":
                 identity = _identity(request, catalog, "updates:read")
-                position = _cursor_decode(str(args.get("cursor", "")))
-                mode = args.get("mode", "following")
-                with catalog.connect() as conn:
-                    ids = followed_ids(conn, identity["account_id"]) if mode != "all" else None
-                    rows = (
-                        []
-                        if ids == []
-                        else conn.execute(
-                            """SELECT c.id,c.activity_id,c.kind,c.summary,c.before_value,c.after_value,c.created_at,COALESCE(a.title_zh,a.title) activity_title FROM catalog_changes c JOIN catalog_activities a ON a.id=c.activity_id WHERE c.id>%s AND a.publication='PUBLISHED' AND (%s::text[] IS NULL OR a.id=ANY(%s::text[])) ORDER BY c.id LIMIT 51""",
-                            (position, ids, ids),
-                        ).fetchall()
-                    )
-                    items = rows[:50]
-                    value = {
-                        "items": items,
-                        "next_cursor": _cursor_encode(items[-1]["id"] if items else position),
-                        "has_more": len(rows) > 50,
-                    }
+                value = _read_updates(
+                    catalog,
+                    identity,
+                    str(args.get("cursor", "")),
+                    str(args.get("mode", "following")),
+                    50,
+                )
             elif name == "list_subscriptions":
                 identity = _identity(request, catalog, "subscriptions:read")
                 with catalog.connect() as conn:
