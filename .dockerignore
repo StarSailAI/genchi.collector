@@ -14,5 +14,6 @@ build
 *.egg-info
 runtime
 .DS_Store
+**/._*
 .idea
 *.log
