@@ -193,7 +193,11 @@ def answer_question(catalog, question):
         rate_limit(catalog, [("homepage-ask-global", "all-users", 3600, 1)])
     except HTTPException as exc:
         if exc.status_code == 429:
-            raise HTTPException(429, "免费问答通道拥挤，请稍后再试。", headers=exc.headers) from None
+            # Concurrent transactions can start before the winning transaction's
+            # clock, so the generic counter may round its retry to 3601 seconds.
+            retry = max(1, min(3600, int((exc.headers or {}).get("Retry-After", "3600"))))
+            raise HTTPException(429, "免费问答通道拥挤，请稍后再试。",
+                                headers={"Retry-After": str(retry)}) from None
         raise
     locale = request_locale.get()
     now = datetime.now(UTC)
