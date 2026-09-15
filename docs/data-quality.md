@@ -77,3 +77,60 @@ python -m genchi_product.quality repair-community-links --apply
 
 This rule replaces the canonical link and adds verified official evidence. It leaves the detailed
 candidate in review and does not infer performer or ownership relations.
+
+## Session semantics and coverage (2026-09)
+
+The Lawson search results are **discovery summaries**, not complete schedules. Native `pfKey`
+identifiers cannot be compressed to distinct dates. The collector reads the public `form-data`
+JSON from the detail page, follows every advertised reception, and retains each reception's
+explicit applicable session keys. Only `scheduleCompleteness=native_detail` can enter automatic
+publication; bounded, missing, conflicting or redirected details go to review. Collection metrics
+include `detail_pages` and `complete_details`; the detail cursor rotates the bounded work.
+
+Never infer hours from opaque session IDs. Missing clock times remain DATE. Period passes use
+both explicit date boundaries, not the `99999999` sentinel. Check the label beside the clock:
+`開演`, `入場開始` and `入店開始` mean different things. A vendor's admission clock cannot replace
+an organizer-confirmed performance clock. Exhibitions use admission slots/periods, hotel room
+products use check-in dates, and live viewings use screening times. Each generated node contains
+its date/time and venue; the original activity title is retained separately.
+
+Ticket deadlines can differ by session within one reception. Native reception and session scopes
+are separate identities. Identical facts may share a milestone; a later scoped change splits the
+changed session without updating every other session. Sold out or reception closed does not mean
+canceled. Pia cancellation must be grounded in its status component (`statusEvidence`), never in
+generic refund/cancellation instructions elsewhere on the page. Legacy cancellation claims without
+that evidence enter REVIEW, including when replayed through the pipeline.
+
+The model prompt has the same time semantics and session-coverage requirements. All model output
+continues to require evidence and review; prompting alone is not an authorization to publish.
+
+### Historical repair procedure
+
+Live collection and snapshot capture run on the production worker, never the developer's machine.
+Keep browser snapshots outside disposable containers, take a verified database backup and pause
+normalization/notifier processes during import and repair. Use previews before applying:
+
+```bash
+# Worker: writes the versioned raw resource through PostgresSink.
+python deploy/import-lawson-native-snapshots.py /path/to/remote-snapshots
+python deploy/import-lawson-native-snapshots.py /path/to/remote-snapshots --apply
+# Product: retains existing activity IDs and only supersedes covered coarse dates.
+python -m genchi_product.schedule_quality native
+python -m genchi_product.schedule_quality native --apply
+python -m genchi_product.schedule_quality labels
+python -m genchi_product.schedule_quality labels --apply
+python -m genchi_product.schedule_quality pia-status
+python -m genchi_product.schedule_quality pia-status --apply
+```
+
+Repairs preserve raw versions, original entities, evidence, external mappings and subscriptions;
+superseded nodes are retained. Each substantive repair records a non-notifying `DATA_REPAIRED`
+change. Native replay is idempotent per resource version; label and status repairs are idempotent
+by state. Absence from today's ticket page is not proof of cancellation: historical dates lacking
+replacement evidence stay in the review backlog. Audit again after applying, verify public activity
+responses and repeat previews to confirm no further mutations are proposed.
+
+Regression coverage: `tests/test_lawson_detail.py` covers session/round identity, per-session sales
+deadlines, admission periods, clock meaning, missing evidence and footer cancellation text.
+PostgreSQL tests in `tests/test_product.py` cover scoped fact splitting and idempotent historical
+repairs preserving IDs and suppressing notification changes.

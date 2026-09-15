@@ -91,6 +91,8 @@ def same_milestone_fact(item: MilestoneInput, row: dict, *, same_occurrence: boo
         return False
     if item.platform and row.get("platform") and item.platform != row["platform"]:
         return False
+    if item.scope_key and item.round_key != row.get("round_key"):
+        return False
     # A second ticket product can share name and sales times. Price/conditions
     # are identity-bearing evidence too; missing fields are not equality.
     left, right = item.details, row.get("details") or {}

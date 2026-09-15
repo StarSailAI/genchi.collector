@@ -21,15 +21,17 @@ from .domain import (
     Moment,
     SubjectRelationInput,
     canonical_url,
+    classify,
     fingerprint,
     normalize,
 )
 from .importer import PHASE_LABELS, subjects_for
 from .matching import event_reference, find_activity_matches
+from .schedules import role_for
 from .store import Catalog
 
 LOGGER = logging.getLogger(__name__)
-PROMPT_VERSION = "catalog-v3.0-subject-provenance"
+PROMPT_VERSION = "catalog-v3.1-session-semantics"
 
 
 def precise(value, end=None) -> Moment:
@@ -47,7 +49,7 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
     payload = attributes.get("ticket_page") or attributes.get("eplus_ticket") or {}
     events = payload.get("events") or []
     platform = payload.get("platform") or attributes.get("source_type", "").removesuffix("_ticket")
-    if platform == "lawson":
+    if platform == "lawson" and payload.get("scheduleCompleteness") != "native_detail":
         dated_events = {str(event.get("startsAt") or "")[:10] for event in events if event.get("startsAt")}
         native_keys = {
             key
@@ -61,6 +63,12 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                 f"Lawson 搜索结果有 {len(native_keys)} 个原生场次标识，但只解析出 "
                 f"{len(dated_events)} 个日期；不能将多场演出压成日期节点并自动发布"
             )
+        raise ValueError("Lawson 仅有搜索日期摘要或不完整详情；需核对原生逐场时间和各受付适用场次后发布")
+    if platform == "lawson":
+        if any(not e.get("nativePerformanceKey") or any(
+            e["nativePerformanceKey"] not in (w.get("nativePerformanceKeys") or [])
+            for w in e.get("ticketWindows") or []) for e in events):
+            raise ValueError("Lawson 原生场次与售票窗口的适用关系缺失")
     if attributes.get("source_type") == "asobi_ticket":
         from genchi_normalizer.app import _asobi_match_acts, _asobi_real_acts
 
@@ -144,7 +152,8 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                 or window.get("label")
                 or PHASE_LABELS.get(window.get("phase"), "售票")
             )
-            round_key = f"{platform}:{window.get('id') or fingerprint(normalize(label) + str(window.get('url') or resource.get('url')))}"
+            window_key = f"{platform}:{window.get('id') or fingerprint(normalize(label) + str(window.get('url') or resource.get('url')))}"
+            round_key = f"{platform}:{window['roundId']}" if window.get("roundId") else window_key
             ticket_evidence = ev.model_copy(
                 update={
                     "field_path": "ticket",
@@ -152,15 +161,18 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                 }
             )
             status = "CANCELED" if window.get("status") == "CANCELED" else "CONFIRMED"
+            if platform == "pia" and status == "CANCELED" and not window.get("statusEvidence"):
+                status = "REVIEW"
             nodes.append(
                 MilestoneInput(
-                    source_key=f"native-ticket:{round_key}",
+                    source_key=f"native-ticket:{window_key}",
                     kind="TICKET",
                     title=label,
                     time=precise(window["opensAt"], window.get("closesAt")),
                     url=window.get("url") or resource.get("url"),
                     platform=platform,
                     round_key=round_key,
+                    scope_key=window_key if window.get("roundId") else None,
                     status=status,
                     notes=window.get("notes"),
                     details={"phase": window.get("phase"), "price_jpy": window.get("priceJpy")},
@@ -174,11 +186,12 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                 if window.get(field):
                     nodes.append(
                         MilestoneInput(
-                            source_key=f"native-{kind}:{round_key}",
+                            source_key=f"native-{kind}:{window_key}",
                             kind=kind,
                             title=f"{label} · {suffix}",
                             time=precise(window[field]),
                             round_key=round_key,
+                            scope_key=window_key if window.get("roundId") else None,
                             url=window.get("url") or resource.get("url"),
                             platform=platform,
                             requires=requirement,
@@ -197,6 +210,9 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                 )
             )
         venue = event.get("venue") or {}
+        role = role_for(title, "OTHER", event.get("startLabel") or
+                        ("開演" if platform == "pia" and "T" in str(event.get("startsAt")) else ""))
+        entry_only_performance = role == "ADMISSION" and classify(title) in {"LIVE", "FESTIVAL", "MEETUP"}
         results.append(
             ActivityInput(
                 activity_key=event.get("activityKey"),
@@ -206,10 +222,11 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                 subject_slugs=slugs,
                 kind="OTHER",
                 occurrence_key=native_key,
+                occurrence_role=role,
                 time=precise(event.get("startsAt"), event.get("endsAt")),
                 venue=venue.get("name"),
                 city=venue.get("prefecture"),
-                publication="PUBLISHED" if slugs else "REVIEW",
+                publication="PUBLISHED" if slugs and not entry_only_performance else "REVIEW",
                 evidence=ev,
                 milestones=nodes,
             )
@@ -251,6 +268,10 @@ def extract_text(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
         + "Do not use a publisher's publication/update date as an event or ticket date. "
         "Keep different cities, dates and sessions separate; never combine a tour's disconnected dates into a continuous period. "
         "For multiple performance dates repeat the SAME formal title in separate activity entries, one per date/session. "
+        "Read the label beside each clock: 開場/入場/入店 are admission, 開演 is performance, hotel check-in is a stay, and screening is not a live concert. "
+        "Keep every same-day session and venue; include its date, clock and session name in milestone titles. Do not emit repeated generic 活动开始 labels. "
+        "Do not mistake ticket sales/application/result/payment dates for performance dates. Preserve each reception's explicit applicable sessions and per-session deadlines. "
+        "If session coverage or the meaning of a clock is unclear, state the uncertainty in summary; never invent a mapping. "
         "Never replace known performance dates with TBD because there are several dates. "
         "For DATE, put YYYY-MM-DD in starts_on/ends_on and leave starts_at/ends_at null; never invent midnight. "
         "For TIME, use starts_at/ends_at with timezone offsets and leave starts_on/ends_on null. "

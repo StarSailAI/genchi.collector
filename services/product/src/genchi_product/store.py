@@ -12,6 +12,7 @@ from psycopg.types.json import Jsonb
 from .domain import ActivityInput, EvidenceInput, MilestoneInput, Moment, fingerprint, normalize
 from .matching import event_reference, find_activity_matches, same_milestone_fact
 from .naming import sync_name
+from .schedules import occurrence_label, schedule_node
 
 
 def uid() -> str:
@@ -292,7 +293,7 @@ class Catalog:
                 conn.execute(
                     """INSERT INTO catalog_occurrences(id,activity_id,identity_key,label,venue,city,starts_at,
                     ends_at,starts_on,ends_on,precision,timezone) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                    (occurrence_id, activity_id, occurrence_key, item.occurrence_label or item.title, *values),
+                    (occurrence_id, activity_id, occurrence_key, occurrence_label(item.time, item.venue, item.occurrence_label), *values),
                 )
             elif not historical and item.evidence.verified:
                 conn.execute(
@@ -306,15 +307,8 @@ class Catalog:
             (item.source_key, activity_id, occurrence_id),
         )
         if occurrence_id:
-            kind = "PERIOD" if item.kind in {"CAFE", "POPUP", "EXHIBITION"} else "START"
-            start_title = (
-                f"{item.occurrence_label} · 开演"
-                if item.occurrence_label and kind == "START" and item.time.precision == "TIME"
-                else "举办期间" if kind == "PERIOD"
-                else "开演" if item.kind == "LIVE" and item.time.precision == "TIME"
-                else "演出日期（时间待核验）" if item.kind == "LIVE"
-                else "举办日期"
-            )
+            kind, start_title, role = schedule_node(item.title, item.kind, item.time, item.venue,
+                                                   item.occurrence_label, item.occurrence_role)
             start = MilestoneInput(
                 source_key=f"occurrence:{occurrence_id}",
                 kind=kind,
@@ -323,7 +317,8 @@ class Catalog:
                 time=item.time,
                 url=item.url,
                 evidence=item.evidence,
-                notes="具体时间待公布" if item.time.precision == "DATE" else None,
+                notes="当前来源仅确认日期，具体时刻尚未核验" if item.time.precision == "DATE" else None,
+                details={"schedule_role": role, "generated_from_occurrence": True},
             )
             self.milestone(conn, activity_id, occurrence_id, start, historical=historical)
         for milestone in item.milestones:
@@ -354,7 +349,7 @@ class Catalog:
                     normalize(item.title),
                     item.platform or "",
                     item.url or "",
-                    item.round_key
+                    item.scope_key or item.round_key
                     or (
                         str(occurrence_id)
                         if item.kind in {"START", "PERIOD", "DOORS"}
@@ -400,6 +395,19 @@ class Catalog:
             requires=item.requires,
             details=item.details,
         )
+        if current and mapped and item.scope_key and occurrence_id and item.evidence.verified:
+            differs = any(current[k] != fields[k] for k in fields)
+            shared = conn.execute("""SELECT 1 FROM catalog_milestone_scopes
+                WHERE milestone_id=%s AND occurrence_id<>%s LIMIT 1""",
+                (current["id"], occurrence_id)).fetchone()
+            if differs and shared and not historical:
+                # Identical windows may share a node. A later per-session change
+                # must split that scope instead of changing every other session.
+                conn.execute("DELETE FROM catalog_milestone_scopes WHERE milestone_id=%s AND occurrence_id=%s",
+                             (current["id"], occurrence_id))
+                conn.execute("DELETE FROM catalog_external_ids WHERE key=%s", (source_key,))
+                semantic = fingerprint(semantic + ":split:" + source_key + ":" + current["id"])
+                current = None
         milestone_id = current["id"] if current else uid()
         changed = current and any(current[k] != fields[k] for k in fields)
         if current is None:

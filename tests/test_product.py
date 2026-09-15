@@ -1426,3 +1426,77 @@ def test_lawson_round_repair_preserves_legacy_id_and_splits_scopes(catalog, monk
         assert conn.execute("SELECT revision FROM catalog_milestones WHERE id=%s", (old_id,)).fetchone()['revision'] == old_revision
         assert conn.execute("SELECT count(*) n FROM catalog_milestone_scopes WHERE milestone_id=%s", (old_id,)).fetchone()['n'] == 2
         assert repair(conn, resources, [], apply=True) == []
+
+
+def test_scoped_ticket_update_splits_shared_fact_without_touching_other_session(catalog):
+    first = activity('slot:1')
+    first.milestones[0].url = 'https://tickets.test/same-round'
+    first.milestones[0].scope_key = 'slot:1'
+    first.milestones[0].source_key = 'ticket:slot:1'
+    second = first.model_copy(deep=True)
+    second.source_key = second.occurrence_key = 'slot:2'
+    second.time.starts_at += timedelta(hours=4)
+    second.milestones[0].scope_key = 'slot:2'
+    second.milestones[0].source_key = 'ticket:slot:2'
+    aid = catalog.publish(first)
+    catalog.publish(second)
+    with catalog.connect() as conn:
+        assert conn.execute("SELECT count(*) n FROM catalog_milestones WHERE kind='TICKET'").fetchone()['n'] == 1
+    before = second.milestones[0].time.ends_at
+    first.milestones[0].time.ends_at -= timedelta(hours=3)
+    catalog.publish(first)
+    catalog.publish(first)
+    with catalog.connect() as conn:
+        nodes = conn.execute("SELECT * FROM catalog_milestones WHERE kind='TICKET' ORDER BY ends_at").fetchall()
+        assert len(nodes) == 2
+        assert nodes[0]['ends_at'] == first.milestones[0].time.ends_at
+        assert nodes[1]['ends_at'] == before
+        for item, expected in [(first,nodes[0]),(second,nodes[1])]:
+            mapped = conn.execute('SELECT milestone_id FROM catalog_external_ids WHERE key=%s',(aid+':'+item.milestones[0].source_key,)).fetchone()
+            assert mapped['milestone_id'] == expected['id']
+            assert conn.execute('SELECT count(*) n FROM catalog_milestone_scopes WHERE milestone_id=%s',(expected['id'],)).fetchone()['n']==1
+
+
+def test_schedule_label_repair_is_idempotent_and_retains_ids(catalog):
+    from genchi_product.schedule_quality import repair_labels
+    item = activity('exhibit')
+    item.title = 'ラブライブ！活動展 ～Aqours～'
+    aid = catalog.publish(item, historical=True)
+    with catalog.connect() as conn:
+        row=conn.execute("SELECT * FROM catalog_milestones WHERE kind='DOORS'").fetchone()
+        conn.execute("UPDATE catalog_milestones SET kind='START',title='活动开始',title_zh='活动开始' WHERE id=%s",(row['id'],))
+        conn.execute("UPDATE catalog_activities SET kind='LIVE' WHERE id=%s",(aid,))
+    assert repair_labels(catalog)['count']==1
+    assert repair_labels(catalog,apply=True)['roles']=={'ADMISSION':1}
+    assert repair_labels(catalog,apply=True)['count']==0
+    with catalog.connect() as conn:
+        fixed=conn.execute('SELECT * FROM catalog_milestones WHERE id=%s',(row['id'],)).fetchone()
+        assert fixed['kind']=='DOORS' and '指定入场' in fixed['title_zh']
+        assert conn.execute('SELECT kind FROM catalog_activities WHERE id=%s',(aid,)).fetchone()['kind']=='EXHIBITION'
+        assert conn.execute("SELECT count(*) n FROM catalog_changes WHERE kind='DATA_REPAIRED' AND notify").fetchone()['n']==0
+
+
+def test_native_schedule_repair_preserves_activity_and_is_idempotent(catalog):
+    from genchi_product.schedule_quality import repair_native
+    from psycopg.types.json import Jsonb
+    item=activity('native:lawson:event:coarse-date')
+    item.time=Moment(precision='DATE',starts_on='2030-06-21')
+    aid=catalog.publish(item,historical=True)
+    payload={'platform':'lawson','pageId':'12345','scheduleCompleteness':'native_detail',
+             'searchSummary':[{'id':'coarse-date'}],
+             'events':[{'id':'slot-'+str(hour),'nativePerformanceKey':'slot-'+str(hour),'name':item.title,
+                        'startsAt':f'2030-06-21T{hour:02d}:00:00+09:00','startLabel':'開演',
+                        'venue':{'name':'Tokyo Hall'},'ticketWindows':[]} for hour in (13,18)]}
+    with catalog.connect() as conn:
+        conn.execute("INSERT INTO resources(source_id,external_id,title,content_hash,attributes) VALUES('lawson','a',%s,'native-v1',%s)",
+                     (item.title,Jsonb({'source_type':'lawson_ticket','schedule_audit':'2026-09-session-semantics','ticket_page':payload})))
+    preview=repair_native(catalog)
+    assert preview['reports'][0]['native_sessions']==2
+    assert len(preview['reports'][0]['superseded_dates'])==1
+    repair_native(catalog,apply=True)
+    assert repair_native(catalog,apply=True)['statuses']=={'already_repaired':1}
+    with catalog.connect() as conn:
+        assert conn.execute('SELECT count(*) n FROM catalog_activities').fetchone()['n']==1
+        assert conn.execute("SELECT count(*) n FROM catalog_occurrences WHERE status<>'SUPERSEDED'").fetchone()['n']==2
+        assert conn.execute('SELECT activity_id FROM catalog_external_ids WHERE key=%s',('native:lawson:lcode:12345:2030',)).fetchone()['activity_id']==aid
+        assert conn.execute("SELECT count(*) n FROM catalog_changes WHERE notify").fetchone()['n']==0

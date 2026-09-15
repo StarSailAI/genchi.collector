@@ -1466,7 +1466,8 @@ def _pia_window(
         "opensAt": opens_at,
         "closesAt": closes_at,
         "resultAt": result_values[0] if result_values else None,
-        "status": _eplus_ticket_status(page_text),
+        "status": _eplus_ticket_status(" ".join(n.get_text(" ", strip=True) for n in soup.select(".textLabel"))),
+        "statusEvidence": " ".join(n.get_text(" ", strip=True) for n in soup.select(".textLabel")),
         "url": sale_url,
     }
 
@@ -1528,6 +1529,7 @@ def _pia_performances(
                 "startsAt": starts_at,
                 "endsAt": None,
                 "doorsAt": doors_at,
+                "startLabel": "開演" if start_match else None,
                 "venue": {
                     "name": venue_name or None,
                     "url": None,
@@ -2060,6 +2062,8 @@ class LawsonTicketConfig(BaseModel):
     queries_per_run: int = Field(default=6, ge=1, le=30)
     max_results_per_run: int = Field(default=200, ge=1, le=1000)
     max_content_chars: int = Field(default=120_000, ge=1000, le=500_000)
+    max_detail_pages_per_run: int = Field(default=30, ge=0, le=200)
+    max_rounds_per_detail: int = Field(default=8, ge=1, le=30)
     browser_url: str = "http://browser:3003"
     browser_token_secret: str = "BROWSER_API_TOKEN"
     project_keywords: dict[str, tuple[str, ...]] = Field(
@@ -2149,10 +2153,57 @@ class LawsonTicketFetcher(FetcherPlugin):
                     )
         if not parsed_results and errors:
             raise TransientError(f"all Lawson Ticket searches failed: {errors[0]}")
+        from .lawson import detail_url, merge_details, parse_detail
+
+        detail_pages = 0
+        detail_cursor = int(checkpoint.get("detail_cursor") or 0)
+        candidates = list(parsed_results.values())[: config.max_results_per_run]
+        if candidates:
+            offset = detail_cursor % len(candidates)
+            ordered = candidates[offset:] + candidates[:offset]
+            processed = 0
+            for parsed in ordered:
+                parsed["scheduleCompleteness"] = "search_summary"
+                parsed["searchSummary"] = parsed["events"]
+                if detail_pages >= config.max_detail_pages_per_run:
+                    continue
+                processed += 1
+                code = str(parsed["pageId"])
+                try:
+                    url = detail_url(code)
+                    detail_pages += 1
+                    html, final = browser.render(url, selector="body")
+                    first = parse_detail(html, final)
+                    pages_for_event = [first]
+                    selected = first["selectedReception"].split(":")
+                    selected_url = detail_url(*selected)
+                    other_urls = [u for u in first["roundUrls"] if u != selected_url]
+                    complete = True
+                    for other in other_urls:
+                        if len(pages_for_event) >= config.max_rounds_per_detail or detail_pages >= config.max_detail_pages_per_run:
+                            complete = False
+                            break
+                        detail_pages += 1
+                        html, final = browser.render(other, selector="body")
+                        page = parse_detail(html, final)
+                        if detail_url(*page["selectedReception"].split(":")) != other:
+                            raise ValueError("Lawson did not return the requested reception")
+                        pages_for_event.append(page)
+                    parsed["events"] = merge_details(pages_for_event)
+                    parsed["scheduleCompleteness"] = "native_detail" if complete else "partial_detail"
+                    parsed["detailUrls"] = [detail_url(*p["selectedReception"].split(":")) for p in pages_for_event]
+                except RateLimitError:
+                    raise
+                except (ValueError, TransientError) as exc:
+                    parsed["scheduleCompleteness"] = "search_summary"
+                    parsed["events"] = parsed["searchSummary"]
+                    parsed["detailError"] = str(exc)[:500]
+                    errors.append(f"Lawson detail {code}: {exc}")
+            detail_cursor += processed
         emitted = 0
         event_count = 0
         ticket_count = 0
-        for parsed in list(parsed_results.values())[: config.max_results_per_run]:
+        for parsed in candidates:
             project = str(parsed["project"])
             events = parsed["events"]
             tags = tuple(tag for tag in request.tags if not str(tag).startswith("project:")) + (
@@ -2188,6 +2239,10 @@ class LawsonTicketFetcher(FetcherPlugin):
                             "nativeCategories": parsed["nativeCategories"],
                             "discovery": parsed["discovery"],
                             "events": events,
+                            "scheduleCompleteness": parsed.get("scheduleCompleteness", "search_summary"),
+                            "searchSummary": parsed.get("searchSummary", []),
+                            "detailUrls": parsed.get("detailUrls", []),
+                            "detailError": parsed.get("detailError"),
                         },
                         "media": [],
                     },
@@ -2201,12 +2256,15 @@ class LawsonTicketFetcher(FetcherPlugin):
             {
                 "last_success_at": datetime.now(UTC).isoformat(),
                 "keyword_cursor": (cursor + count) % len(config.search_keywords),
+                "detail_cursor": detail_cursor,
             }
         )
         return FetchReport(
             status="partial" if errors else "succeeded",
             details={
                 "search_pages": pages,
+                "detail_pages": detail_pages,
+                "complete_details": sum(p.get("scheduleCompleteness") == "native_detail" for p in candidates),
                 "queries": selected,
                 "empty_queries": empty_queries,
                 "results": emitted,

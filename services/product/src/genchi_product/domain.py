@@ -54,7 +54,7 @@ def classify(title: str, fallback: str = "OTHER") -> str:
     for pattern, kind in [
         (r"カフェ|cafe|café|喫茶", "CAFE"),
         (r"pop.?up|ポップアップ|快闪", "POPUP"),
-        (r"展覧|展示|展$|原画展|exhibition", "EXHIBITION"),
+        (r"展覧|展示|活動展|体験展|記念展|展(?=[\s「『:：・]|$)|原画展|exhibition|\bexpo\b", "EXHIBITION"),
         (r"物販|グッズ|通販|goods", "GOODS"),
         (r"お渡し|サイン会|握手|meet|ファンミ|トークイベント", "MEETUP"),
         (r"festival|フェス|fes\b", "FESTIVAL"),
@@ -187,6 +187,7 @@ class MilestoneInput(BaseModel):
     url: str | None = None
     platform: str | None = None
     round_key: str | None = None
+    scope_key: str | None = None
     eligibility: str | None = None
     notes: str | None = None
     requires: Literal["NONE", "APPLIED", "WON"] = "NONE"
@@ -217,6 +218,7 @@ class ActivityInput(BaseModel):
     time: Moment = Field(default_factory=Moment)
     occurrence_key: str | None = None
     occurrence_label: str | None = Field(default=None, max_length=500)
+    occurrence_role: Literal["EVENT", "PERFORMANCE", "ADMISSION", "STAY", "SCREENING"] | None = None
     venue: str | None = None
     city: str | None = None
     status: Literal["ANNOUNCED", "SCHEDULED", "POSTPONED", "CANCELED", "ENDED"] = "SCHEDULED"
