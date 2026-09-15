@@ -1500,3 +1500,19 @@ def test_native_schedule_repair_preserves_activity_and_is_idempotent(catalog):
         assert conn.execute("SELECT count(*) n FROM catalog_occurrences WHERE status<>'SUPERSEDED'").fetchone()['n']==2
         assert conn.execute('SELECT activity_id FROM catalog_external_ids WHERE key=%s',('native:lawson:lcode:12345:2030',)).fetchone()['activity_id']==aid
         assert conn.execute("SELECT count(*) n FROM catalog_changes WHERE notify").fetchone()['n']==0
+
+
+def test_pia_legacy_cancellation_is_reviewed_without_inventing_current_status(catalog):
+    from genchi_product.schedule_quality import repair_pia_status
+    item=activity('pia:old')
+    node=item.milestones[0]
+    node.platform='pia'
+    node.status='CANCELED'
+    node.evidence.excerpt='{"status":"CANCELED"}'
+    aid=catalog.publish(item,historical=True)
+    assert repair_pia_status(catalog)['count']==1
+    assert repair_pia_status(catalog,apply=True)['count']==1
+    assert repair_pia_status(catalog,apply=True)['count']==0
+    with catalog.connect() as conn:
+        assert conn.execute("SELECT status FROM catalog_milestones WHERE activity_id=%s AND platform='pia'",(aid,)).fetchone()['status']=='REVIEW'
+        assert conn.execute("SELECT count(*) n FROM catalog_changes WHERE notify").fetchone()['n']==0
