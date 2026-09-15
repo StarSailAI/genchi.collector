@@ -76,9 +76,15 @@ def main():
         record = ResourceRecord(
             external_id=row["external_id"],
             kind=row["kind"],
-            url=row["url"],
+            url=detail_url(code) if complete else row["url"],
             title=row["title"],
-            content=row["content"],
+            content=(
+                "\n".join(
+                    [row["title"], *[json.dumps(e, ensure_ascii=False) for e in payload["events"]]]
+                )[:100000]
+                if complete
+                else row["content"]
+            ),
             content_type=row["content_type"],
             language=row["language"],
             published_at=row["published_at"],
