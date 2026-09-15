@@ -159,7 +159,15 @@ def repair_native(catalog: Catalog, *, apply=False):
                         payload={"resource_id": resource["id"], "code": code},
                     )
                 continue
-            items = structured(resource, subjects)
+            try:
+                items = structured(resource, subjects)
+            except ValueError as exc:
+                report["reason"] = str(exc)[:500]
+                if apply:
+                    catalog.review(conn, key="schedule-validation:" + str(resource["id"]),
+                                   resource_id=resource["id"], activity_id=aid,
+                                   reason=report["reason"], payload={"code": code})
+                continue
             # A ticket page's 入店开始 is not the organizer's 开演. Preserve both meanings.
             if any(
                 i.occurrence_role == "ADMISSION"
@@ -203,7 +211,9 @@ def repair_native(catalog: Catalog, *, apply=False):
                 ]
                 if matches:
                     covered.append(o["id"])
-                else:
+                elif not any(i.time.anchor() == str(o["starts_on"])
+                             and normalize(i.venue or "") == normalize(o["venue"] or "")
+                             for i in items):
                     unresolved.append(o["id"])
             report.update(
                 status="repaired" if apply else "ready",

@@ -67,7 +67,11 @@ def main():
             detailError="; ".join(errors)[:500] or None,
         )
         if complete:
-            payload["events"] = merge_details(pages)
+            try:
+                payload["events"] = merge_details(pages)
+            except ValueError as exc:
+                complete = False
+                payload.update(scheduleCompleteness="search_summary", detailError=str(exc)[:500])
         attrs["ticket_page"] = payload
         record = ResourceRecord(
             external_id=row["external_id"],
