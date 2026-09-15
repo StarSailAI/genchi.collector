@@ -334,9 +334,7 @@ def main():
     parser.add_argument("command", choices=["labels", "native", "pia-status"])
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
-    result = (repair_labels if args.command == "labels" else repair_native)(
-        Catalog(), apply=args.apply
-    )
+    result = {"labels": repair_labels, "native": repair_native, "pia-status": repair_pia_status}[args.command](Catalog(), apply=args.apply)
     print(json.dumps(json_value(result), ensure_ascii=False, indent=2))
 
 

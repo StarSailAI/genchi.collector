@@ -223,6 +223,18 @@ def audit(catalog: Catalog, limit: int = 50) -> dict:
             WHERE a.publication='PUBLISHED' AND m.status='CONFIRMED'
               AND m.kind='START' AND m.title='活动开始'
             ORDER BY a.updated_at DESC LIMIT %s""",
+        "lawson_incomplete_details": """
+            SELECT id,title,attributes->'ticket_page'->>'scheduleCompleteness' completeness
+            FROM allfeeds.resources WHERE attributes->>'source_type'='lawson_ticket'
+              AND COALESCE(attributes->'ticket_page'->>'scheduleCompleteness','')<>'native_detail'
+            ORDER BY id LIMIT %s""",
+        "pia_unproven_cancellation": """
+            SELECT m.id,m.activity_id,m.title,m.url FROM catalog_milestones m
+            WHERE m.platform='pia' AND m.status='CANCELED'
+              AND EXISTS(SELECT 1 FROM catalog_evidence e WHERE e.milestone_id=m.id
+                AND e.method='structured' AND e.excerpt LIKE '%%CANCELED%%'
+                AND e.excerpt NOT LIKE '%%statusEvidence%%')
+            ORDER BY m.id LIMIT %s""",
         "lawson_native_sessions_collapsed": """
             WITH parsed AS (
               SELECT r.id,r.title,
@@ -239,6 +251,7 @@ def audit(catalog: Catalog, limit: int = 50) -> dict:
                  WHERE key <> '') AS native_keys
               FROM allfeeds.resources r
               WHERE r.attributes->>'source_type'='lawson_ticket'
+                AND COALESCE(r.attributes->'ticket_page'->>'scheduleCompleteness','')<>'native_detail'
             )
             SELECT id,title,parsed_dates,native_keys FROM parsed
             WHERE native_keys>parsed_dates
