@@ -101,7 +101,7 @@ def featured(catalog):
         by_id = {row["id"]: row for row in current}
         selected = [by_id[key] for key in (saved["milestone_ids"] if saved else []) if key in by_id]
         available_activities = len({row["activity_id"] for row in current})
-        if not saved or saved["selection_date"] != today or len(selected) < min(4, available_activities):
+        if not saved or saved["selection_date"] != today or len(selected) < min(6, available_activities):
             selected = select_cards(current)
             saved = conn.execute("""
                 INSERT INTO genchi_private.home_features(id,selection_date,milestone_ids)
