@@ -2063,7 +2063,7 @@ class LawsonTicketConfig(BaseModel):
     max_results_per_run: int = Field(default=200, ge=1, le=1000)
     max_content_chars: int = Field(default=120_000, ge=1000, le=500_000)
     max_detail_pages_per_run: int = Field(default=30, ge=0, le=200)
-    max_rounds_per_detail: int = Field(default=8, ge=1, le=30)
+    max_rounds_per_detail: int = Field(default=30, ge=1, le=30)
     browser_url: str = "http://browser:3003"
     browser_token_secret: str = "BROWSER_API_TOKEN"
     project_keywords: dict[str, tuple[str, ...]] = Field(

@@ -174,8 +174,13 @@ def repair_native(catalog: Catalog, *, apply=False):
                 and classify(i.title) in {"LIVE", "FESTIVAL", "MEETUP"}
                 for i in items
             ):
-                report["status"] = "organizer_schedule_preserved"
-                report["reason"] = "售票站只明确入场，未作为开演替换；主办方已核验场次保留"
+                official = conn.execute("SELECT 1 FROM catalog_evidence WHERE activity_id=%s AND verified AND method LIKE 'editorial:official%%' LIMIT 1", (aid,)).fetchone()
+                report["status"] = "organizer_schedule_preserved" if official else "entry_time_requires_review"
+                report["reason"] = "售票站只明确入场，不据此改写演出时间；既有安排保留"
+                if apply and not official:
+                    catalog.review(conn, key="schedule-entry:" + str(resource["id"]),
+                                   activity_id=aid, resource_id=resource["id"], reason=report["reason"],
+                                   payload={"code": code})
                 continue
             marker = fingerprint(
                 "schedule-native-v1:" + str(resource["id"]) + ":" + resource["content_hash"]
