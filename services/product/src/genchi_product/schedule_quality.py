@@ -214,7 +214,11 @@ def repair_native(catalog: Catalog, *, apply=False):
                     and i.time.anchor() == str(o["starts_on"])
                     and normalize(i.venue or "") == normalize(o["venue"] or "")
                 ]
-                if matches:
+                explicit_date = any(i.time.precision == "DATE"
+                                    and i.time.anchor() == str(o["starts_on"])
+                                    and normalize(i.venue or "") == normalize(o["venue"] or "")
+                                    for i in items)
+                if matches and not explicit_date:
                     covered.append(o["id"])
                 elif not any(i.time.anchor() == str(o["starts_on"])
                              and normalize(i.venue or "") == normalize(o["venue"] or "")

@@ -134,3 +134,10 @@ Regression coverage: `tests/test_lawson_detail.py` covers session/round identity
 deadlines, admission periods, clock meaning, missing evidence and footer cancellation text.
 PostgreSQL tests in `tests/test_product.py` cover scoped fact splitting and idempotent historical
 repairs preserving IDs and suppressing notification changes.
+
+After the native replay, run `deploy/finalize-schedule-replay.py` inside the product image with the
+applied native report, first as a preview and then with `--apply`. It verifies committed repair
+receipts against the current raw version, refreshes raw search and acknowledges the corresponding
+jobs. Unresolved resources get persistent review dispositions. This avoids processing the same
+historical batch again as newly discovered information when normalization resumes. A DATE ticket
+explicitly present in native details is retained even when that date also has timed admission slots.

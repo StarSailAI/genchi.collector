@@ -1476,7 +1476,8 @@ def test_schedule_label_repair_is_idempotent_and_retains_ids(catalog):
         assert conn.execute("SELECT count(*) n FROM catalog_changes WHERE kind='DATA_REPAIRED' AND notify").fetchone()['n']==0
 
 
-def test_native_schedule_repair_preserves_activity_and_is_idempotent(catalog):
+@pytest.mark.parametrize("date_pass", [False, True])
+def test_native_schedule_repair_preserves_activity_and_is_idempotent(catalog, date_pass):
     from genchi_product.schedule_quality import repair_native
     from psycopg.types.json import Jsonb
     item=activity('native:lawson:event:coarse-date')
@@ -1487,17 +1488,20 @@ def test_native_schedule_repair_preserves_activity_and_is_idempotent(catalog):
              'events':[{'id':'slot-'+str(hour),'nativePerformanceKey':'slot-'+str(hour),'name':item.title,
                         'startsAt':f'2030-06-21T{hour:02d}:00:00+09:00','startLabel':'開演',
                         'venue':{'name':'Tokyo Hall'},'ticketWindows':[]} for hour in (13,18)]}
+    if date_pass:
+        payload['events'].append({'id':'date-pass','nativePerformanceKey':'date-pass','name':item.title,
+                                  'startsAt':'2030-06-21','venue':{'name':'Tokyo Hall'},'ticketWindows':[]})
     with catalog.connect() as conn:
         conn.execute("INSERT INTO resources(source_id,external_id,title,content_hash,attributes) VALUES('lawson','a',%s,'native-v1',%s)",
                      (item.title,Jsonb({'source_type':'lawson_ticket','schedule_audit':'2026-09-session-semantics','ticket_page':payload})))
     preview=repair_native(catalog)
-    assert preview['reports'][0]['native_sessions']==2
-    assert len(preview['reports'][0]['superseded_dates'])==1
+    assert preview['reports'][0]['native_sessions']==2+date_pass
+    assert len(preview['reports'][0]['superseded_dates'])==int(not date_pass)
     repair_native(catalog,apply=True)
     assert repair_native(catalog,apply=True)['statuses']=={'already_repaired':1}
     with catalog.connect() as conn:
         assert conn.execute('SELECT count(*) n FROM catalog_activities').fetchone()['n']==1
-        assert conn.execute("SELECT count(*) n FROM catalog_occurrences WHERE status<>'SUPERSEDED'").fetchone()['n']==2
+        assert conn.execute("SELECT count(*) n FROM catalog_occurrences WHERE status<>'SUPERSEDED'").fetchone()['n']==2+date_pass
         assert conn.execute('SELECT activity_id FROM catalog_external_ids WHERE key=%s',('native:lawson:lcode:12345:2030',)).fetchone()['activity_id']==aid
         assert conn.execute("SELECT count(*) n FROM catalog_changes WHERE notify").fetchone()['n']==0
 
