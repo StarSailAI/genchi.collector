@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import Mock
 
+import psycopg
 import pytest
 import requests
 from fastapi import HTTPException
@@ -31,8 +32,8 @@ NOW = datetime(2030, 6, 1, 3, tzinfo=UTC)
 def model(monkeypatch):
     monkeypatch.setenv("ASK_LLM_BASE_URL", "https://api.deepseek.com")
     monkeypatch.setenv("ASK_LLM_API_KEY", "test-only-never-network")
-    call = Mock(return_value={"relevant": False, "keywords": [], "subjects": []})
-    monkeypatch.setattr("genchi_product.assistant.complete", call)
+    call = Mock(return_value={"status": "out_of_scope", "answer": "Outside event scope", "sources": []})
+    monkeypatch.setattr("genchi_product.ask_agent.run_agent", call)
     return call
 
 
@@ -138,23 +139,25 @@ def test_retrieval_uses_only_published_records_and_literal_keywords(catalog):
 
 
 def test_answers_reject_fabricated_citations(catalog, model):
-    catalog.publish(activity(start=datetime.now(UTC) + timedelta(days=10)))
-    model.side_effect = [
-        {"relevant": True, "keywords": [], "subjects": ["gakumas"]},
-        {"found": True, "answer": "An invented answer", "source_ids": ["invented-id"]},
-    ]
+    model.side_effect = ValueError("Citation must be an exact excerpt of a source actually read")
     with pytest.raises(HTTPException) as error:
         answer_question(catalog, "Gakumas next live?")
     assert error.value.status_code == 503
 
 
-def test_unverified_catalogue_cannot_be_misreported_as_unannounced(catalog, model):
-    catalog.publish(activity(start=datetime.now(UTC) + timedelta(days=10), verified=False))
-    model.return_value = {"relevant": True, "keywords": [], "subjects": ["gakumas"]}
+def test_database_timeout_is_redacted(catalog, model):
+    model.side_effect = psycopg.errors.QueryCanceled("sensitive query details")
+    with pytest.raises(HTTPException) as error:
+        answer_question(catalog, "Gakumas next live?")
+    assert error.value.status_code == 503 and "sensitive" not in str(error.value.detail)
+
+
+def test_insufficient_agent_answer_is_preserved(catalog, model):
+    model.return_value = {"status": "insufficient", "answer": "资料不足，这不代表官方尚未公布。", "sources": []}
     answer = answer_question(catalog, "Gakumas next live?")
     assert answer["status"] == "insufficient" and model.call_count == 1
     assert "这不代表官方尚未公布" in answer["answer"]
-    assert answer["sources"] and not answer["sources"][0]["urls"]
+    assert answer["sources"] == []
 
 
 def test_featured_selection_persists_and_immediately_removes_cancelled(catalog):

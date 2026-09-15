@@ -22,6 +22,12 @@ def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("serve")
+    ask = sub.add_parser("ask-eval", help="Internal read-only RAG evaluation; does not use the public quota")
+    ask.add_argument("question")
+    ask.add_argument("--locale", choices=["zh-Hans", "zh-Hant", "en", "ja"], default="zh-Hans")
+    ask.add_argument("--trace", action="store_true", help="Print tool counts/timing, never reasoning or credentials")
+    search = sub.add_parser("search-eval", help="Internal evidence retrieval only; no LLM or public quota")
+    search.add_argument("query", help="JSON EvidenceQuery: terms, focus, intent, time_scope")
     sub.add_parser("import-legacy")
     sub.add_parser("plan")
     sub.add_parser("index-raw")
@@ -45,7 +51,29 @@ def main():
         level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s"
     )
     catalog = Catalog()
-    if args.command == "serve":
+    if args.command == "ask-eval":
+        from .ask_agent import run_agent
+        from .assistant import Question, model_config
+
+        question = Question(question=args.question).question
+
+        def trace(event):
+            print(json.dumps({"trace": event}, ensure_ascii=False, default=str))
+
+        result = run_agent(catalog, question, model_config(), locale=args.locale,
+                           trace=trace if args.trace else None)
+        print(json.dumps(result, ensure_ascii=False, default=str))
+    elif args.command == "search-eval":
+        from .ask_agent import EvidenceStore
+        from .retrieval import EvidenceQuery, search_evidence
+
+        query = EvidenceQuery.model_validate_json(args.query)
+        started = time.monotonic()
+        evidence = EvidenceStore(catalog, started + 15)
+        result = search_evidence(evidence, query, evidence.now)
+        print(json.dumps(dict(result=result, seconds=round(time.monotonic() - started, 3)),
+                         ensure_ascii=False, default=str))
+    elif args.command == "serve":
         import uvicorn
 
         from .api import create_app
