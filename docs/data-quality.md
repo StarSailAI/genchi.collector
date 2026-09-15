@@ -141,3 +141,27 @@ receipts against the current raw version, refreshes raw search and acknowledges 
 jobs. Unresolved resources get persistent review dispositions. This avoids processing the same
 historical batch again as newly discovered information when normalization resumes. A DATE ticket
 explicitly present in native details is retained even when that date also has timed admission slots.
+
+### Venue identity and non-occurrence products
+
+`genchi_product.venues` stores reviewed venue aliases with supporting source URLs. Building names
+are not globally interchangeable with hall names: the Aqours/TO YAESU HALL alias is restricted to
+that named 2026 event. The Nihon Kogakuin/Katayanagi arena alias is supported by the venue owner's
+rename announcement. Occurrence identity uses these keys for new writes. Historical repair only
+merges matching exact times, date boundaries and statuses; it retains the oldest occurrence and
+all external mappings, evidence and ticket scopes. Different ticket platforms remain distinct.
+
+Known streaming platforms in the venue field become ONLINE review candidates. A multi-show pass
+in a venue field is a ticket product, not a separate performance, and also requires review. Raw
+records remain searchable. The corresponding historical review/supersession and alias commands are:
+
+```bash
+python -m genchi_product.occurrence_quality identity
+python -m genchi_product.occurrence_quality identity --apply
+python -m genchi_product.occurrence_quality labels
+python -m genchi_product.occurrence_quality labels --apply
+```
+
+The label enrichment retains explicit native session subtitles; admission restrictions are also
+preserved on their ticket nodes. It never guesses a missing hall from an unknown venue. The database
+regressions cover alias isolation, source-scope preservation, idempotence, online platforms and passes.

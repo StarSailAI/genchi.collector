@@ -27,8 +27,9 @@ from .domain import (
 )
 from .importer import PHASE_LABELS, subjects_for
 from .matching import event_reference, find_activity_matches
-from .schedules import role_for
+from .schedules import occurrence_label, role_for
 from .store import Catalog
+from .venues import bundle_venue, nonphysical_venue
 
 LOGGER = logging.getLogger(__name__)
 PROMPT_VERSION = "catalog-v3.1-session-semantics"
@@ -175,6 +176,7 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                     scope_key=window_key if window.get("roundId") else None,
                     status=status,
                     notes=window.get("notes"),
+                    eligibility=window.get("eligibility") or (event.get("nativeTitle") if re.search(r"平日|土日|通し|日時指定|入場不可", event.get("nativeTitle") or "") else None),
                     details={"phase": window.get("phase"), "price_jpy": window.get("priceJpy")},
                     evidence=ticket_evidence,
                 )
@@ -223,10 +225,13 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                 kind="OTHER",
                 occurrence_key=native_key,
                 occurrence_role=role,
+                occurrence_label=(occurrence_label(precise(event.get("startsAt"), event.get("endsAt")), venue.get("name")) + " · " + event["nativeTitle"])[:500]
+                if event.get("nativeTitle") and normalize(event["nativeTitle"]) != normalize(title) else None,
                 time=precise(event.get("startsAt"), event.get("endsAt")),
                 venue=venue.get("name"),
                 city=venue.get("prefecture"),
-                publication="PUBLISHED" if slugs and not entry_only_performance else "REVIEW",
+                publication="PUBLISHED" if slugs and not entry_only_performance and not bundle_venue(venue.get("name")) else "REVIEW",
+                attendance="ONLINE" if nonphysical_venue(venue.get("name")) else "OFFLINE",
                 evidence=ev,
                 milestones=nodes,
             )

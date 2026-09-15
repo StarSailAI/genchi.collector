@@ -157,3 +157,25 @@ def test_pia_cancellation_disclaimer_is_not_cancellation():
         soup, sale_id="a", sale_url="https://t.pia.jp/a", fallback_label="一般発売"
     )
     assert window and window["status"] != "CANCELED"
+
+
+def test_venue_aliases_are_scoped_and_virtual_platforms_are_not_halls():
+    from genchi_product.venues import bundle_venue, nonphysical_venue, venue_key
+
+    title = "Aqours スクールアイドル活動展 Dive into Sparkle"
+    assert venue_key("東京建物ぴあカンファレンス", title, "2026") == venue_key(
+        "東京建物ぴあカンファレンス TO YAESU HALL", title, "2026"
+    )
+    assert venue_key("東京建物ぴあカンファレンス", "Another event", "2026") != venue_key(
+        "東京建物ぴあカンファレンス TO YAESU HALL", "Another event", "2026"
+    )
+    assert venue_key("東京建物ぴあカンファレンス", title, "2027") != venue_key(
+        "東京建物ぴあカンファレンス TO YAESU HALL", title, "2027"
+    )
+    assert nonphysical_venue("ＰＩＡ ＬＩＶＥ ＳＴＲＥＡＭ")
+    assert bundle_venue("Shibuya LOVEZ【3公演通しチケット】")
+    page = parsed()
+    page["events"][0]["venue"]["name"] = "SPWN"
+    assert structured(resource(page), [])[0].attendance == "ONLINE"
+    page["events"][0]["venue"]["name"] = "Shibuya LOVEZ【3公演通しチケット】"
+    assert structured(resource(page), [])[0].publication == "REVIEW"

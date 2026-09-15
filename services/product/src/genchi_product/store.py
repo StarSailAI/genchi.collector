@@ -13,6 +13,7 @@ from .domain import ActivityInput, EvidenceInput, MilestoneInput, Moment, finger
 from .matching import event_reference, find_activity_matches, same_milestone_fact
 from .naming import sync_name
 from .schedules import occurrence_label, schedule_node
+from .venues import venue_key
 
 
 def uid() -> str:
@@ -269,7 +270,7 @@ class Catalog:
                 else item.time.anchor()
             )
             period = bool(item.time.ends_on and item.time.ends_on != item.time.starts_on)
-            occurrence_key = fingerprint(f"{clock}:{normalize(item.venue or '')}" + (":period" if period else ""))
+            occurrence_key = fingerprint(f"{clock}:{venue_key(item.venue, item.title, year)}" + (":period" if period else ""))
             occurrence = conn.execute(
                 "SELECT * FROM catalog_occurrences WHERE id=%s"
                 if mapped and mapped["occurrence_id"]
@@ -298,8 +299,8 @@ class Catalog:
             elif not historical and item.evidence.verified:
                 conn.execute(
                     """UPDATE catalog_occurrences SET venue=%s,city=%s,starts_at=%s,ends_at=%s,starts_on=%s,
-                    ends_on=%s,precision=%s,timezone=%s WHERE id=%s""",
-                    (*values, occurrence_id),
+                    ends_on=%s,precision=%s,timezone=%s,label=COALESCE(%s,label) WHERE id=%s""",
+                    (*values, item.occurrence_label, occurrence_id),
                 )
         conn.execute(
             """INSERT INTO catalog_external_ids(key,activity_id,occurrence_id) VALUES(%s,%s,%s)

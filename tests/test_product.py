@@ -1520,3 +1520,48 @@ def test_pia_legacy_cancellation_is_reviewed_without_inventing_current_status(ca
     with catalog.connect() as conn:
         assert conn.execute("SELECT status FROM catalog_milestones WHERE activity_id=%s AND platform='pia'",(aid,)).fetchone()['status']=='REVIEW'
         assert conn.execute("SELECT count(*) n FROM catalog_changes WHERE notify").fetchone()['n']==0
+
+
+def test_reviewed_venue_alias_merge_keeps_source_scopes_and_old_ids(catalog):
+    from genchi_product.domain import fingerprint, normalize
+    from genchi_product.occurrence_quality import repair
+    original=activity('pia:alias')
+    original.title='Aqours スクールアイドル活動展 Dive into Sparkle'
+    original.time=Moment(precision='TIME',starts_at='2026-09-20T13:00:00+09:00')
+    original.venue='東京建物ぴあカンファレンス TO YAESU HALL'
+    aid=catalog.publish(original,historical=True)
+    with catalog.connect() as conn:
+        o=conn.execute('SELECT * FROM catalog_occurrences WHERE activity_id=%s',(aid,)).fetchone()
+        # Emulate the pre-policy canonical key before a second source arrived.
+        conn.execute('UPDATE catalog_occurrences SET identity_key=%s WHERE id=%s',(fingerprint('legacy:'+normalize(original.venue)),o['id']))
+    other=original.model_copy(deep=True)
+    other.source_key=other.occurrence_key='lawson:alias'
+    other.venue='東京建物ぴあカンファレンス'
+    catalog.publish(other,historical=True)
+    assert repair(catalog)['count']==1
+    result=repair(catalog,apply=True)
+    assert result['count']==1
+    assert repair(catalog,apply=True)['count']==0
+    catalog.publish(other,historical=True)
+    with catalog.connect() as conn:
+        assert conn.execute("SELECT count(*) n FROM catalog_occurrences WHERE status<>'SUPERSEDED'").fetchone()['n']==1
+        assert conn.execute("SELECT count(*) n FROM catalog_milestones WHERE kind='DOORS' AND status='CONFIRMED'").fetchone()['n']==1
+        ids={r['occurrence_id'] for r in conn.execute("SELECT occurrence_id FROM catalog_external_ids WHERE key=ANY(%s)",(['pia:alias','lawson:alias'],)).fetchall()}
+        assert len(ids)==1
+        assert conn.execute("SELECT count(*) n FROM catalog_changes WHERE notify").fetchone()['n']==0
+
+
+def test_online_platform_and_bundle_are_not_physical_occurrences(catalog):
+    from genchi_product.occurrence_quality import repair
+    aid=catalog.publish(activity('physical'),historical=True)
+    for key,venue in [('stream','SPWN'),('bundle','Tokyo Hall【3公演通しチケット】')]:
+        value=activity(key)
+        value.venue=venue
+        catalog.publish(value,historical=True)
+    assert repair(catalog)['count']==2
+    repair(catalog,apply=True)
+    assert repair(catalog,apply=True)['count']==0
+    with catalog.connect() as conn:
+        assert conn.execute("SELECT count(*) n FROM catalog_occurrences WHERE activity_id=%s AND status<>'SUPERSEDED'",(aid,)).fetchone()['n']==1
+        assert conn.execute("SELECT count(*) n FROM catalog_milestones WHERE kind='START' AND status='CONFIRMED'").fetchone()['n']==1
+        assert conn.execute("SELECT count(*) n FROM catalog_changes WHERE notify").fetchone()['n']==0
