@@ -30,6 +30,9 @@ missing_agent_paths = agent_paths - set(schema["paths"])
 if missing_agent_paths:
     raise SystemExit(f"Product image is missing Agent access: {sorted(missing_agent_paths)}")
 print("Product image supports API keys, Agent REST and MCP.")
+if not {"/ask", "/home/featured"}.issubset(schema["paths"]):
+    raise SystemExit("Product image is missing homepage Q&A or countdowns.")
+print("Product image supports bounded homepage Q&A and daily countdowns.")
 
 properties = schema["components"]["schemas"][model]["properties"]
 if set(properties.get("locale", {}).get("enum", [])) != {"zh-Hans", "zh-Hant", "en", "ja"}:

@@ -1,5 +1,7 @@
 > 本仓库已加入 Genchi 活动目录与邮件提醒产品。参见 [Genchi v2 运行说明](../docs/product-v2.md)。下文保留继承的 AllFeeds 框架参考。
 
+Genchi 现支持根据活动资料进行 AI 问答，并每日精选演出、票务截止等倒计时。免费问答为全站所有用户共用每小时一次，详见 [功能说明](../docs/home-assistant.md)。
+
 <p align="center">
   <img src="../assets/allfeeds-logo.png" alt="AllFeeds" width="380">
 </p>

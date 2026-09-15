@@ -1,5 +1,7 @@
 > This repository includes the Genchi activity catalog and notification product. See [Genchi v2 operations](../docs/product-v2.md). The framework reference below describes the inherited AllFeeds runtime.
 
+Genchi now answers event questions from its catalogue and selects show and ticket-deadline countdowns daily. Free Q&A allows one question per hour shared by all users. See [feature details](../docs/home-assistant.md).
+
 <p align="center">
   <img src="../assets/allfeeds-logo.png" alt="AllFeeds" width="380">
 </p>

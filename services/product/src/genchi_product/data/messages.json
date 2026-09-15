@@ -1667,6 +1667,170 @@
     "“Follow Gakuen IDOLM@STER. Tell me daily about new events and ticket deadlines.”",
     "「学園アイドルマスターをフォローして、新しいイベントと締切間近のチケット情報を毎日教えて。」"
   ],
+  "我的 AI 助手": ["我的 AI 助手", "My AI assistant", "自分の AI アシスタント"],
+  "复制失败，请展开完整指令并手动复制。": [
+    "複製失敗，請展開完整指令並手動複製。",
+    "Copy failed. Expand the full instructions and copy them manually.",
+    "コピーできませんでした。完全な指示を開いて手動でコピーしてください。"
+  ],
+  "连接步骤": ["連接步驟", "Connection steps", "接続手順"],
+  "创建连接": ["建立連接", "Create connection", "接続を作成"],
+  "名称已经替你填好": [
+    "名稱已經替你填好",
+    "A name is already filled in",
+    "名前は入力済みです"
+  ],
+  "复制完整指令": [
+    "複製完整指令",
+    "Copy full instructions",
+    "完全な指示をコピー"
+  ],
+  "密钥和设置会自动放进去": [
+    "密鑰和設定會自動放進去",
+    "The key and settings are included",
+    "キーと設定は自動で含まれます"
+  ],
+  "粘贴并发送": ["貼上並傳送", "Paste and send", "貼り付けて送信"],
+  "交给你常用的 AI": [
+    "交給你常用的 AI",
+    "Give it to your usual AI",
+    "いつもの AI に渡します"
+  ],
+  "第 1 步": ["第 1 步", "Step 1", "ステップ 1"],
+  "创建一个专属连接": [
+    "建立一個專屬連接",
+    "Create your private connection",
+    "専用の接続を作成"
+  ],
+  "不用配置地址，也不用自己写指令。": [
+    "不用設定網址，也不用自己寫指令。",
+    "No addresses to configure and no instructions to write.",
+    "接続先の設定も、指示を書く必要もありません。"
+  ],
+  "连接名称": ["連接名稱", "Connection name", "接続名"],
+  "让 AI 也能帮我添加或取消关注": [
+    "讓 AI 也能幫我新增或取消關注",
+    "Let the AI add or remove subscriptions for me",
+    "AI にフォローの追加・解除も任せる"
+  ],
+  "只有你明确提出时，AI 才会更改关注。": [
+    "只有你明確提出時，AI 才會更改關注。",
+    "The AI will change subscriptions only when you clearly ask.",
+    "あなたが明確に頼んだときだけ、AI がフォローを変更します。"
+  ],
+  "正在创建连接…": ["正在建立連接…", "Creating connection…", "接続を作成中…"],
+  "第 2 步": ["第 2 步", "Step 2", "ステップ 2"],
+  "连接指令已经准备好了": [
+    "連接指令已經準備好了",
+    "Your connection instructions are ready",
+    "接続用の指示を用意しました"
+  ],
+  "密钥、Skill 和每天检查的设置都已放进同一段话，你不需要看懂它。": [
+    "密鑰、Skill 和每天檢查的設定都已放進同一段話，你不需要看懂它。",
+    "The key, Skill, and daily check settings are all in one message. You do not need to understand it.",
+    "キー、Skill、毎日のチェック設定を一つのメッセージにまとめました。内容を理解する必要はありません。"
+  ],
+  "✓ 完整指令已复制": [
+    "✓ 完整指令已複製",
+    "✓ Full instructions copied",
+    "✓ 完全な指示をコピーしました"
+  ],
+  "复制给 AI 的完整指令": [
+    "複製給 AI 的完整指令",
+    "Copy the full instructions for AI",
+    "AI に渡す完全な指示をコピー"
+  ],
+  "这段指令包含你的专属密钥，只粘贴给你信任的 AI。": [
+    "這段指令包含你的專屬密鑰，只貼給你信任的 AI。",
+    "These instructions contain your private key. Paste them only into an AI you trust.",
+    "この指示には専用キーが含まれます。信頼できる AI にだけ貼り付けてください。"
+  ],
+  "最后一步：打开你常用的 AI，粘贴，然后发送。": [
+    "最後一步：開啟你常用的 AI，貼上，然後傳送。",
+    "Last step: open your usual AI, paste, and send.",
+    "最後のステップ：いつもの AI を開き、貼り付けて送信してください。"
+  ],
+  "接下来的连接、检查和设置都交给它完成。": [
+    "接下來的連接、檢查和設定都交給它完成。",
+    "It will take care of the connection, checks, and setup from here.",
+    "この先の接続、確認、設定は AI に任せられます。"
+  ],
+  "查看将要复制的完整内容": [
+    "查看將要複製的完整內容",
+    "Preview the full text",
+    "コピーする全文を確認"
+  ],
+  "再创建一个连接": [
+    "再建立一個連接",
+    "Create another connection",
+    "別の接続を作成"
+  ],
+  "高级设置：查看 MCP 接入配置": [
+    "進階設定：查看 MCP 接入設定",
+    "Advanced: view MCP setup",
+    "詳細設定：MCP 接続設定を見る"
+  ],
+  "已经创建的连接": [
+    "已經建立的連接",
+    "Existing connections",
+    "作成済みの接続"
+  ],
+  "当我明确提出关注或取消关注时，你可以替我修改关注列表；除此之外不要修改。": [
+    "當我明確提出關注或取消關注時，你可以替我修改關注列表；除此之外不要修改。",
+    "You may change my subscriptions when I clearly ask to follow or unfollow something. Do not change them otherwise.",
+    "私がフォローまたは解除を明確に頼んだときだけ、フォロー一覧を変更してください。それ以外は変更しないでください。"
+  ],
+  "这个连接只能读取信息。不要尝试添加、修改或取消关注。": [
+    "這個連接只能讀取資訊。不要嘗試新增、修改或取消關注。",
+    "This connection can only read information. Do not attempt to add, change, or remove subscriptions.",
+    "この接続は読み取り専用です。フォローの追加、変更、解除を試みないでください。"
+  ],
+  "请帮我连接 Genchi，并替我完成后续设置。我不需要了解技术细节。": [
+    "請幫我連接 Genchi，並替我完成後續設定。我不需要了解技術細節。",
+    "Please connect me to Genchi and complete the setup for me. I do not need to understand the technical details.",
+    "Genchi に接続し、その後の設定まで済ませてください。技術的な説明は不要です。"
+  ],
+  "先阅读 https://genchi.news/SKILL.md，并严格按照其中说明使用 Genchi。": [
+    "先閱讀 https://genchi.news/SKILL.md，並嚴格按照其中說明使用 Genchi。",
+    "First read https://genchi.news/SKILL.md and use Genchi exactly as described there.",
+    "まず https://genchi.news/SKILL.md を読み、その説明に従って Genchi を使用してください。"
+  ],
+  "使用下面的专属连接密钥验证连接，并在可用时把它保存在安全的密钥存储中：": [
+    "使用下面的專屬連接密鑰驗證連接，並在可用時把它保存在安全的密鑰儲存中：",
+    "Use the private connection key below to verify the connection, and store it in secure secret storage when available:",
+    "以下の専用接続キーで接続を確認し、利用できる場合は安全なシークレットストレージに保存してください："
+  ],
+  "不要在回复中重复或展示完整密钥，也不要把它发送给 Genchi 以外的网站。": [
+    "不要在回覆中重複或顯示完整密鑰，也不要把它傳送給 Genchi 以外的網站。",
+    "Do not repeat or display the full key in your response, and do not send it to any site other than Genchi.",
+    "返信で完全なキーを繰り返したり表示したりせず、Genchi 以外のサイトへ送信しないでください。"
+  ],
+  "如果你支持定时任务，请创建一个每天 09:00（{timezone}）运行的任务：检查我关注的 Genchi 信息，只有出现有意义的新活动、票务截止、抽选结果、付款、取消、延期或场地变化时才告诉我；没有更新时保持安静。": [
+    "如果你支援定時任務，請建立一個每天 09:00（{timezone}）執行的任務：檢查我關注的 Genchi 資訊，只有出現有意義的新活動、票務截止、抽選結果、付款、取消、延期或場地變更時才告訴我；沒有更新時保持安靜。",
+    "If you support scheduled tasks, create one that runs every day at 09:00 ({timezone}): check the Genchi information I follow and tell me only about meaningful new events, ticket deadlines, lottery results, payments, cancellations, postponements, or venue changes; stay silent when nothing changed.",
+    "定期タスクに対応している場合は、毎日 09:00（{timezone}）に実行するタスクを作成してください。フォロー中の Genchi 情報を確認し、重要な新規イベント、チケット締切、抽選結果、支払い、開催中止、延期、会場変更がある場合だけ知らせ、更新がなければ何も通知しないでください。"
+  ],
+  "现在验证连接是否成功，然后问我最想关注什么。": [
+    "現在驗證連接是否成功，然後問我最想關注什麼。",
+    "Now verify that the connection works, then ask what I most want to follow.",
+    "接続できたことを確認し、私が最もフォローしたいものを尋ねてください。"
+  ],
+  "如果你不支持联网、带密钥调用 API、保存进度或定时任务，请直接告诉我缺少哪项能力，不要声称已经完成。": [
+    "如果你不支援連網、帶密鑰呼叫 API、儲存進度或定時任務，請直接告訴我缺少哪項能力，不要聲稱已經完成。",
+    "If you cannot access the internet, call an API with a key, save progress, or run scheduled tasks, tell me exactly which capability is missing and do not claim the setup is complete.",
+    "インターネット接続、キー付き API 呼び出し、進捗の保存、定期タスクのいずれかに対応していない場合は、不足している機能を明確に伝え、設定が完了したとは言わないでください。"
+  ],
+  "先让 Agent 阅读 Genchi Skill": [
+    "先讓 Agent 閱讀 Genchi Skill",
+    "Let your Agent read the Genchi Skill first",
+    "まず Agent に Genchi Skill を読ませる"
+  ],
+  "Skill 会教 Agent 安全连接、定时检查更新、保存游标和管理关注。": [
+    "Skill 會教 Agent 安全連接、定時檢查更新、儲存游標和管理關注。",
+    "The Skill teaches your Agent to connect safely, check on a schedule, save its cursor, and manage subscriptions.",
+    "Skill が、安全な接続、定期チェック、カーソルの保存、フォロー管理の方法を Agent に伝えます。"
+  ],
+  "打开 SKILL.md": ["開啟 SKILL.md", "Open SKILL.md", "SKILL.md を開く"],
   "连接你的 Agent": ["連接你的 Agent", "Connect your Agent", "Agent を接続"],
   "支持远程 MCP 与 REST API。完整密钥只会在创建时显示一次。": [
     "支援遠端 MCP 與 REST API。完整密鑰只會在建立時顯示一次。",
@@ -1681,6 +1845,16 @@
   ],
   "创建中…": ["建立中…", "Creating…", "作成中…"],
   "创建 API Key": ["建立 API Key", "Create API key", "API Key を作成"],
+  "允许这个 Agent 管理关注": [
+    "允許這個 Agent 管理關注",
+    "Allow this Agent to manage subscriptions",
+    "この Agent にフォロー管理を許可する"
+  ],
+  "关闭时仅允许查询、日程和更新读取。": [
+    "關閉時僅允許查詢、日程和更新讀取。",
+    "When off, the key can only search and read agendas and updates.",
+    "オフの場合、検索・予定・更新の読み取りのみ許可されます。"
+  ],
   "请立即保存这枚密钥": [
     "請立即儲存這枚密鑰",
     "Save this key now",
@@ -1707,6 +1881,8 @@
   "已撤销": ["已撤銷", "Revoked", "取り消し済み"],
   "已连接": ["已連接", "Connected", "接続済み"],
   "尚未使用": ["尚未使用", "Not used yet", "未使用"],
+  "可管理关注": ["可管理關注", "Can manage subscriptions", "フォロー管理可"],
+  "只读": ["唯讀", "Read only", "読み取り専用"],
   "撤销": ["撤銷", "Revoke", "取り消す"],
   "还没有连接 Agent。": [
     "尚未連接 Agent。",
@@ -1718,11 +1894,27 @@
     "API keys are temporarily unavailable",
     "API Key を一時的に読み込めません"
   ],
-  "因 {participant} 出演而与 {subject} 相关": ["因 {participant} 出演而與 {subject} 相關","Related to {subject} through a performance by {participant}","{participant}の出演により{subject}に関連"],
-  "因 {participant} 参与而与 {subject} 相关": ["因 {participant} 參與而與 {subject} 相關","Related to {subject} through the participation of {participant}","{participant}の参加により{subject}に関連"],
-  "与 {subject} 的联动活动": ["與 {subject} 的聯動活動","A collaboration with {subject}","{subject}とのコラボイベント"],
-  "相关成员": ["相關成員","a related member","関連メンバー"],
-  "官方信息已核验": ["官方資訊已核驗", "Verified against official information", "公式情報で確認済み"],
+  "因 {participant} 出演而与 {subject} 相关": [
+    "因 {participant} 出演而與 {subject} 相關",
+    "Related to {subject} through a performance by {participant}",
+    "{participant}の出演により{subject}に関連"
+  ],
+  "因 {participant} 参与而与 {subject} 相关": [
+    "因 {participant} 參與而與 {subject} 相關",
+    "Related to {subject} through the participation of {participant}",
+    "{participant}の参加により{subject}に関連"
+  ],
+  "与 {subject} 的联动活动": [
+    "與 {subject} 的聯動活動",
+    "A collaboration with {subject}",
+    "{subject}とのコラボイベント"
+  ],
+  "相关成员": ["相關成員", "a related member", "関連メンバー"],
+  "官方信息已核验": [
+    "官方資訊已核驗",
+    "Verified against official information",
+    "公式情報で確認済み"
+  ],
   "新增": ["新增", "Added", "追加"],
   "更新": ["更新", "Updated", "更新"],
   "开放入场": ["開放入場", "Doors open", "開場"],
@@ -1752,5 +1944,133 @@
     "ほか {count} 種類の更新があります。イベント詳細をご確認ください。"
   ],
   "变更内容": ["變更內容", "Change", "変更内容"],
-  "记录数": ["紀錄數", "Records", "件数"]
+  "记录数": ["紀錄數", "Records", "件数"],
+  "找到了可能相关的活动，但 Genchi 尚未核验其中的关键时间或出演信息，暂时无法确认答案。这不代表官方尚未公布，请打开活动详情核对来源。": [
+    "找到了可能相關的活動，但 Genchi 尚未核驗其中的關鍵時間或出演資訊，暫時無法確認答案。這不代表官方尚未公布，請開啟活動詳情核對來源。",
+    "I found potentially related events, but Genchi has not verified the key dates or appearance information yet. This does not mean the organiser has not announced it. Open the event details to check the sources.",
+    "関連する可能性のあるイベントは見つかりましたが、Genchiでは重要な日時や出演情報をまだ確認できていません。公式が未発表という意味ではありません。イベント詳細で情報源をご確認ください。"
+  ],
+  "问问現地情報": ["問問現地情報", "Ask Genchi", "現地情報に聞く"],
+  "MyGO!!!!! 最近一场演出是什么时候？": [
+    "MyGO!!!!! 最近一場演出是什麼時候？",
+    "When is MyGO!!!!!'s next show?",
+    "MyGO!!!!! の次のライブはいつ？"
+  ],
+  "学园偶像大师下一次 Live 抽选什么时候截止？": [
+    "學園偶像大師下一次 Live 抽選什麼時候截止？",
+    "When does the next Gakumas live ticket lottery close?",
+    "学園アイドルマスターの次のライブの抽選締切はいつ？"
+  ],
+  "Girls Band Cry 最近会在哪场音乐节登场？": [
+    "Girls Band Cry 最近會在哪場音樂節登場？",
+    "Which festival will Girls Band Cry appear at next?",
+    "ガールズバンドクライ関連の次のフェス出演は？"
+  ],
+  "你来提问，AI 帮你找下一场心动。": [
+    "你來提問，AI 幫你找下一場心動。",
+    "Ask a question. Find your next unforgettable show with AI.",
+    "気になることを聞いて、AIと次の現場を見つけよう。"
+  ],
+  "想知道什么活动信息？": [
+    "想知道什麼活動資訊？",
+    "What would you like to know about an event?",
+    "知りたいイベント情報は？"
+  ],
+  "演出时间、抽选截止、联动咖啡…直接问我": [
+    "演出時間、抽選截止、聯動咖啡…直接問我",
+    "Show dates, ticket deadlines, collab cafés… just ask",
+    "公演日、抽選締切、コラボカフェ…気軽に質問"
+  ],
+  "提问": ["提問", "Ask", "質問する"],
+  "基于 Genchi 活动资料回答": [
+    "根據 Genchi 活動資料回答",
+    "Answers from the Genchi event catalogue",
+    "Genchiのイベント情報をもとに回答"
+  ],
+  "试着问问": ["試著問問", "Try asking", "こんな質問はいかが？"],
+  "免费体验 · 全站每小时开放 1 次提问，登录后同样适用。": [
+    "免費體驗 · 全站每小時開放 1 次提問，登入後同樣適用。",
+    "Free preview · One question per hour across the entire site, including signed-in users.",
+    "無料体験 · サイト全体で1時間に1回。ログイン後も同じ制限です。"
+  ],
+  "请启用 JavaScript 使用问答，或浏览下方活动。": [
+    "請啟用 JavaScript 使用問答，或瀏覽下方活動。",
+    "Enable JavaScript to ask a question, or browse events below.",
+    "質問するにはJavaScriptを有効にするか、下のイベントをご覧ください。"
+  ],
+  "正在倒计时": ["正在倒數", "Coming up", "開催・締切までのカウントダウン"],
+  "申请截止": ["申請截止", "Applications close", "申込締切"],
+  "活动结束": ["活動結束", "Event ends", "開催終了"],
+  "演出开始": ["演出開始", "Show starts", "開演"],
+  "还有": ["還有", "In", "あと"],
+  "天": ["天", "days", "日"],
+  "每日精选 · 截止与变更持续核对": [
+    "每日精選 · 截止與變更持續核對",
+    "Selected daily · Deadlines and changes checked regularly",
+    "毎日ピックアップ · 締切と変更を随時確認"
+  ],
+  "演唱会、音乐节、联动咖啡，发现你的下一站。": [
+    "演唱會、音樂節、聯動咖啡，發現你的下一站。",
+    "Concerts, festivals, collab cafés. Discover your next stop.",
+    "ライブ、フェス、コラボカフェ。次の現場を見つけよう。"
+  ],
+  "继续发现活动": ["繼續探索活動", "Explore more events", "イベントを探す"],
+  "回答": ["回答", "Answer", "回答"],
+  "正在查找活动资料…": [
+    "正在查找活動資料…",
+    "Looking through event records…",
+    "イベント情報を検索中…"
+  ],
+  "核对时间、票务轮次和来源，请稍候。": [
+    "核對時間、票務輪次和來源，請稍候。",
+    "Checking dates, ticket rounds and sources. One moment.",
+    "日時・受付回・情報源を確認しています。少々お待ちください。"
+  ],
+  "免费问答通道拥挤，请稍后再试。": [
+    "免費問答通道擁擠，請稍後再試。",
+    "The free Q&A channel is busy. Please try again later.",
+    "無料質問枠が混み合っています。時間をおいてお試しください。"
+  ],
+  "问答暂时不可用，请先浏览下方活动。": [
+    "問答暫時無法使用，請先瀏覽下方活動。",
+    "Q&A is temporarily unavailable. Please browse the events below.",
+    "質問機能は一時的に利用できません。下のイベントをご覧ください。"
+  ],
+  "约 {minutes} 分钟后可再试。": [
+    "約 {minutes} 分鐘後可再試。",
+    "Try again in about {minutes} minutes.",
+    "約{minutes}分後に再度お試しください。"
+  ],
+  "你也可以继续使用下方的活动搜索。": [
+    "你也可以繼續使用下方的活動搜尋。",
+    "You can still use the event search below.",
+    "下のイベント検索も引き続きご利用いただけます。"
+  ],
+  "現地情報的回答": ["現地情報的回答", "Genchi's answer", "現地情報からの回答"],
+  "依据已收录资料": [
+    "依據已收錄資料",
+    "Based on recorded sources",
+    "収録済みの資料に基づく回答"
+  ],
+  "我可以帮你查询日本的演出、票务和线下活动。试着问问喜欢的作品或艺人吧。": [
+    "我可以幫你查詢日本的演出、票務和線下活動。試著問問喜歡的作品或藝人吧。",
+    "I can help with shows, tickets and in-person events in Japan. Try asking about a favourite series or artist.",
+    "日本の公演、チケット、現地イベントについてお答えします。好きな作品やアーティストについて聞いてみてください。"
+  ],
+  "现有资料中暂未找到能回答这个问题的活动。可以换个作品名或艺人名试试，也可以浏览下方活动。": [
+    "現有資料中暫未找到能回答這個問題的活動。可以換個作品名或藝人名試試，也可以瀏覽下方活動。",
+    "The current catalogue has no matching records to answer this question. Try another series or artist name, or browse below.",
+    "現在の資料では回答できるイベントが見つかりませんでした。別の作品名・アーティスト名を試すか、下のイベントをご覧ください。"
+  ],
+  "相关活动与来源": [
+    "相關活動與來源",
+    "Related events and sources",
+    "関連イベント・情報源"
+  ],
+  "来源 {number}": ["來源 {number}", "Source {number}", "情報源 {number}"],
+  "资料可能尚未收全或发生变更，参与前请核对官方公告。": [
+    "資料可能尚未收全或發生變更，參與前請核對官方公告。",
+    "Records may be incomplete or have changed. Check official announcements before making plans.",
+    "情報が未収録・変更されている場合があります。参加前に公式発表をご確認ください。"
+  ]
 }

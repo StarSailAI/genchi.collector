@@ -187,6 +187,9 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-Genchi <hello@genchi.local>}
       RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
+      ASK_LLM_BASE_URL: ${ASK_LLM_BASE_URL:-${LLM_BASE_URL:-}}
+      ASK_LLM_API_KEY: ${ASK_LLM_API_KEY:-${LLM_API_KEY:-}}
+      ASK_LLM_MODEL: ${ASK_LLM_MODEL:-deepseek-flash}
     ports: ["127.0.0.1:${PRODUCT_PORT:-18080}:8080"]
     networks: [collector, genchi-data]
     healthcheck:

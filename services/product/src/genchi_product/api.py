@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import secrets
+from contextlib import asynccontextmanager
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -15,6 +18,7 @@ from starlette.concurrency import run_in_threadpool
 from svix.webhooks import Webhook, WebhookVerificationError
 
 from .agent_api import register_agent_routes
+from .assistant import register_assistant_routes
 from .auth import COOKIE, account, clear_cookie, register_auth_routes, valid_timezone
 from .auth import digest as digest
 from .domain import KINDS, ActivityInput
@@ -197,8 +201,32 @@ class NameBody(BaseModel):
 
 def create_app(catalog: Catalog | None = None):
     catalog = catalog or Catalog()
+
+    @asynccontextmanager
+    async def lifespan(app):
+        from .home import featured
+
+        async def refresh_home():
+            while True:
+                try:
+                    await run_in_threadpool(featured, catalog)
+                except Exception:
+                    logging.warning("Homepage countdown refresh failed; retrying in one minute")
+                await asyncio.sleep(60)
+
+        task = asyncio.create_task(refresh_home())
+        try:
+            yield
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
     app = FastAPI(
-        title="Genchi Product", version="0.2.0", default_response_class=LocalizedJSONResponse
+        title="Genchi Product", version="0.2.0", default_response_class=LocalizedJSONResponse,
+        lifespan=lifespan,
     )
 
     @app.exception_handler(RequestValidationError)
@@ -247,6 +275,7 @@ def create_app(catalog: Catalog | None = None):
                 "/auth/verify",
                 "/auth/logout",
                 "/auth/logout-all",
+                "/ask",
             }
             if (
                 (protected and origin != expected)
@@ -255,7 +284,7 @@ def create_app(catalog: Catalog | None = None):
             ):
                 return Response("Origin not allowed", status_code=403)
         response = await call_next(request)
-        if request.url.path.startswith(("/auth", "/me", "/admin")):
+        if request.url.path.startswith(("/auth", "/me", "/admin", "/ask", "/home")):
             response.headers["Cache-Control"] = "no-store"
         if response.status_code == 401 and request.cookies.get(COOKIE):
             clear_cookie(response)
@@ -268,9 +297,9 @@ def create_app(catalog: Catalog | None = None):
             contract = conn.execute(
                 'SELECT major,minor FROM "SchemaContract" WHERE id=1'
             ).fetchone()
-            ready = bool(contract and contract["major"] == 1 and contract["minor"] >= 9)
+            ready = bool(contract and contract["major"] == 1 and contract["minor"] >= 10)
             if not ready:
-                raise HTTPException(503, "Catalog schema 1.9 required")
+                raise HTTPException(503, "Catalog schema 1.10 required")
             return {
                 "ok": True,
                 "schema": f"{contract['major']}.{contract['minor']}",
@@ -798,4 +827,5 @@ def create_app(catalog: Catalog | None = None):
             return {"ok": True, "item": result}
 
     register_agent_routes(app, catalog, hydrate, public_activity)
+    register_assistant_routes(app, catalog)
     return app

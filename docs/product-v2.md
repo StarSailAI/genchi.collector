@@ -1,5 +1,7 @@
 # Genchi v2：活动与提醒
 
+首页 AI 问答与每日倒计时使用 Schema 1.10；规则、模型配置和发布验收见 [首页问答](home-assistant.md)。
+
 ## 边界与模型
 
 网站的核心是长期稳定的 Activity，下面有 Occurrence（真实场次）和 Milestone（公告、受付、结果、入金、物贩、开演等节点）。节点通过 scopes 关联一个或多个场次。同一节点更新时增加 revision，不生成新的活动 URL。
