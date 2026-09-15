@@ -59,6 +59,11 @@ def repair_ensemble_band_live(catalog: Catalog, *, apply: bool) -> dict:
               AND starts_on BETWEEN '2026-09-13' AND '2026-09-16'
             ORDER BY starts_on
         """, (ENSEMBLE_BAND_LIVE_ID,)).fetchall()
+        active_sessions = conn.execute("""
+            SELECT count(*) AS n FROM catalog_occurrences WHERE activity_id=%s
+              AND status<>'SUPERSEDED' AND precision='TIME'
+              AND starts_at BETWEEN '2026-09-13 00:00:00+09' AND '2026-09-17 00:00:00+09'
+        """, (ENSEMBLE_BAND_LIVE_ID,)).fetchone()["n"]
         result = {
             "activity_id": ENSEMBLE_BAND_LIVE_ID,
             "official_url": resource["url"],
@@ -66,9 +71,13 @@ def repair_ensemble_band_live(catalog: Catalog, *, apply: bool) -> dict:
             "sessions": [f"2026-09-{day:02d} {clock}" for day in range(13, 17)
                          for clock in ("13:00", "16:30", "20:00")],
             "date_only_occurrences_to_supersede": old_occurrences,
+            "already_repaired": active_sessions == 12 and not old_occurrences,
             "applied": apply,
         }
         if not apply:
+            return result
+        if result["already_repaired"]:
+            result["applied"] = False
             return result
         if len(old_occurrences) not in {0, 4}:
             raise RuntimeError("Unexpected partial date-only occurrence set; review manually")

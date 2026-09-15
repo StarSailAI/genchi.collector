@@ -115,6 +115,29 @@ def test_official_site_discovers_and_parses_detail(monkeypatch):
     assert records[0].attributes["media"][0]["url"] == "https://example.com/cover.jpg"
 
 
+def test_official_site_can_monitor_an_exact_detail_url_without_an_index(monkeypatch):
+    page = '<h1>3公演ライブ</h1><article>各日３公演、13:00／16:30／20:00開演。</article>'
+    visited = []
+
+    def get(_self, url, **_kwargs):
+        visited.append(url)
+        return type("Response", (), {"url": url, "text": page})()
+
+    monkeypatch.setattr("genchi_fetchers.fetchers.SafeHttpClient.get", get)
+    records = []
+    report = OfficialSiteFetcher().fetch(context(records), FetchRequest(
+        task_id=3, source_id="official-live", operation="fetch", tags=(), config={
+            "start_urls": ["https://example.com/live/ensemble/"],
+            "link_pattern": r"^https://example\.com/live/ensemble/$",
+            "title_selector": "h1", "content_selector": "article",
+            "published_selector": None,
+        },
+    ))
+    assert visited == ["https://example.com/live/ensemble/"]
+    assert report.details["detail_urls"] == 1
+    assert records[0].title == "3公演ライブ"
+
+
 def test_official_site_discovers_event_from_sitemap_with_provenance_links(monkeypatch):
     sitemap = """<?xml version="1.0"?>
     <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url>

@@ -2296,9 +2296,11 @@ class OfficialSiteFetcher(FetcherPlugin):
             response = direct.get(url, allowed_content_types=("text/html", "application/xhtml+xml"))
             return response.text, response.url
 
-        pending = list(config.start_urls)
+        pending = [url for url in config.start_urls if not pattern.search(url)]
         visited_pages: set[str] = set()
-        detail_urls: list[str] = []
+        # An exact official page can be monitored directly after it leaves the
+        # site's latest-news index. It still passes the same host and selector checks.
+        detail_urls: list[str] = [url for url in config.start_urls if pattern.search(url)]
         sitemap_dates: dict[str, datetime] = {}
         for sitemap_url in config.sitemap_urls:
             response = direct.get(

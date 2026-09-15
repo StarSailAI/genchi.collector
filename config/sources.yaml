@@ -272,8 +272,8 @@ sources:
     schedule: {type: cron, cron: "30 3 * * *", timezone: Asia/Tokyo}
     config:
       start_urls:
-        - https://www.bluenoteplace.jp/news/
-        - https://www.bluenoteplace.jp/live/
+        - https://www.bluenoteplace.jp/ensemble_stars_2026/
+        - https://www.bluenoteplace.jp/live/ensemble-stars-260913/
       link_pattern: '^https://www\.bluenoteplace\.jp/(ensemble_stars_2026/|live/ensemble-stars-260913/)$'
       title_selector: .newsDetailTitle, .eventRequiredBody
       content_selector: .newsDetailBody, .eventDetail
