@@ -47,6 +47,20 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
     payload = attributes.get("ticket_page") or attributes.get("eplus_ticket") or {}
     events = payload.get("events") or []
     platform = payload.get("platform") or attributes.get("source_type", "").removesuffix("_ticket")
+    if platform == "lawson":
+        dated_events = {str(event.get("startsAt") or "")[:10] for event in events if event.get("startsAt")}
+        native_keys = {
+            key
+            for event in events
+            for window in event.get("ticketWindows") or []
+            for key in window.get("nativePerformanceKeys") or []
+            if key
+        }
+        if len(native_keys) > len(dated_events):
+            raise ValueError(
+                f"Lawson 搜索结果有 {len(native_keys)} 个原生场次标识，但只解析出 "
+                f"{len(dated_events)} 个日期；不能将多场演出压成日期节点并自动发布"
+            )
     if attributes.get("source_type") == "asobi_ticket":
         from genchi_normalizer.app import _asobi_match_acts, _asobi_real_acts
 

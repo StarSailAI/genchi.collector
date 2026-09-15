@@ -263,6 +263,30 @@ sources:
     backfill_enabled: true
     backfill_window_seconds: 2678400
 
+  # Exact organizer pages for the Lawson 73531 multi-session repair. The
+  # search result exposes 12 opaque performance keys but only four dates.
+  - id: blue-note-place-ensemble-band-live
+    enabled: true
+    fetcher: genchi.official_site
+    sink: postgres
+    schedule: {type: cron, cron: "30 3 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls:
+        - https://www.bluenoteplace.jp/news/
+        - https://www.bluenoteplace.jp/live/
+      link_pattern: '^https://www\.bluenoteplace\.jp/(ensemble_stars_2026/|live/ensemble-stars-260913/)$'
+      title_selector: .newsDetailTitle, .eventRequiredBody
+      content_selector: .newsDetailBody, .eventDetail
+      published_selector: .newsDetailDate
+      resource_kind: official_event
+      max_pages: 2
+      backfill_max_pages: 2
+      max_items: 2
+    retry: {max_attempts: 3, backoff: exponential, base_seconds: 300, max_seconds: 3600}
+    routing: {queue: web, resources: {domain:bluenoteplace.jp: 1}}
+    tags: [project:ensemble-stars, country:JP, timezone:Asia/Tokyo, source:official-operator]
+    backfill_enabled: false
+
   - id: girls-band-cry-news
     enabled: true
     fetcher: genchi.official_site

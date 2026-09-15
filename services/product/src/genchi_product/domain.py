@@ -50,6 +50,7 @@ def canonical_url(value: str | None) -> str | None:
 
 
 def classify(title: str, fallback: str = "OTHER") -> str:
+    title = unicodedata.normalize("NFKC", title)
     for pattern, kind in [
         (r"カフェ|cafe|café|喫茶", "CAFE"),
         (r"pop.?up|ポップアップ|快闪", "POPUP"),
@@ -215,6 +216,7 @@ class ActivityInput(BaseModel):
     subject_relations: list[SubjectRelationInput] = Field(default_factory=list)
     time: Moment = Field(default_factory=Moment)
     occurrence_key: str | None = None
+    occurrence_label: str | None = Field(default=None, max_length=500)
     venue: str | None = None
     city: str | None = None
     status: Literal["ANNOUNCED", "SCHEDULED", "POSTPONED", "CANCELED", "ENDED"] = "SCHEDULED"

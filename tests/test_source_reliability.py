@@ -30,7 +30,8 @@ from genchi_fetchers.fetchers import (
     _pia_performances,
     _select_ticket_details,
 )
-from genchi_product.pipeline import _source_excerpt, extract_text, precise
+from genchi_product.domain import classify
+from genchi_product.pipeline import _source_excerpt, extract_text, precise, structured
 
 
 def context(records, state):
@@ -223,6 +224,23 @@ def test_date_only_ticket_keeps_precision_and_existing_fallback_identity():
     assert row["startsAt"] == "2026-10-01"
     assert precise(row["startsAt"]).precision == "DATE"
     assert precise("2026-10-01T17:00:00+09:00", "2026-10-02").ends_at is None
+
+
+def test_fullwidth_live_title_and_unresolved_lawson_sessions_are_not_published():
+    assert classify("ＥＮＳＥＭＢＬＥ　ＳＴＡＲＳ！！　ＢＡＮＤ　ＬＩＶＥ") == "LIVE"
+    resource = {
+        "source_id": "lawson-anime-tickets", "external_id": "lawson:result:73531",
+        "content_hash": "v1", "title": "ＢＡＮＤ　ＬＩＶＥ",
+        "attributes": {"source_type": "lawson_ticket", "ticket_page": {
+            "platform": "lawson", "events": [
+                {"id": str(index), "name": "ＢＡＮＤ　ＬＩＶＥ", "startsAt": f"2026-09-{day:02d}",
+                 "ticketWindows": [{"nativePerformanceKeys": [f"show:{day}:{n}" for n in range(3)]}]}
+                for index, day in enumerate(range(13, 17))
+            ]
+        }},
+    }
+    with pytest.raises(ValueError, match="12 个原生场次标识"):
+        structured(resource, [])
 
 
 def test_evidence_whitespace_mapping_returns_original_span_and_rejects_changed_facts():

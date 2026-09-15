@@ -292,7 +292,7 @@ class Catalog:
                 conn.execute(
                     """INSERT INTO catalog_occurrences(id,activity_id,identity_key,label,venue,city,starts_at,
                     ends_at,starts_on,ends_on,precision,timezone) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                    (occurrence_id, activity_id, occurrence_key, item.title, *values),
+                    (occurrence_id, activity_id, occurrence_key, item.occurrence_label or item.title, *values),
                 )
             elif not historical and item.evidence.verified:
                 conn.execute(
@@ -307,10 +307,19 @@ class Catalog:
         )
         if occurrence_id:
             kind = "PERIOD" if item.kind in {"CAFE", "POPUP", "EXHIBITION"} else "START"
+            start_title = (
+                f"{item.occurrence_label} · 开演"
+                if item.occurrence_label and kind == "START" and item.time.precision == "TIME"
+                else "举办期间" if kind == "PERIOD"
+                else "开演" if item.kind == "LIVE" and item.time.precision == "TIME"
+                else "演出日期（时间待核验）" if item.kind == "LIVE"
+                else "举办日期"
+            )
             start = MilestoneInput(
                 source_key=f"occurrence:{occurrence_id}",
                 kind=kind,
-                title="举办期间" if kind == "PERIOD" else "活动开始",
+                title=start_title,
+                title_zh=start_title,
                 time=item.time,
                 url=item.url,
                 evidence=item.evidence,
