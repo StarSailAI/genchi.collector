@@ -125,6 +125,10 @@ def test_out_of_scope_requires_no_known_subject(monkeypatch):
     row["payload"]["activity"]["evidence"]["excerpt"] = "別の作品 東京公演"
     row["payload"]["activity"]["milestones"][0]["evidence"]["excerpt"] = "別の作品 東京公演"
     assert batch_review._safe_out_of_scope(row, subjects)
+    row["attributes"] = {"source_type": "eplus_ticket",
+                         "eplus_ticket": {"discoveryScope": "jpop"}}
+    assert not batch_review._safe_out_of_scope(row, subjects)
+    row["attributes"] = {"source_role": "official_operator"}
     monkeypatch.setattr(batch_review, "_pending", lambda _catalog, _limit, _source_type: (0, [row]))
     monkeypatch.setattr(batch_review, "_subjects", lambda _catalog: subjects)
     monkeypatch.setattr(batch_review, "_close_stale", lambda _catalog: 0)
