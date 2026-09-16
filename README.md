@@ -4,7 +4,7 @@
   </a>
 </p>
 
-<h1 align="center">Genchi Collector</h1>
+<p align="center"><strong>Genchi Collector</strong></p>
 
 **把日本二次元活动的公告、票务和官推，整理成可追溯的活动时间线。**
 
