@@ -17,4 +17,4 @@ Installed plugins are trusted code. Review plugin packages and pin versions in
 Worker images. Child-process isolation protects Worker availability but is not a
 security boundary.
 
-Report vulnerabilities privately as described in the repository SECURITY file.
+Report vulnerabilities privately as described in the [security policy](../../.github/SECURITY.md).

@@ -1,6 +1,6 @@
 # 邮箱账户与个人中心
 
-当前契约最低为 Schema 1.6。沿用 FoundationServices 的账户、验证码和 Cookie Session 分层，具体选择见仓库根目录的 `foundation.project.yaml` 与 `FOUNDATION_DECISIONS.md`。
+当前契约最低为 Schema 1.6。沿用 FoundationServices 的账户、验证码和 Cookie Session 分层，具体选择见[项目配置](../../foundation.project.yaml) 与 [架构决策](../architecture/foundation-decisions.md)。
 
 ## 使用流程
 

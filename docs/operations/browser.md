@@ -48,8 +48,8 @@ python3 genchi.collector/deploy/manage.py compose backend up -d --no-build --wai
 
 今后的真实浏览器探测和采集验收只在部署服务器执行，本地使用模拟测试。浏览器客户端对临时页面失败最多尝试 3 次。上游短期限流先按 Retry-After 等待，至少 60 秒，再重试当前页面；长时间或持续限流交回调度器退避，认证错误不会反复重试。来源可显式配置已核对的页面删除提示，但普通 403 拒绝不会被当成删除成功跳过。
 
-2026-09-09 的迁移验收在本机 Linux ARM64 容器和服务器 Linux x86_64 容器通过：Love Live! 与偶像大师新闻列表均可读取；Lawson「ラブライブ」搜索均解析出 2 个结果页、10 个场次、15 个票务窗口。全量测试 102 项通过。当时 X 尚未验收；后续匿名页面适配和四源验收另见 [X 公开采集验收](x-public-acceptance-2026-09-09.md)。
+2026-09-09 的迁移验收在本机 Linux ARM64 容器和服务器 Linux x86_64 容器通过：Love Live! 与偶像大师新闻列表均可读取；Lawson「ラブライブ」搜索均解析出 2 个结果页、10 个场次、15 个票务窗口。全量测试 102 项通过。当时 X 尚未验收；后续匿名页面适配和四源验收另见 [X 公开采集验收](../archive/x-public-acceptance-2026-09-09.md)。
 
-Natalie 可见验证码的会话保留、私有 `/verification` 接口及真实通过记录，见 [验证中断与恢复](browser-verification.md)。启用常驻 `verification-agent` 后可自动处理已登记的九宫格验证，配置与调用上限见 [Natalie 采集](natalie-collection.md)。
+Natalie 可见验证码的会话保留、私有 `/verification` 接口及真实通过记录，见 [验证中断与恢复](browser-verification.md)。启用常驻 `verification-agent` 后可自动处理已登记的九宫格验证，配置与调用上限见 [Natalie 采集](../sources/natalie-collection.md)。
 
 参考：[Camoufox 使用说明](https://camoufox.com/python/usage/)、[安装说明](https://camoufox.com/python/installation/)。

@@ -107,6 +107,6 @@ python3 genchi.collector/deploy/sync-git-bundles.py --host ubuntu@server --branc
 
 首次初始化会生成独立 `PRODUCT_PROXY_SECRET`；既有部署在共用 `.env` 中补充至少 32 字符的随机值，再执行 `check`，前后端消费同一份配置。新版本 Product API 自行发送验证码，需配置 SMTP；notifier 未启动不影响验证码认证。Resend key 未配置时验证码返回暂不可用，不回落到生产 Mailpit。
 
-升级前备份私有账户和目录数据，迁移到 `0008_email_code_auth`，构建并更新 product、notifier、web。旧邮件登录链接停用，原账户和关注保留。个人中心为 `/zh-Hans/dashboard`。验证码默认限额和恢复邮件开关见 [用户系统](accounts.md)。
+升级前备份私有账户和目录数据，迁移到 `0008_email_code_auth`，构建并更新 product、notifier、web。旧邮件登录链接停用，原账户和关注保留。个人中心为 `/zh-Hans/dashboard`。验证码默认限额和恢复邮件开关见 [用户系统](../guides/accounts.md)。
 
 可信来源默认合并限流。确认 Nginx 使用当前模板覆盖 `X-Real-IP`，并且网站端口仅允许本机反向代理后，在共用环境设置 `AUTH_TRUST_PROXY=true`，启用按真实来源的独立额度。外部可直接访问源站端口时不要开启。

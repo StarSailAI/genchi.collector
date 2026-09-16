@@ -36,6 +36,7 @@ jobs:
           -e services/worker -e plugins/builtin -e plugins/genchi
           -e services/normalizer -e services/product -e dashboard -e examples/custom-fetcher -e '.[dev]'
       - run: python scripts/check-public-release.py --history
+      - run: python scripts/check-doc-links.py
       - run: ruff check .
       - run: pytest -q
       - run: |

@@ -1,5 +1,7 @@
 # X 公开采集：2026-09-09
 
+> 历史归档：以下内容记录当时的实现或验收结果，不代表当前部署状态。现行操作从 [文档目录](../README.md) 进入。
+
 ## 范围与方式
 
 仅使用现有四个官推：`bang_dream_info`、`girlsbandcry`、`LoveLive_staff`、`imas_official`。真实网页访问和采集任务均在生产服务器执行，使用 Camoufox / Firefox，后台匿名 context，无 X 账号 Cookie，无历史回溯。

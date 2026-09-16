@@ -1,5 +1,7 @@
 # 用户系统验收
 
+> 历史归档：以下内容记录当时的实现或验收结果，不代表当前部署状态。现行操作从 [文档目录](../../README.md) 进入。
+
 状态：2026-09-09 本地实现与验收完成，并已按用户要求部署到生产环境。
 
 ## 自动化结果
@@ -43,7 +45,7 @@
 
 ## 品牌验证码邮件（2026-09-09）
 
-按 Email 0.2.0 规范新增 HTML / 纯文本渲染和 SMTP multipart/alternative，视觉沿用衬线品牌字标、珊瑚红及网站主 slogan。189 项后端测试、ruff、全部 10 个 Python 分发包构建通过；模板确实包含在 product wheel 中。760 / 390 / 320 px 预览与 Mailpit 实际登录收码 / 验证均通过，测试账户及消息已清理。新模板没有自动发往真实邮箱；邮箱客户端的最终呈现以用户实际收信为准。详见 `docs/email-templates.md`。
+按 Email 0.2.0 规范新增 HTML / 纯文本渲染和 SMTP multipart/alternative，视觉沿用衬线品牌字标、珊瑚红及网站主 slogan。189 项后端测试、ruff、全部 10 个 Python 分发包构建通过；模板确实包含在 product wheel 中。760 / 390 / 320 px 预览与 Mailpit 实际登录收码 / 验证均通过，测试账户及消息已清理。新模板没有自动发往真实邮箱；邮箱客户端的最终呈现以用户实际收信为准。详见 `docs/guides/email-templates.md`。
 
 ## Agent API 与 API Key（2026-09-10）
 

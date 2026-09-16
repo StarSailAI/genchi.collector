@@ -1,6 +1,6 @@
 # 开源配置与发布前检查
 
-本仓库采用 MIT 许可证，保留 `LICENSE` 和 `UPSTREAM.md` 中的原始版权及 AllFeeds 来源。公开官网、公开采集地址、Docker 服务名和测试用保留地址是代码的一部分；它们不是生产凭据。`config/catalog.yaml` 和 `config/sources.yaml` 是 Genchi 的公开领域配置，部署前应审阅其启用范围。
+本仓库采用 MIT 许可证，保留 [LICENSE](../../LICENSE) 和 [上游说明](../project/upstream.md) 中的原始版权及 AllFeeds 来源。公开官网、公开采集地址、Docker 服务名和测试用保留地址是代码的一部分；它们不是生产凭据。`config/catalog.yaml` 和 `config/sources.yaml` 是 Genchi 的公开领域配置，部署前应审阅其启用范围。
 
 ## 配置放在哪里
 
@@ -33,6 +33,7 @@ python3 scripts/init-local-env.py
 python3 scripts/check-public-release.py --history
 # 可选：与本地已知密钥比对，输出只有文件位置和规则名
 python3 scripts/check-public-release.py --history --secrets-file .env
+python3 scripts/check-doc-links.py
 ruff check .
 pytest -q
 allfeeds-plugin validate --sources config/sources.yaml
@@ -43,14 +44,6 @@ allfeeds-control config-validate --sources config/sources.yaml
 
 这是有明确范围的防误提交检查，不能识别所有供应商密钥、任意硬编码密码、截图内容、不可达对象或远端未获取的引用。正式公开前还应对计划发布的全部分支／标签运行完整密钥扫描并人工审阅。历史中若发现真实密钥，先撤销／轮换，再清理历史或从审阅后的源码建立新仓库；仅删除当前文件或增加 `.gitignore` 不够。不要直接公开带私有历史的 Git bundle。
 
-仓库现有 `docs/reports/`、`docs/audits/` 与 `FOUNDATION_*` 是历史开发／采集验收资料，不代表新部署已通过验收。它们不能用于存放用户记录、真实邮件、生产截图或凭据。安全问题按 [安全策略](../SECURITY.md) 私下报告。
+仓库现有 `docs/archive/` 中的报告与验收记录 是历史开发／采集验收资料，不代表新部署已通过验收。它们不能用于存放用户记录、真实邮件、生产截图或凭据。安全问题按 [安全策略](../../.github/SECURITY.md) 私下报告。
 
-## 本次整理记录（2026-09-16）
-
-整理前工作区干净，真实 `.env` 未跟踪。对本地可达的 48 个提交、494 个文件对象进行凭据格式检查，并对照本地 `.env` 的 4 个有效密钥值，未发现命中；历史中未发现被跟踪的真实 env、密钥文件、数据库备份或 Git bundle。该结论只覆盖当前本地可见内容，不是对外部系统凭据状态的证明。
-
-本轮补充配置初始化、Git／Docker 排除规则、发布扫描和 CI；将 foundation 配置中的站点设为本地示例，去除部署同步脚本的专用开发分支默认值，以及双语文档中不存在的截图引用。没有更改真实配置、采集调度、数据库或线上服务，也没有公开仓库或重写 Git 历史。
-
-## GitHub 发布检查（2026-09-16）
-
-目标仓库为 [StarSailAI/genchi.collector](https://github.com/StarSailAI/genchi.collector)，默认发布分支为 `main`。使用官方 Gitleaks 8.30.1（下载归档 SHA-256 与官方校验清单一致）检查完整本地可达历史和待发布源码快照，均为 0 条发现；原始本地 `.env` 不进入源码快照。以 Evan Yang 的 GitHub noreply 邮箱署名本次整理提交，原有作者和上游版权保持不变。
+历史扫描与首次 GitHub 发布记录见 [2026-09-16 开源发布归档](../archive/2026-09-16-open-source-release.md)。

@@ -4,7 +4,7 @@
 
 ## 唯一词表
 
-维护文件：[`services/normalizer/src/genchi_normalizer/data/glossary.json`](../services/normalizer/src/genchi_normalizer/data/glossary.json)。这是随 normalizer Python 包发布的配置，不依赖运行目录，也没有另一份复制到前端的词表。
+维护文件：[`services/normalizer/src/genchi_normalizer/data/glossary.json`](../../services/normalizer/src/genchi_normalizer/data/glossary.json)。这是随 normalizer Python 包发布的配置，不依赖运行目录，也没有另一份复制到前端的词表。
 
 - `version`：规则版本；修改词条时更新它，并重新部署 normalizer / product / notifier。
 - `subjects`：作品 / 系列 slug 对应的首选展示名。
