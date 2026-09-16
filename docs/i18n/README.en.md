@@ -1,4 +1,14 @@
-# Genchi Collector
+<p align="center">
+  <a href="https://genchi.news">
+    <img src="../../assets/genchi-mascot.webp" width="192" height="192" alt="GENCHI mascot" />
+  </a>
+</p>
+
+<h1 align="center">Genchi Collector</h1>
+
+<p align="center">
+  <a href="https://genchi.news">genchi.news</a>
+</p>
 
 **Turn Japanese anime, music and live-event announcements into traceable activity timelines.**
 

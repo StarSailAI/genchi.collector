@@ -1,4 +1,14 @@
-# Genchi Collector
+<p align="center">
+  <a href="https://genchi.news">
+    <img src="assets/genchi-mascot.webp" width="192" height="192" alt="GENCHI 看板娘" />
+  </a>
+</p>
+
+<h1 align="center">Genchi Collector</h1>
+
+<p align="center">
+  <a href="https://genchi.news">genchi.news</a>
+</p>
 
 **把日本二次元活动的公告、票务和官推，整理成可追溯的活动时间线。**
 
