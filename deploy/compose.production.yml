@@ -28,6 +28,9 @@ services:
     image: genchi/product:${GENCHI_IMAGE_TAG:-current}
     mem_limit: 384m
     command: ["sh", "-c", "genchi-normalizer migrate && exec genchi-product worker --mode ${CATALOG_WORKER_MODE:-idle}"]
+  reviewer:
+    image: genchi/product:${GENCHI_IMAGE_TAG:-current}
+    mem_limit: 384m
   product:
     image: genchi/product:${GENCHI_IMAGE_TAG:-current}
     mem_limit: 256m

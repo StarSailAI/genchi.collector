@@ -198,6 +198,29 @@ services:
       timeout: 5s
       retries: 6
 
+  reviewer:
+    build:
+      context: .
+      dockerfile: services/normalizer/Dockerfile
+    command: ["genchi-product", "worker", "--mode", "${BATCH_REVIEW_WORKER_MODE:-idle}"]
+    restart: unless-stopped
+    depends_on:
+      normalizer:
+        condition: service_healthy
+    environment:
+      <<: *database
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks: [collector]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8070/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+
   notifier:
     build:
       context: .

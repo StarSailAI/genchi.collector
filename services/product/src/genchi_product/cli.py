@@ -50,7 +50,7 @@ def main():
     worker = sub.add_parser("worker")
     worker.add_argument(
         "--mode",
-        choices=["catalog", "notifications", "collection-digest", "idle"],
+        choices=["catalog", "reviews", "notifications", "collection-digest", "idle"],
         default="catalog",
     )
     args = parser.parse_args()
@@ -144,7 +144,8 @@ def main():
 
         class Health(BaseHTTPRequestHandler):
             def do_GET(self):
-                ok = time.monotonic() - state["heartbeat"] < 180
+                max_age = 600 if args.mode == "reviews" else 180
+                ok = time.monotonic() - state["heartbeat"] < max_age
                 self.send_response(200 if ok else 503)
                 self.end_headers()
                 self.wfile.write(json.dumps({"ok": ok, "mode": args.mode}).encode())
@@ -156,12 +157,24 @@ def main():
         threading.Thread(target=health.serve_forever, daemon=True).start()
         last_plan = 0
         last_inbound_scan = 0
+        last_review = 0
         inbound_client = Resend() if os.getenv("RESEND_API_KEY") else None
         while not stop.is_set():
             try:
                 state["heartbeat"] = time.monotonic()
                 if args.mode == "catalog":
                     busy = process_one(catalog)
+                elif args.mode == "reviews":
+                    if time.monotonic() - last_review >= 300:
+                        last_review = time.monotonic()
+                        from .batch_review import run
+
+                        report = run(catalog, limit=32, batch_size=16, apply=True)
+                        logging.info("catalog batch review: %s",
+                                     {key: value for key, value in report.items()
+                                      if key != "examples"})
+                        last_review = time.monotonic()
+                    busy = False
                 elif args.mode == "notifications":
                     if time.monotonic() - last_inbound_scan > 60:
                         try:

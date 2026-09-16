@@ -42,6 +42,7 @@ def test_deployment_bootstrap_preserves_secrets_and_pauses_unconfigured_integrat
     values = deploy.prepare(tmp_path)
     assert len({values[key] for key in deploy.INTERNAL_KEYS}) == len(deploy.INTERNAL_KEYS)
     assert values["CATALOG_WORKER_MODE"] == "idle"
+    assert values["BATCH_REVIEW_WORKER_MODE"] == "idle"
     assert values["SMTP_HOST"] == "smtp.resend.com"
     assert values["NOTIFIER_WORKER_MODE"] == "idle"
     assert env.stat().st_mode & 0o777 == 0o600
@@ -96,7 +97,15 @@ def test_deployment_env_literals_validation_and_model_activation(tmp_path):
     text = text.replace("LLM_BASE_URL=\n", "LLM_BASE_URL=https://model.example.test/v1\n")
     text = text.replace("LLM_MODEL=\n", "LLM_MODEL=example\n")
     env.write_text(text)
-    assert deploy.prepare(tmp_path)["CATALOG_WORKER_MODE"] == "catalog"
+    active = deploy.prepare(tmp_path)
+    assert active["CATALOG_WORKER_MODE"] == "catalog"
+    assert active["BATCH_REVIEW_WORKER_MODE"] == "reviews"
+    env.write_text(text.replace("BATCH_REVIEW_ENABLED=true", "BATCH_REVIEW_ENABLED=false"))
+    assert deploy.prepare(tmp_path)["BATCH_REVIEW_WORKER_MODE"] == "idle"
+    env.write_text(text.replace("BATCH_REVIEW_ENABLED=true", "BATCH_REVIEW_ENABLED=maybe"))
+    with pytest.raises(ValueError, match="BATCH_REVIEW_ENABLED"):
+        deploy.prepare(tmp_path)
+    env.write_text(text)
     effective = deploy.read_env(tmp_path / ".deploy/effective.env")
     assert effective["LLM_API_KEY"] == "literal$secret # value"
     assert effective["PUBLIC_SITE_URL"] == "https://events.example.test"

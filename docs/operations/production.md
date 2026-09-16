@@ -26,6 +26,8 @@ python3 genchi.collector/deploy/manage.py check
 
 模型未配置时，normalizer 运行 `idle` 健康模式，不领取或终结处理任务；原文采集与已迁移活动读取继续工作。补齐模型配置后执行 `apply` 才切换到处理模式。未启用 X 时生成的来源配置仅关闭现有四个官推来源，不扩大其他来源范围。既有采集历史保留。
 
+模型配置齐全时，独立的 `reviewer` 进程会每 5 分钟把最多 32 条新候选送给 DeepSeek 二次审核；详细发布门槛及人工队列见[批量 AI 审核](../guides/batch-review.md)。在共用 `.env` 设置 `BATCH_REVIEW_ENABLED=false` 可暂停自动二审，不丢弃候选。
+
 生产环境默认 `MAIL_PROVIDER=resend`。辅助命令把 API key 映射到 Resend 官方 SMTP 认证，固定使用 `smtp.resend.com:465`、用户名 `resend` 和校验证书的 TLS。API key 为空时 notifier 运行 `idle` 模式，保留队列而不投递到其他服务。配置 key 和合法的 `MAIL_FROM` 后执行 `apply` 启用。发送附带稳定的 `Resend-Idempotency-Key`；已有 SMTP 不确定状态仍需人工核对，不会自动重试。
 
 Mailpit 仅保留为私网调试工具，不是生产投递的替代入口；既有本地环境仍支持 `MAIL_PROVIDER=smtp`。邮件域名的 SPF、DKIM、DMARC 按 Resend 指引配置。参见 [Resend SMTP 文档](https://resend.com/docs/send-with-smtp)。

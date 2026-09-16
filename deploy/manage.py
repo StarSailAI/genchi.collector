@@ -130,6 +130,13 @@ def prepare(root: Path) -> dict[str, str]:
             "Fill LLM_BASE_URL, LLM_API_KEY and LLM_MODEL together, or leave all empty"
         )
     values["CATALOG_WORKER_MODE"] = "catalog" if all(llm) else "idle"
+    review_enabled = values.get("BATCH_REVIEW_ENABLED", "true").lower()
+    if review_enabled not in {"true", "false"}:
+        raise ValueError("BATCH_REVIEW_ENABLED must be true or false")
+    values["BATCH_REVIEW_WORKER_MODE"] = (
+        "reviews" if all(llm) and review_enabled == "true"
+        else "idle"
+    )
     verification_enabled = values.get("VERIFICATION_AGENT_ENABLED", "false").lower() == "true"
     visual_base = values.get("VERIFICATION_LLM_BASE_URL", "").rstrip("/")
     if (
@@ -387,6 +394,7 @@ def main() -> None:
             compose(root, target, ["config", "--quiet"])
         print("Configuration valid; no secret values printed.")
         print("Catalog worker mode:", values["CATALOG_WORKER_MODE"])
+        print("Batch review worker mode:", values["BATCH_REVIEW_WORKER_MODE"])
         print(
             "Email:",
             "paused; fill RESEND_API_KEY"
@@ -432,6 +440,7 @@ def main() -> None:
                 "browser",
                 "worker",
                 "normalizer",
+                "reviewer",
                 "product",
                 "mailpit",
                 "notifier",
