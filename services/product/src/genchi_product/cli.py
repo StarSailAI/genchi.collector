@@ -40,6 +40,7 @@ def main():
     reviews = sub.add_parser("review-batch", help="Batch-audit catalog candidates with DeepSeek")
     reviews.add_argument("--limit", type=int, default=500, help="Maximum current candidates (1–5000)")
     reviews.add_argument("--batch-size", type=int, default=16, help="Candidates per model call (1–30)")
+    reviews.add_argument("--source-type", help="Review one source type first, e.g. official_site")
     review_mode = reviews.add_mutually_exclusive_group()
     review_mode.add_argument("--dry-run", action="store_true", help="Call model without database writes")
     review_mode.add_argument("--apply", action="store_true", help="Save results and publish eligible approvals")
@@ -133,7 +134,8 @@ def main():
         from .batch_review import run
 
         print(json.dumps(run(catalog, limit=args.limit, batch_size=args.batch_size,
-                             apply=args.apply, dry_run=args.dry_run), ensure_ascii=False))
+                             apply=args.apply, dry_run=args.dry_run,
+                             source_type=args.source_type), ensure_ascii=False))
     else:
         stop = threading.Event()
         signal.signal(signal.SIGTERM, lambda *_: stop.set())
