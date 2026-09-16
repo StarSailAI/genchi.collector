@@ -6,10 +6,6 @@
 
 <h1 align="center">Genchi Collector</h1>
 
-<p align="center">
-  <a href="https://genchi.news">genchi.news</a>
-</p>
-
 **把日本二次元活动的公告、票务和官推，整理成可追溯的活动时间线。**
 
 简体中文 · [English](docs/i18n/README.en.md) · [文档目录](docs/README.md) · [贡献指南](.github/CONTRIBUTING.md)

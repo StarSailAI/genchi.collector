@@ -6,10 +6,6 @@
 
 <h1 align="center">Genchi Collector</h1>
 
-<p align="center">
-  <a href="https://genchi.news">genchi.news</a>
-</p>
-
 **Turn Japanese anime, music and live-event announcements into traceable activity timelines.**
 
 [简体中文](../../README.md) · English · [Documentation](../README.md) · [Contributing](../../.github/CONTRIBUTING.md)
