@@ -52,6 +52,8 @@ def hard_gate(row: dict) -> tuple[bool, str]:
         return False, "非正文模型抽取候选"
     if not activity.subject_slugs or activity.attendance != "OFFLINE":
         return False, "系列归属或线下属性不明确"
+    if not activity.venue:
+        return False, "缺少明确的线下会场"
     if activity.time.precision == "TBD":
         return False, "活动日期待定"
     if len(activity.milestones) > 24:

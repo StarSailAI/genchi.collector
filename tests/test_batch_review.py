@@ -35,6 +35,9 @@ def test_hard_gate_requires_current_official_source_and_every_quote():
     row["attributes"]["source_role"] = "community"
     assert batch_review.hard_gate(row)[0] is False
     row["attributes"]["source_role"] = "official_operator"
+    row["payload"]["activity"]["venue"] = None
+    assert batch_review.hard_gate(row)[0] is False
+    row["payload"]["activity"]["venue"] = "東京"
     row["payload"]["activity"]["milestones"][0]["evidence"]["excerpt"] = "missing"
     assert batch_review.hard_gate(row)[0] is False
     row = candidate_row()
