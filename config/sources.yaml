@@ -423,6 +423,32 @@ sources:
       resources: {browser_api: 2, domain:eplus.jp: 1}
     tags: [country:JP, timezone:Asia/Tokyo, source:ticket-aggregator]
 
+  # Music discovery is a separate, bounded pilot. These records remain in
+  # review until their artist identity and physical attendance are verified.
+  - id: eplus-jpop-tickets
+    enabled: false
+    fetcher: genchi.eplus_ticket
+    sink: postgres
+    schedule: {type: cron, cron: "40 14 * * *", timezone: Asia/Tokyo}
+    config:
+      discovery_scope: jpop
+      category_urls: [https://eplus.jp/sf/live/j-pop]
+      project_keywords: {}
+      roots_per_run: 1
+      pages_per_root: 2
+      refresh_details_per_run: 2
+      max_detail_pages: 6
+      max_tracked_details: 300
+      rate_limit_seconds: 3
+      browser_fallback: true
+    timeout_seconds: 1800
+    retry: {max_attempts: 3, backoff: exponential, base_seconds: 600, max_seconds: 7200}
+    routing:
+      queue: browser
+      capabilities: [browser_api]
+      resources: {browser_api: 1, domain:eplus.jp: 1}
+    tags: [scope:jpop-offline, country:JP, timezone:Asia/Tokyo, source:ticket-aggregator]
+
   - id: pia-anime-tickets
     enabled: true
     fetcher: genchi.pia_ticket

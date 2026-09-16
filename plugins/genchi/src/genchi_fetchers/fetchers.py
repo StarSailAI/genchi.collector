@@ -29,7 +29,7 @@ from allfeeds_sdk import (
     UpstreamHTTPError,
 )
 from bs4 import BeautifulSoup
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def _time(value: Any) -> datetime | None:
@@ -707,7 +707,12 @@ def _eplus_next_page(html: str, page_url: str) -> str | None:
     if not node:
         return None
     target = urljoin(page_url, str(node.get("href") or ""))
-    return target if target.startswith("https://eplus.jp/sf/anime/") else None
+    parsed = urlsplit(target)
+    if parsed.scheme != "https" or parsed.hostname != "eplus.jp":
+        return None
+    if parsed.path.startswith("/sf/anime/") or re.fullmatch(r"/sf/live/j-pop/p\d+", parsed.path):
+        return target
+    return None
 
 
 def _eplus_jsonld_events(soup: BeautifulSoup) -> list[dict[str, Any]]:
@@ -963,6 +968,7 @@ class EplusTicketConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     category_urls: tuple[str, ...] = EPLUS_CATEGORY_URLS
+    discovery_scope: str = "anime"
     seed_urls: tuple[str, ...] = ()
     roots_per_run: int = Field(default=2, ge=1, le=7)
     pages_per_root: int = Field(default=2, ge=1, le=10)
@@ -978,20 +984,23 @@ class EplusTicketConfig(BaseModel):
         default_factory=lambda: dict(EPLUS_PROJECT_KEYWORDS)
     )
 
-    @field_validator("category_urls")
-    @classmethod
-    def validate_category_urls(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if not value:
+    @model_validator(mode="after")
+    def validate_category_scope(self):
+        if self.discovery_scope not in {"anime", "jpop"}:
+            raise ValueError("discovery_scope must be anime or jpop")
+        if not self.category_urls:
             raise ValueError("category_urls must not be empty")
-        for url in value:
+        for url in self.category_urls:
             parsed = urlsplit(url)
-            if (
-                parsed.scheme != "https"
-                or parsed.hostname != "eplus.jp"
-                or not parsed.path.startswith("/sf/anime/")
-            ):
-                raise ValueError("category_urls must be public eplus.jp anime category URLs")
-        return value
+            allowed = (
+                parsed.path.startswith("/sf/anime/")
+                if self.discovery_scope == "anime" else parsed.path == "/sf/live/j-pop"
+            )
+            if parsed.scheme != "https" or parsed.hostname != "eplus.jp" or not allowed or parsed.query:
+                raise ValueError("category_urls must match the configured public e+ discovery scope")
+        if self.discovery_scope == "jpop" and self.seed_urls:
+            raise ValueError("jpop discovery does not accept unrelated word-page seeds")
+        return self
 
     @field_validator("seed_urls")
     @classmethod
@@ -1156,7 +1165,7 @@ class EplusTicketFetcher(FetcherPlugin):
                         detail_url,
                         kind="platform_category",
                         source_url=page_url,
-                        trusted_category=True,
+                        trusted_category=config.discovery_scope == "anime",
                     )
                 discovered_next = _eplus_next_page(html, page_url)
                 if page_index >= 1:
@@ -1193,7 +1202,7 @@ class EplusTicketFetcher(FetcherPlugin):
         )
         for page_id, detail_url in selected_details:
             discovery = discoveries.get(page_id, [])
-            category_discovered = any(bool(item.get("trustedCategory")) for item in discovery)
+            category_discovered = any(item.get("kind") == "platform_category" for item in discovery)
             try:
                 html = self._html(client, browser, detail_url, require_events=True)
                 parsed = _eplus_parse_detail(
@@ -1237,6 +1246,7 @@ class EplusTicketFetcher(FetcherPlugin):
                         "source_type": "eplus_ticket",
                         "eplus_ticket": {
                             "pageId": page_id,
+                            "discoveryScope": config.discovery_scope,
                             "project": project,
                             "matchedKeywords": parsed["matchedKeywords"],
                             "relatedGenres": parsed["relatedGenres"],

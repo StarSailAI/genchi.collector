@@ -1,4 +1,4 @@
-# e+ 动漫票务来源
+# e+ 动漫票务与 J-pop 试点
 
 `genchi.eplus_ticket` 只读取 e+ 公开展示的票务信息，目标是建立事实性索引，不参与登录、
 抽选、排队或购票。
@@ -67,3 +67,17 @@ python3 genchi.collector/deploy/manage.py compose backend exec -T postgres psql 
 
 需要降低压力时，优先减少 `roots_per_run`、`pages_per_root` 和
 `refresh_details_per_run`，不要降低 `rate_limit_seconds`。
+
+## J-pop 独立试点
+
+`eplus-jpop-tickets` 使用公开的 `/sf/live/j-pop` 分类页，独立于七个动漫地域入口。
+它每日最多读取两页列表和六个详情，已知详情轮转复查两个；仍可能包含纯配信或混合
+活动，所以分类页只用于发现，不被当作已经核实的线下演出证据。直接 HTTP 可能返回
+拥堵页，Fetcher 使用同一受控 Camoufox 回退。
+
+每条资源保留 `discoveryScope=jpop` 和原生详情、场次及受付信息。旧动漫相关性模型
+不会把 J-pop 误判成“二次元无关”后丢弃；首批音乐资源进入产品审核候选，**不自动
+发布或发送订阅提醒**。审核时先确认实体演出、艺人身份、场次与每轮售票的适用范围，
+再将其关联到经过维护的艺人主体。即便标题与现有主体别名匹配，试点来源仍须审核。
+日调度初始关闭；先在服务器手动提交任务，核对资源、候选与失败报告，再决定是否
+开启日调度。扩大到其他音乐分类或平台需分别验收。

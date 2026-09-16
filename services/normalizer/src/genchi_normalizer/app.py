@@ -139,6 +139,16 @@ def _ticket_relevance_rules(
     platform: str,
 ) -> dict[str, Any]:
     payload = _ticket_payload(resource)
+    if payload.get("discoveryScope") == "jpop":
+        return {
+            "status": "review",
+            "confidence": 0.5,
+            "method": "music-pilot",
+            "reason": "J-pop 试点来源需核实艺人身份、实体场次和票务轮次",
+            "signals": ["discovery-scope:jpop"],
+            "subjectName": None,
+            "subjectType": "UNKNOWN",
+        }
     discoveries = [item for item in payload.get("discovery") or [] if isinstance(item, dict)]
     native_categories = _ticket_string_list(
         payload.get("nativeCategories") or payload.get("relatedGenres")
@@ -2132,9 +2142,9 @@ class Normalizer:
             platform = TICKET_SOURCE_PLATFORMS[source_type]
             decision = _ticket_relevance_rules(resource, platform=platform)
             cached_decision = self.cached_activity_decision(resource)
-            if cached_decision:
+            if cached_decision and decision["method"] != "music-pilot":
                 decision = cached_decision
-            else:
+            elif decision["method"] != "music-pilot":
                 llm_decision = self.call_ticket_relevance_llm(
                     resource,
                     platform=platform,

@@ -171,6 +171,18 @@ def test_ticket_relevance_accepts_trusted_category_without_project_enumeration()
     assert decision["confidence"] == 0.99
 
 
+def test_jpop_pilot_stays_in_review_even_with_a_trusted_category() -> None:
+    resource = ticket_resource(
+        "架空のJ-POP LIVE",
+        discovery=[{"kind": "platform_category", "sourceUrl": "https://eplus.jp/sf/live/j-pop",
+                    "trustedCategory": True}],
+    )
+    resource["attributes"]["ticket_page"]["discoveryScope"] = "jpop"
+    decision = _ticket_relevance_rules(resource, platform="eplus")
+    assert decision["status"] == "review"
+    assert decision["method"] == "music-pilot"
+
+
 def test_ticket_relevance_llm_treats_search_query_as_context_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

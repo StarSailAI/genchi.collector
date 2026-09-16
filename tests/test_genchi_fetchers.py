@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from allfeeds_sdk import FetchContext, FetchRequest
 from genchi_fetchers import (
     AsobiTicketFetcher,
@@ -10,6 +11,8 @@ from genchi_fetchers import (
     XProfileFetcher,
 )
 from genchi_fetchers.fetchers import (
+    EplusTicketConfig,
+    _eplus_next_page,
     _eplus_ticket_phase,
     _pia_ticket_phase,
     _pia_title,
@@ -403,6 +406,49 @@ def test_eplus_ticket_phase_and_event_type_rules():
     assert _eplus_event_type("アフタヌーン40周年展") == "OTHER"
     assert _eplus_event_type("GAME MUSIC FESTIVAL") == "FES"
     assert _eplus_event_type("声優 SPECIAL LIVE") == "LIVE"
+
+
+def test_eplus_jpop_pilot_discovers_without_trusting_music_category(monkeypatch):
+    root = "https://eplus.jp/sf/live/j-pop"
+    detail = "https://eplus.jp/sf/detail/4512340002"
+    pages = {
+        root: '<a href="/sf/detail/4512340002-P0030001P021001">公演</a>'
+              '<a class="block-paginator__nextprev--next" href="/sf/live/j-pop/p2">次へ</a>',
+        detail: '<script type="application/ld+json">'
+                '{"@type":"Event","url":"https://eplus.jp/sf/detail/4512340002-P0030001P021001",'
+                '"name":"架空のJ-POP LIVE","startDate":"2026-11-20T19:00",'
+                '"location":{"@type":"Place","name":"テストホール",'
+                '"address":{"addressRegion":"東京都","addressCountry":"日本"}}}'
+                '</script><article class="block-ticket-article"></article>',
+    }
+
+    class Response:
+        def __init__(self, url):
+            self.text = pages[url]
+
+    monkeypatch.setattr("genchi_fetchers.fetchers.SafeHttpClient.get",
+                        lambda _self, url, **_kwargs: Response(url))
+    records = []
+    report = EplusTicketFetcher().fetch(
+        context(records),
+        FetchRequest(task_id=5, source_id="eplus-jpop-tickets", operation="fetch",
+                     config={"discovery_scope": "jpop", "category_urls": [root],
+                             "project_keywords": {}, "pages_per_root": 1,
+                             "refresh_details_per_run": 0, "browser_fallback": False},
+                     tags=("scope:jpop-offline",)),
+    )
+    assert report.details["details"] == 1
+    assert records[0].attributes["eplus_ticket"]["discoveryScope"] == "jpop"
+    assert records[0].attributes["eplus_ticket"]["discovery"][0]["trustedCategory"] is False
+    assert _eplus_next_page(pages[root], root) == root + "/p2"
+    assert _eplus_next_page('<a class="block-paginator__nextprev--next" href="https://evil.example/p2">x</a>', root) is None
+
+
+def test_eplus_jpop_scope_rejects_anime_or_arbitrary_roots():
+    with pytest.raises(ValueError):
+        EplusTicketConfig(discovery_scope="jpop", category_urls=["https://eplus.jp/sf/anime/kanto"])
+    with pytest.raises(ValueError):
+        EplusTicketConfig(discovery_scope="anime", category_urls=["https://eplus.jp/sf/live/j-pop"])
 
 
 def test_pia_response_uses_declared_utf8_instead_of_lxml_encoding_guess():

@@ -59,6 +59,28 @@ def test_http_404_is_typed_without_logging_query_credentials(monkeypatch):
     assert "not-for-logs" not in str(error.value)
 
 
+def test_jpop_pilot_cannot_publish_even_when_artist_alias_matches():
+    resource = {
+        "source_id": "eplus-jpop-tickets", "external_id": "eplus:detail:4512340002",
+        "content_hash": "sample-hash", "url": "https://eplus.jp/sf/detail/4512340002",
+        "title": "架空歌手 LIVE", "attributes": {
+            "source_type": "eplus_ticket", "eplus_ticket": {
+                "discoveryScope": "jpop", "events": [{
+                    "id": "4512340002-P0030001P021001", "name": "架空歌手 LIVE",
+                    "startsAt": "2026-11-20T19:00:00+09:00",
+                    "venue": {"name": "テストホール", "prefecture": "東京都"},
+                    "ticketWindows": [],
+                }],
+            },
+        },
+    }
+    subjects = [{"slug": "fictional-artist", "name": "架空歌手", "name_zh": None, "aliases": []}]
+    items = structured(resource, subjects)
+    assert len(items) == 1
+    assert items[0].subject_slugs == ["fictional-artist"]
+    assert items[0].publication == "REVIEW"
+
+
 def test_browser_retries_transient_page_failure_but_not_bad_auth(monkeypatch):
     responses = iter([
         SimpleNamespace(status_code=502),

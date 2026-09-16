@@ -48,6 +48,7 @@ def precise(value, end=None) -> Moment:
 def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
     attributes = resource.get("attributes") or {}
     payload = attributes.get("ticket_page") or attributes.get("eplus_ticket") or {}
+    music_pilot = payload.get("discoveryScope") == "jpop"
     events = payload.get("events") or []
     platform = payload.get("platform") or attributes.get("source_type", "").removesuffix("_ticket")
     if platform == "lawson" and payload.get("scheduleCompleteness") != "native_detail":
@@ -230,7 +231,7 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                 time=precise(event.get("startsAt"), event.get("endsAt")),
                 venue=venue.get("name"),
                 city=venue.get("prefecture"),
-                publication="PUBLISHED" if slugs and not entry_only_performance and not bundle_venue(venue.get("name")) else "REVIEW",
+                publication="PUBLISHED" if slugs and not music_pilot and not entry_only_performance and not bundle_venue(venue.get("name")) else "REVIEW",
                 attendance="ONLINE" if nonphysical_venue(venue.get("name")) else "OFFLINE",
                 evidence=ev,
                 milestones=nodes,
