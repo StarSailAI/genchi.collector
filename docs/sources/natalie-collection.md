@@ -18,7 +18,7 @@ Agent 不持有数据库、邮件或 X 登录凭证。它与 browser 共用镜�
 
 ## 模型与费用边界
 
-服务器沿用已有 DeepSeek API key，仅验证码分类使用 `deepseek-v4-flash-vision-exp`；正文提取继续使用 `LLM_MODEL`。图片以验证面板截图送到配置的 API，不发送 Cookie、浏览器令牌或整篇新闻。
+服务器沿用已有 DeepSeek API key；验证码图片分类与正文提取统一使用支持图片输入的 `deepseek-flash`。图片以验证面板截图送到配置的 API，不发送 Cookie、浏览器令牌或整篇新闻。
 
 设置都在项目共享 `.env`：
 
@@ -26,11 +26,11 @@ Agent 不持有数据库、邮件或 X 登录凭证。它与 browser 共用镜�
 VERIFICATION_AGENT_ENABLED=true
 VERIFICATION_LLM_BASE_URL=
 VERIFICATION_LLM_API_KEY=
-VERIFICATION_LLM_MODEL=deepseek-v4-flash-vision-exp
+VERIFICATION_LLM_MODEL=deepseek-flash
 VERIFICATION_DAILY_MODEL_CALLS=40
 ```
 
-空的视觉 endpoint/key 由部署工具解析为已有 `LLM_BASE_URL` / `LLM_API_KEY`，不复制密钥到仓库。视觉模型名称必须显式配置；不能用普通文本模型冒充视觉能力。关闭 Agent 时，部署工具也暂停两个 Natalie 来源。
+空的视觉 endpoint/key 由部署工具解析为已有 `LLM_BASE_URL` / `LLM_API_KEY`，不复制密钥到仓库。视觉模型名称必须显式配置；`deepseek-flash` 同时支持文本和图片输入。关闭 Agent 时，部署工具也暂停两个 Natalie 来源。
 
 当前九宫格处理每个中断只调用一次模型，底层硬上限仍为 10 次；单次输出最多 450 token、等待最多 18 秒。全服务每天最多 40 次（UTC 日期）；该日上限可配置为 1–100。已有浏览器规则仍限制 120 秒控制权和每个上下文 12 次点击。账本在 `verification-state` 卷中：先持久化预留调用，再请求模型，网络回复丢失也占额度。重启保留当日计数，旧处理中断标为 abandoned，不重做付费调用。
 
