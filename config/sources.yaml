@@ -489,7 +489,7 @@ sources:
   # Pia 邦楽 is a separate music pilot. Oversized ticket-sale pages are skipped
   # rather than silently truncating rounds; every extracted performance is reviewed.
   - id: pia-jpop-tickets
-    enabled: false
+    enabled: true
     fetcher: genchi.pia_ticket
     sink: postgres
     schedule: {type: cron, cron: "20 15 * * *", timezone: Asia/Tokyo}

@@ -43,4 +43,4 @@ docker-compose exec control allfeeds-control task-submit --source lawson-anime-t
 
 来源按东京时间每日错峰运行。Pia 对普通 HTTP 失败使用 Camoufox 回退；Lawson 始终使用 Camoufox，并通过 `browser_api` 和域名资源锁限制并发。
 
-`pia-jpop-tickets` 独立于动漫关键词和分类。官方[邦楽入口](https://t.pia.jp/music/hgk/)只作为发现途径，不能证明每个详情都是符合要求的实体 J-pop 演出。每轮最多选择 3 个详情，每个详情最多允许 12 个销售入口；超过上限、销售页缺失或临时失败时，整条详情不会作为完整数据发出，任务报告列在 `incomplete_details`。艺人归属、实体场馆、场次与受付仍进入人工审核，不自动公开或发送提醒。上线前先手动执行限量任务、核对 `task_runs`、`resources`、审核候选与公开证据，再开启日调度。
+`pia-jpop-tickets` 独立于动漫关键词和分类。官方[邦楽入口](https://t.pia.jp/music/hgk/)只作为发现途径，不能证明每个详情都是符合要求的实体 J-pop 演出。每轮最多选择 3 个详情，每个详情最多允许 12 个销售入口；超过上限、销售页缺失或临时失败时，整条详情不会作为完整数据发出，任务报告列在 `incomplete_details`。艺人归属、实体场馆、场次与受付仍进入人工审核，不自动公开或发送提醒。2026-09-16 线上手动验收选择 3 个详情：ORANGE RANGE 的 77 个销售入口超过上限，被跳过；另 2 个详情提取 26 个实体场次、35 个售票窗口，全部进入审核，公开证据为 0。日调度因此以同样上限开启，后续扩大覆盖前需解决大型巡演详情的完整采集及跨平台合并。
