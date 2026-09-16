@@ -4,11 +4,17 @@
   </a>
 </p>
 
-<h1 align="center">Genchi Collector</h1>
+<p align="center">
+  <img src="assets/genchi-title.svg" width="360" height="48" alt="Genchi Collector" />
+</p>
 
-**把日本二次元活动的公告、票务和官推，整理成可追溯的活动时间线。**
+<p align="center"><strong>把日本二次元活动的公告、票务和官推，整理成可追溯的活动时间线。</strong></p>
 
-简体中文 · [English](docs/i18n/README.en.md) · [文档目录](docs/README.md) · [贡献指南](.github/CONTRIBUTING.md)
+<p align="center">
+  简体中文 · <a href="docs/i18n/README.en.md">English</a> · <a href="docs/README.md">文档目录</a> · <a href=".github/CONTRIBUTING.md">贡献指南</a>
+</p>
+
+<hr />
 
 Genchi Collector 是 [genchi.news](https://genchi.news) 的采集、活动目录与提醒后端，基于 AllFeeds 分布式采集框架开发。它保存原始证据，将官网、官方 X、票务平台和经过审核的聚合来源统一为活动、场次与时间节点，供网站和 Agent 使用。
 

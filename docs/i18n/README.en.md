@@ -4,11 +4,17 @@
   </a>
 </p>
 
-<h1 align="center">Genchi Collector</h1>
+<p align="center">
+  <img src="../../assets/genchi-title.svg" width="360" height="48" alt="Genchi Collector" />
+</p>
 
-**Turn Japanese anime, music and live-event announcements into traceable activity timelines.**
+<p align="center"><strong>Turn Japanese anime, music and live-event announcements into traceable activity timelines.</strong></p>
 
-[简体中文](../../README.md) · English · [Documentation](../README.md) · [Contributing](../../.github/CONTRIBUTING.md)
+<p align="center">
+  <a href="../../README.md">简体中文</a> · English · <a href="../README.md">Documentation</a> · <a href="../../.github/CONTRIBUTING.md">Contributing</a>
+</p>
+
+<hr />
 
 Genchi Collector is the collection, activity catalog and notification backend for [genchi.news](https://genchi.news), built on the AllFeeds distributed collection framework. It retains source evidence and turns official websites, public X posts, ticket platforms and reviewed aggregators into activities, occurrences and milestones for websites and agents.
 
