@@ -221,7 +221,7 @@ def _pending(catalog: Catalog, limit: int, source_type: str | None = None) -> tu
             JOIN allfeeds.resources r ON r.id=rv.resource_id
             WHERE rv.status='PENDING' AND rv.payload ? 'activity'
             AND rv.payload->'activity'->'evidence'->>'version_hash' IS DISTINCT FROM r.content_hash""").fetchone()["n"]
-        rows = conn.execute("""SELECT rv.*,r.content,r.content_hash AS current_hash,
+        rows = conn.execute("""SELECT rv.*,r.content_hash AS current_hash,
             r.source_id,r.external_id,r.title AS source_title,r.url AS source_url,r.attributes
             FROM catalog_reviews rv JOIN allfeeds.resources r ON r.id=rv.resource_id
             WHERE rv.status='PENDING' AND rv.kind='EXTRACTION' AND rv.payload ? 'activity'
@@ -299,6 +299,17 @@ def run(catalog: Catalog, *, limit: int = 500, batch_size: int = 16,
         _endpoint(base)
     subjects = _subjects(catalog)
     for batch in _batches(rows, batch_size):
+        official_rows = [row for row, _ in batch if "content" not in row and (
+            (row.get("attributes") or {}).get("source_role") in TRUSTED_ROLES or
+            (row.get("attributes") or {}).get("source_type") == "official_site")]
+        if official_rows:
+            resource_ids = list({row["resource_id"] for row in official_rows})
+            with catalog.connect() as conn:
+                source_content = {resource["id"]: resource["content"] for resource in
+                                  conn.execute("SELECT id,content FROM allfeeds.resources WHERE id=ANY(%s)",
+                                               (resource_ids,)).fetchall()}
+            for row in official_rows:
+                row["content"] = source_content.get(row["resource_id"])
         reviewable = [item for _, item in batch if item is not None]
         decisions, calls = (_judge_bounded(reviewable, subjects=subjects, key=key,
                                             base=base, model=model)

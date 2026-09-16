@@ -146,3 +146,32 @@ def test_out_of_scope_requires_no_known_subject(monkeypatch):
 def test_source_type_filter_is_validated_before_query():
     with pytest.raises(ValueError, match="source-type"):
         batch_review.run(Mock(), source_type="official_site' OR TRUE")
+
+
+def test_official_source_content_is_loaded_only_for_active_batch(monkeypatch):
+    row = candidate_row()
+    row["resource_id"] = 42
+    row.pop("content")
+    monkeypatch.setattr(batch_review, "_pending", lambda _catalog, _limit, _source_type: (0, [row]))
+    monkeypatch.setattr(batch_review, "_subjects", lambda _catalog: [])
+    monkeypatch.setattr(batch_review, "_close_stale", lambda _catalog: 0)
+    monkeypatch.setattr(batch_review, "judge", lambda items, **_: {
+        items[0]["id"]: {"decision": "APPROVE", "reason": "证据充分"}})
+    for name in ("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"):
+        monkeypatch.setenv(name, "https://api.deepseek.com" if name == "LLM_BASE_URL" else "test")
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, query, params):
+            assert "id=ANY" in query and params == ([42],)
+            return Mock(fetchall=lambda: [{"id": 42, "content": QUOTE}])
+
+    catalog = Mock()
+    catalog.connect.return_value = Connection()
+    catalog.approve_review.return_value = True
+    assert batch_review.run(catalog, apply=True)["published"] == 1
