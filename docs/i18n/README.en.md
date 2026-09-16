@@ -4,7 +4,7 @@
   </a>
 </p>
 
-<p align="center"><strong>Genchi Collector</strong></p>
+<h1 align="center">Genchi Collector</h1>
 
 **Turn Japanese anime, music and live-event announcements into traceable activity timelines.**
 
