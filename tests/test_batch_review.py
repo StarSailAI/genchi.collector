@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import pytest
 from genchi_product import batch_review
 from genchi_product.domain import ActivityInput, EvidenceInput, MilestoneInput, Moment
+from genchi_product.pipeline import structured
 
 QUOTE = "2026年9月25日 18:00 開演。学園アイドルマスター 東京公演。"
 
@@ -43,6 +44,95 @@ def test_hard_gate_requires_current_official_source_and_every_quote():
     row = candidate_row()
     row["current_hash"] = "new-version"
     assert batch_review.hard_gate(row)[0] is False
+
+
+def test_jpop_native_ticket_can_publish_after_independent_review():
+    resource = {
+        "source_id": "eplus-jpop-tickets", "external_id": "eplus:detail:123",
+        "content_hash": "hash-1", "title": "架空歌手 LIVE",
+        "url": "https://eplus.jp/sf/detail/123", "kind": "eplus_ticket_page",
+        "attributes": {"source_type": "eplus_ticket", "eplus_ticket": {
+            "platform": "eplus", "discoveryScope": "jpop", "events": [{
+                "id": "123-P1", "name": "架空歌手 LIVE",
+                "startsAt": "2026-11-20T19:00:00+09:00",
+                "venue": {"name": "テストホール", "prefecture": "東京都"},
+                "ticketWindows": [{"id": "round-1", "phaseLabelJa": "一般発売",
+                                   "opensAt": "2026-09-20T10:00:00+09:00",
+                                   "closesAt": "2026-11-19T23:59:00+09:00"}],
+            }],
+        }}, "tags": [],
+    }
+    candidate = structured(resource, [])[0]
+    row = {"id": "jpop-one", "payload": {"activity": candidate.model_dump(mode="json"),
+                                         "matches": []},
+           "current_hash": resource["content_hash"],
+           "source_id": resource["source_id"], "external_id": resource["external_id"],
+           "source_title": resource["title"], "source_url": resource["url"],
+           "source_kind": resource["kind"], "tags": [], "attributes": resource["attributes"]}
+    assert candidate.subject_slugs == [] and candidate.publication == "REVIEW"
+    assert batch_review.hard_gate(row, [])[0] is True
+    row["payload"]["activity"]["occurrence_role"] = "ADMISSION"
+    assert batch_review.hard_gate(row, [])[0] is False
+    row["payload"]["activity"] = candidate.model_dump(mode="json")
+    row["payload"]["activity"]["venue"] = "別のホール"
+    assert batch_review.hard_gate(row, [])[0] is False
+    row["payload"]["activity"] = candidate.model_dump(mode="json")
+    resource["attributes"]["eplus_ticket"]["events"][0]["startsAt"] = "2026-11-21T19:00:00+09:00"
+    assert batch_review.hard_gate(row, [])[0] is False
+
+
+def test_approved_jpop_ticket_is_published_by_batch_worker(monkeypatch):
+    resource = {
+        "source_id": "pia-jpop-tickets", "external_id": "pia:event:123",
+        "content_hash": "hash-1", "title": "架空歌手 LIVE",
+        "url": "https://t.pia.jp/pia/event/event.do?eventBundleCd=123",
+        "kind": "ticket_page", "tags": [],
+        "attributes": {"source_type": "pia_ticket", "ticket_page": {
+            "platform": "pia", "discoveryScope": "jpop", "events": [{
+                "id": "123-P1", "name": "架空歌手 LIVE",
+                "startsAt": "2026-11-20T19:00:00+09:00",
+                "venue": {"name": "テストホール", "prefecture": "東京都"},
+                "ticketWindows": [{"id": "round-1", "phaseLabelJa": "一般発売",
+                                   "opensAt": "2026-09-20T10:00:00+09:00"}],
+            }],
+        }},
+    }
+    candidate = structured(resource, [])[0]
+    row = {"id": "jpop-pia", "payload": {"activity": candidate.model_dump(mode="json"),
+                                         "matches": []},
+           "current_hash": resource["content_hash"], "source_id": resource["source_id"],
+           "external_id": resource["external_id"], "source_title": resource["title"],
+           "source_url": resource["url"], "source_kind": resource["kind"],
+           "tags": resource["tags"], "attributes": resource["attributes"]}
+    monkeypatch.setattr(batch_review, "_pending", lambda *_args: (0, [row]))
+    monkeypatch.setattr(batch_review, "_subjects", lambda _catalog: [])
+    monkeypatch.setattr(batch_review, "_close_stale", lambda _catalog: 0)
+    monkeypatch.setattr(batch_review, "judge", lambda items, **_: {
+        items[0]["id"]: {"decision": "APPROVE", "reason": "原生场次与售票窗口一致"}})
+    for name in ("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"):
+        monkeypatch.setenv(name, "https://api.deepseek.com" if name == "LLM_BASE_URL" else "test")
+    catalog = Mock()
+    catalog.approve_review.return_value = True
+    result = batch_review.run(catalog, apply=True)
+    assert result["published"] == 1 and result["manual"] == 0
+    assert catalog.approve_review.call_args.args[:3] == (
+        "jpop-pia", "ai:deepseek-batch-v2", True)
+
+
+def test_editorial_and_community_need_source_backed_authority():
+    row = candidate_row()
+    row["source_url"] = "https://spice.eplus.jp/articles/123"
+    row["payload"]["activity"]["url"] = "https://eplus.jp/sf/detail/123"
+    row["attributes"] = {"source_type": "aggregator", "source_role": "editorial",
+                         "outbound_links": [{"url": "https://eplus.jp/sf/detail/123"}]}
+    assert batch_review.hard_gate(row)[0] is True
+    row["attributes"]["outbound_links"] = []
+    assert batch_review.hard_gate(row)[0] is False
+    row["attributes"]["outbound_links"] = [{"url": "https://eplus.jp/sf/detail/123"}]
+    row["attributes"]["source_role"] = "community"
+    assert batch_review.hard_gate(row)[0] is False
+    row["payload"]["matches"] = [{"strength": "exact_event_and_dates"}]
+    assert batch_review.hard_gate(row)[0] is True
 
 
 def test_judge_rejects_missing_or_duplicate_results(monkeypatch):

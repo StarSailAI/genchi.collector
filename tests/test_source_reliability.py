@@ -81,6 +81,23 @@ def test_jpop_pilot_cannot_publish_even_when_artist_alias_matches():
     assert items[0].publication == "REVIEW"
 
 
+def test_known_series_ticket_also_waits_for_automatic_second_review():
+    resource = {
+        "source_id": "eplus-anime-tickets", "external_id": "eplus:detail:known",
+        "content_hash": "sample-hash", "url": "https://eplus.jp/sf/detail/known",
+        "title": "架空歌手 LIVE", "attributes": {"source_type": "eplus_ticket",
+            "eplus_ticket": {"platform": "eplus", "events": [{
+                "id": "known-P1", "name": "架空歌手 LIVE",
+                "startsAt": "2026-11-20T19:00:00+09:00",
+                "venue": {"name": "テストホール", "prefecture": "東京都"},
+            }]}}}
+    subjects = [{"slug": "fictional-artist", "name": "架空歌手", "name_zh": None,
+                 "aliases": []}]
+    item = structured(resource, subjects)[0]
+    assert item.subject_slugs == ["fictional-artist"]
+    assert item.publication == "REVIEW"
+
+
 def test_jpop_pilot_excludes_streaming_plus_but_keeps_physical_performances():
     resource = {
         "source_id": "eplus-jpop-tickets", "external_id": "eplus:detail:4512340002",

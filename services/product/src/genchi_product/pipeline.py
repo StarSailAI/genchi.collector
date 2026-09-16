@@ -21,7 +21,6 @@ from .domain import (
     Moment,
     SubjectRelationInput,
     canonical_url,
-    classify,
     fingerprint,
     normalize,
 )
@@ -29,7 +28,7 @@ from .importer import PHASE_LABELS, subjects_for
 from .matching import event_reference, find_activity_matches
 from .schedules import occurrence_label, role_for
 from .store import Catalog
-from .venues import bundle_venue, nonphysical_venue
+from .venues import nonphysical_venue
 
 LOGGER = logging.getLogger(__name__)
 PROMPT_VERSION = "catalog-v3.1-session-semantics"
@@ -224,7 +223,6 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
             )
         role = role_for(title, "OTHER", event.get("startLabel") or
                         ("開演" if platform == "pia" and "T" in str(event.get("startsAt")) else ""))
-        entry_only_performance = role == "ADMISSION" and classify(title) in {"LIVE", "FESTIVAL", "MEETUP"}
         results.append(
             ActivityInput(
                 activity_key=event.get("activityKey"),
@@ -240,7 +238,7 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                 time=precise(event.get("startsAt"), event.get("endsAt")),
                 venue=venue.get("name"),
                 city=venue.get("prefecture"),
-                publication="PUBLISHED" if slugs and not music_pilot and not entry_only_performance and not bundle_venue(venue.get("name")) else "REVIEW",
+                publication="REVIEW",
                 attendance="ONLINE" if virtual else "OFFLINE",
                 evidence=ev,
                 milestones=nodes,
