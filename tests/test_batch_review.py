@@ -161,7 +161,7 @@ def test_judge_rejects_missing_or_duplicate_results(monkeypatch):
 def test_review_run_batches_and_persists_only_high_confidence(monkeypatch):
     rows = [candidate_row("one"), candidate_row("two"), candidate_row("three")]
     rows[1]["attributes"]["source_role"] = "community"
-    monkeypatch.setattr(batch_review, "_pending", lambda _catalog, _limit, _source_type: (7, rows))
+    monkeypatch.setattr(batch_review, "_pending", lambda *_args: (7, rows))
     monkeypatch.setattr(batch_review, "_close_stale", lambda _catalog: 7)
     monkeypatch.setattr(batch_review, "_subjects", lambda _catalog: [])
     monkeypatch.setattr(batch_review, "_save_audit", lambda _catalog, _row, _audit: True)
@@ -182,7 +182,7 @@ def test_review_run_batches_and_persists_only_high_confidence(monkeypatch):
 
 
 def test_plan_does_not_call_model(monkeypatch):
-    monkeypatch.setattr(batch_review, "_pending", lambda _catalog, _limit, _source_type: (2, [candidate_row()]))
+    monkeypatch.setattr(batch_review, "_pending", lambda *_args: (2, [candidate_row()]))
     monkeypatch.setattr(batch_review, "judge", lambda *_a, **_k: pytest.fail("model called"))
     assert batch_review.run(Mock())["selected"] == 1
 
@@ -219,7 +219,7 @@ def test_out_of_scope_requires_no_known_subject(monkeypatch):
                          "eplus_ticket": {"discoveryScope": "jpop"}}
     assert not batch_review._safe_out_of_scope(row, subjects)
     row["attributes"] = {"source_role": "official_operator"}
-    monkeypatch.setattr(batch_review, "_pending", lambda _catalog, _limit, _source_type: (0, [row]))
+    monkeypatch.setattr(batch_review, "_pending", lambda *_args: (0, [row]))
     monkeypatch.setattr(batch_review, "_subjects", lambda _catalog: subjects)
     monkeypatch.setattr(batch_review, "_close_stale", lambda _catalog: 0)
     monkeypatch.setattr(batch_review, "judge", lambda items, **_: {
@@ -236,13 +236,15 @@ def test_out_of_scope_requires_no_known_subject(monkeypatch):
 def test_source_type_filter_is_validated_before_query():
     with pytest.raises(ValueError, match="source-type"):
         batch_review.run(Mock(), source_type="official_site' OR TRUE")
+    with pytest.raises(ValueError, match="source-id"):
+        batch_review.run(Mock(), source_id="pia-jpop-tickets' OR TRUE")
 
 
 def test_official_source_content_is_loaded_only_for_active_batch(monkeypatch):
     row = candidate_row()
     row["resource_id"] = 42
     row.pop("content")
-    monkeypatch.setattr(batch_review, "_pending", lambda _catalog, _limit, _source_type: (0, [row]))
+    monkeypatch.setattr(batch_review, "_pending", lambda *_args: (0, [row]))
     monkeypatch.setattr(batch_review, "_subjects", lambda _catalog: [])
     monkeypatch.setattr(batch_review, "_close_stale", lambda _catalog: 0)
     monkeypatch.setattr(batch_review, "judge", lambda items, **_: {

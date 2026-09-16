@@ -41,6 +41,7 @@ def main():
     reviews.add_argument("--limit", type=int, default=500, help="Maximum current candidates (1–5000)")
     reviews.add_argument("--batch-size", type=int, default=16, help="Candidates per model call (1–30)")
     reviews.add_argument("--source-type", help="Review one source type first, e.g. official_site")
+    reviews.add_argument("--source-id", help="Review one configured source first, e.g. pia-jpop-tickets")
     review_mode = reviews.add_mutually_exclusive_group()
     review_mode.add_argument("--dry-run", action="store_true", help="Call model without database writes")
     review_mode.add_argument("--apply", action="store_true", help="Save results and publish eligible approvals")
@@ -135,7 +136,7 @@ def main():
 
         print(json.dumps(run(catalog, limit=args.limit, batch_size=args.batch_size,
                              apply=args.apply, dry_run=args.dry_run,
-                             source_type=args.source_type), ensure_ascii=False))
+                             source_type=args.source_type, source_id=args.source_id), ensure_ascii=False))
     else:
         stop = threading.Event()
         signal.signal(signal.SIGTERM, lambda *_: stop.set())

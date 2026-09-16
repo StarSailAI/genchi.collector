@@ -34,4 +34,4 @@ python3 genchi.collector/deploy/manage.py compose backend exec -T normalizer \
 ```
 
 `--dry-run` 和 `--apply` 都会列出最多 20 个判定示例，便于核对标题、理由及硬校验结果。先抽样检查自动发布和范围外拒绝的结果，再扩大运行批次。该命令可能触发目录变更和后续提醒；在生产部署后应检查审核计数、已发布活动及通知计划。只读计划显示 `stale` 和 `selected`，不计入已经保存过同版本 AI 判定的候选。
-可用 `--source-type official_site`、`--source-type pia_ticket` 等按来源分阶段运行；不传时处理全部来源。过期候选清理始终覆盖全队列，不受来源筛选影响。
+可用 `--source-type official_site`、`--source-id pia-jpop-tickets` 等按类型或具体来源分阶段运行；不传时处理全部来源。过期候选清理始终覆盖全队列，不受来源筛选影响。

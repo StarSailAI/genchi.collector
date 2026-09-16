@@ -269,7 +269,8 @@ def _judge_bounded(items: list[dict], *, subjects: list[dict], key: str,
         return {**left, **right}, 1 + left_calls + right_calls
 
 
-def _pending(catalog: Catalog, limit: int, source_type: str | None = None) -> tuple[int, list[dict]]:
+def _pending(catalog: Catalog, limit: int, source_type: str | None = None,
+             source_id: str | None = None) -> tuple[int, list[dict]]:
     with catalog.connect() as conn:
         stale = conn.execute("""SELECT count(*) AS n FROM catalog_reviews rv
             JOIN allfeeds.resources r ON r.id=rv.resource_id
@@ -284,8 +285,9 @@ def _pending(catalog: Catalog, limit: int, source_type: str | None = None) -> tu
             AND rv.payload->'activity'->'evidence'->>'version_hash'=r.content_hash
             AND rv.payload->'ai_review'->>'version' IS DISTINCT FROM %s
             AND (%s::text IS NULL OR r.attributes->>'source_type'=%s)
+            AND (%s::text IS NULL OR r.source_id=%s)
             ORDER BY rv.created_at,rv.id LIMIT %s""",
-            (REVIEW_VERSION, source_type, source_type, limit)).fetchall()
+            (REVIEW_VERSION, source_type, source_type, source_id, source_id, limit)).fetchall()
     return stale, rows
 
 
@@ -332,14 +334,16 @@ def _save_audit(catalog: Catalog, row: dict, audit: dict) -> bool:
 
 def run(catalog: Catalog, *, limit: int = 500, batch_size: int = 16,
         apply: bool = False, dry_run: bool = False,
-        source_type: str | None = None) -> dict:
+        source_type: str | None = None, source_id: str | None = None) -> dict:
     if not 1 <= limit <= 5000 or not 1 <= batch_size <= 30:
         raise ValueError("limit 必须为 1–5000，batch-size 必须为 1–30")
     if apply and dry_run:
         raise ValueError("--apply 与 --dry-run 不能同时使用")
     if source_type is not None and not re.fullmatch(r"[a-z0-9_]{1,40}", source_type):
         raise ValueError("source-type 格式无效")
-    stale, rows = _pending(catalog, limit, source_type)
+    if source_id is not None and not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,79}", source_id):
+        raise ValueError("source-id 格式无效")
+    stale, rows = _pending(catalog, limit, source_type, source_id)
     result = {"stale": stale, "selected": len(rows), "batches": 0, "model_calls": 0,
               "published": 0, "out_of_scope": 0, "manual": 0,
               "contradicted": 0, "skipped": 0, "examples": []}
