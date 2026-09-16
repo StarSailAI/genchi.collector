@@ -16,6 +16,7 @@ Genchi Collector 的使用、开发与维护入口。命令默认从仓库根目
 - [邮箱账户与个人中心](guides/accounts.md)
 - [Configuration](guides/configuration.md)
 - [邮件模板](guides/email-templates.md)
+- [批量 AI 审核目录候选](guides/batch-review.md)
 - [首页问答与倒计时](guides/home-assistant.md)
 - [名称与专有词表](guides/naming.md)
 

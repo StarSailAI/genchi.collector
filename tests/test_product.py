@@ -501,6 +501,32 @@ def test_review_promotion_adds_verified_evidence(catalog):
         ).fetchone()["verified"] is True
 
 
+def test_batch_review_promotion_records_ai_provenance_and_candidate_hash(catalog):
+    from genchi_product.batch_review import REVIEW_VERSION, _activity_hash
+
+    value = activity(verified=False)
+    value.publication = "REVIEW"
+    payload = value.model_dump(mode="json")
+    with catalog.connect() as conn:
+        Catalog.review(conn, key="batch-candidate", reason="Second pass",
+                       payload={"activity": payload})
+        review_id = conn.execute("SELECT id FROM catalog_reviews").fetchone()["id"]
+    with pytest.raises(ValueError, match="已变化"):
+        catalog.approve_review(review_id, "ai:test", True,
+                               expected_activity_hash="bad-hash")
+    audit = {"version": REVIEW_VERSION, "decision": "APPROVE", "reason": "官方证据完整"}
+    assert catalog.approve_review(review_id, "ai:test", True,
+                                  evidence_method="llm:review:test", audit=audit,
+                                  expected_activity_hash=_activity_hash(payload))
+    with catalog.connect() as conn:
+        review = conn.execute("SELECT status,reviewed_by,payload FROM catalog_reviews WHERE id=%s",
+                              (review_id,)).fetchone()
+        assert review["status"] == "APPROVED" and review["reviewed_by"] == "ai:test"
+        assert review["payload"]["ai_review"] == audit
+        assert conn.execute("SELECT count(*) AS n FROM catalog_evidence WHERE method=%s",
+                            ("llm:review:test",)).fetchone()["n"] >= 2
+
+
 def test_notification_dedup_and_send_once(catalog):
     aid = catalog.publish(activity(), historical=True)
     subscribe(catalog)

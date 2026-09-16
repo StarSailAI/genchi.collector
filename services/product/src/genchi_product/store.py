@@ -651,7 +651,9 @@ class Catalog:
         )
 
     def approve_review(
-        self, review_id: str, reviewer: str, approve: bool, edited: ActivityInput | None = None
+        self, review_id: str, reviewer: str, approve: bool, edited: ActivityInput | None = None,
+        *, evidence_method: str = "human", audit: dict | None = None,
+        expected_activity_hash: str | None = None,
     ):
         with self.connect() as conn, conn.transaction():
             review = conn.execute(
@@ -660,12 +662,18 @@ class Catalog:
             if not review or review["status"] != "PENDING":
                 return False
             payload = review["payload"]
-            if approve and review["resource_id"] and payload.get("activity"):
+            if expected_activity_hash is not None and fingerprint(
+                json.dumps(payload.get("activity"), ensure_ascii=False, sort_keys=True)
+            ) != expected_activity_hash:
+                raise ValueError("审核候选已变化，请重新复核")
+            if (approve or expected_activity_hash is not None) and review["resource_id"] and payload.get("activity"):
                 expected_hash = payload["activity"].get("evidence", {}).get("version_hash")
                 current = conn.execute(
                     "SELECT content_hash FROM allfeeds.resources WHERE id=%s",
                     (review["resource_id"],),
                 ).fetchone()
+                if expected_activity_hash is not None and not current:
+                    raise ValueError("原文已移除，请重新复核")
                 if current and expected_hash and current["content_hash"] != expected_hash:
                     raise ValueError("原文已经更新，请核对最新候选后再发布")
             if edited is not None:
@@ -674,20 +682,21 @@ class Catalog:
                     "activity": edited.model_dump(mode="json"),
                     "original_payload": payload,
                 }
-                conn.execute(
-                    "UPDATE catalog_reviews SET payload=%s WHERE id=%s", (Jsonb(payload), review_id)
-                )
+            if audit is not None:
+                payload = {**payload, "ai_review": audit}
+            if edited is not None or audit is not None:
+                conn.execute("UPDATE catalog_reviews SET payload=%s WHERE id=%s", (Jsonb(payload), review_id))
             if approve and "activity" in payload:
                 value = ActivityInput.model_validate(payload["activity"])
                 value.publication = "PUBLISHED"
                 value.evidence.verified = True
-                value.evidence.method = "human"
+                value.evidence.method = evidence_method
                 for node in value.milestones:
                     node.evidence.verified = True
-                    node.evidence.method = "human"
+                    node.evidence.method = evidence_method
                 for relation in value.subject_relations:
                     relation.evidence.verified = True
-                    relation.evidence.method = "human"
+                    relation.evidence.method = evidence_method
                 activity_id = self.publish(value, conn=conn)
                 conn.execute(
                     "UPDATE catalog_reviews SET activity_id=%s WHERE id=%s",

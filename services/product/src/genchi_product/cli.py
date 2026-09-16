@@ -37,6 +37,12 @@ def main():
         "inbound-status", help="Show forwarding counts and failures without mail contents"
     )
     sub.add_parser("collection-digest-status", help="Show daily collection digest delivery status")
+    reviews = sub.add_parser("review-batch", help="Batch-audit catalog candidates with DeepSeek")
+    reviews.add_argument("--limit", type=int, default=500, help="Maximum current candidates (1–5000)")
+    reviews.add_argument("--batch-size", type=int, default=16, help="Candidates per model call (1–30)")
+    review_mode = reviews.add_mutually_exclusive_group()
+    review_mode.add_argument("--dry-run", action="store_true", help="Call model without database writes")
+    review_mode.add_argument("--apply", action="store_true", help="Save results and publish eligible approvals")
     names = sub.add_parser("normalize-names", help="Preview/apply audited Chinese display names")
     names.add_argument("--apply", action="store_true")
     names.add_argument("--output", help="Write the complete reviewable report as JSON")
@@ -123,6 +129,11 @@ def main():
                 FROM genchi_private.collection_digests ORDER BY digest_date DESC LIMIT 14"""
             ).fetchall()
             print(json.dumps({"cursor": state, "recent": recent}, default=str))
+    elif args.command == "review-batch":
+        from .batch_review import run
+
+        print(json.dumps(run(catalog, limit=args.limit, batch_size=args.batch_size,
+                             apply=args.apply, dry_run=args.dry_run), ensure_ascii=False))
     else:
         stop = threading.Event()
         signal.signal(signal.SIGTERM, lambda *_: stop.set())
