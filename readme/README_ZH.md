@@ -1,3 +1,5 @@
+开源配置与发布前检查见 [开源说明](../docs/open-source.md)。
+
 > 本仓库已加入 Genchi 活动目录与邮件提醒产品。参见 [Genchi v2 运行说明](../docs/product-v2.md)。下文保留继承的 AllFeeds 框架参考。
 
 Genchi 现支持根据活动资料进行 AI 问答，并每日精选演出、票务截止等倒计时。免费问答为全站所有用户共用每小时一次，详见 [功能说明](../docs/home-assistant.md)。
@@ -20,7 +22,6 @@ AllFeeds 是一套面向网站、RSS、JSON API、Sitemap 和自定义数据源�
 
 你可以先在一台机器上同时运行 Controller 和 Worker。任务积压时，再启动一台 Worker，它会立即加入集群并帮助处理同一个任务池。
 
-![AllFeeds 运维总览](../assets/screenshots/dashboard-overview.png)
 
 ## AllFeeds 可以用来做什么？
 
@@ -69,7 +70,6 @@ Fetcher 是一个可以独立安装的 Python 插件，拥有明确的配置和�
 
 只有能够判断“它是否正常工作”的爬虫，才是可用的系统。只读 Dashboard 把正在运行的任务、等待队列、错误、执行摘要、计划和 Worker 容量集中展示在一个页面中。
 
-![AllFeeds 执行历史](../assets/screenshots/dashboard-history.png)
 
 ## 整套系统只有一个简单的心智模型
 
@@ -88,7 +88,7 @@ Controller 负责协调，Worker 负责执行，插件负责采集，PostgreSQL 
 ## 从一台机器开始，需要时再扩展
 
 ~~~bash
-cp .env.example .env
+python3 scripts/init-local-env.py
 docker compose up -d --build postgres control dashboard
 ~~~
 

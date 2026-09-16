@@ -98,7 +98,7 @@ python3 genchi.collector/deploy/manage.py backup
 Gitee 无法直连时，保留 Gitee 作为主仓库，在能访问 Gitee 的开发机推送后，通过 SSH 传递完整 Git bundle：
 
 ```bash
-python3 genchi.collector/deploy/sync-git-bundles.py --host ubuntu@server
+python3 genchi.collector/deploy/sync-git-bundles.py --host ubuntu@server --branch YOUR_BRANCH
 ```
 
 脚本同时打包 `genchi.news` 和 `genchi.collector` 当前部署分支，在服务器配置只读的 `deploy-bundle` 远端，抓取后逐一核对提交哈希。它不切换分支、不改工作区，也不需要把 Gitee 凭据放到服务器。后续每次推送后重复运行即可刷新备用远端。若已经建立受控的 GitHub 私有镜像，也可将服务器远端指向该镜像；不要依赖第三方公共代理，不要为拉代码关闭 TLS 校验，也不要把个人 Git 凭据写入镜像。

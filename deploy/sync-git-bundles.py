@@ -21,7 +21,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", required=True, help="SSH target, for example ubuntu@server")
     parser.add_argument("--remote-root", default="/home/ubuntu/genchi")
-    parser.add_argument("--branch", default="codex/rebuild-v2")
+    parser.add_argument("--branch", required=True, help="Branch to sync in both repositories")
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9_.@:-]+", args.host):
         raise ValueError("Invalid SSH host")

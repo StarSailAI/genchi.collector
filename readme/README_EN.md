@@ -1,3 +1,5 @@
+Open-source configuration and release checks: [release guide](../docs/open-source.md).
+
 > This repository includes the Genchi activity catalog and notification product. See [Genchi v2 operations](../docs/product-v2.md). The framework reference below describes the inherited AllFeeds runtime.
 
 Genchi now answers event questions from its catalogue and selects show and ticket-deadline countdowns daily. Free Q&A allows one question per hour shared by all users. See [feature details](../docs/home-assistant.md).
@@ -25,7 +27,6 @@ consistent Resources.
 Start with a Controller and Worker on one machine. When work piles up, connect
 another Worker and let it help immediately.
 
-![AllFeeds operations overview](../assets/screenshots/dashboard-overview.png)
 
 ## What can you build with it?
 
@@ -91,7 +92,6 @@ A crawler is only useful when people can tell whether it is working. The
 read-only operations dashboard keeps running tasks, waiting work, errors,
 execution summaries, schedules and Worker capacity in one place.
 
-![AllFeeds execution history](../assets/screenshots/dashboard-history.png)
 
 ## A simple mental model
 
@@ -111,7 +111,7 @@ the truth.
 ## Start small. Scale when you need it.
 
 ~~~bash
-cp .env.example .env
+python3 scripts/init-local-env.py
 docker compose up -d --build postgres control dashboard
 ~~~
 

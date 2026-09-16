@@ -1,5 +1,7 @@
 # genchi.collector
 
+[GitHub](https://github.com/StarSailAI/genchi.collector) · [MIT License](LICENSE)
+
 Genchi 的采集、活动目录与提醒后端。持续收集日本二次元现地活动的官网、官方 X 和票务信息，把公告、抽选、售票、结果与开演整理成可追溯的时间线。
 
 ```text
@@ -10,7 +12,7 @@ Genchi 的采集、活动目录与提醒后端。持续收集日本二次元现�
                                       genchi.news
 ```
 
-保留现有 12 个来源；新作品和艺人的采集范围仍由 `config/catalog.yaml` 手工启用。旧数据保留，活动更新使用稳定链接。
+来源配置见 `config/sources.yaml`；新作品和艺人的采集范围由 `config/catalog.yaml` 手工启用。活动更新使用稳定链接。
 
 - `control` / `worker` / `browser`：调度与私网采集。
 - `normalizer`：数据库迁移、原文索引、活动处理 Worker。
@@ -23,3 +25,5 @@ Genchi 的采集、活动目录与提醒后端。持续收集日本二次元现�
 远程机器使用共用 `.env`、生产 Compose 覆盖文件、Nginx HTTPS 入口和 Resend 邮件，参见 [单机部署与配置](docs/production.md)。
 
 [启动、架构与验证](docs/product-v2.md) · [命名与词表维护](docs/naming.md) · [服务器配置建议](docs/hosting-size.md) · [数据源说明](docs/ticket-platform-sources.md) · [Agent 开发约束](AGENTS.md)
+
+开源使用前请阅读 [配置与发布前检查](docs/open-source.md)，使用 `python3 scripts/init-local-env.py` 生成本地配置。

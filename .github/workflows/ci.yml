@@ -25,20 +25,30 @@ jobs:
       ALLFEEDS_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfeeds
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
       - run: >-
           pip install -e packages/contracts -e packages/sdk -e services/controller
-          -e services/worker -e plugins/builtin -e examples/custom-fetcher -e '.[dev]'
+          -e services/worker -e plugins/builtin -e plugins/genchi
+          -e services/normalizer -e services/product -e dashboard -e examples/custom-fetcher -e '.[dev]'
+      - run: python scripts/check-public-release.py --history
       - run: ruff check .
       - run: pytest -q
+      - run: |
+          allfeeds-plugin validate --sources config/sources.yaml
+          allfeeds-control config-validate --sources config/sources.yaml
       - run: |
           python -m build packages/contracts
           python -m build packages/sdk
           python -m build services/controller
           python -m build services/worker
           python -m build plugins/builtin
+          python -m build plugins/genchi
+          python -m build services/normalizer
+          python -m build services/product
           python -m build dashboard
           python -m build examples/custom-fetcher

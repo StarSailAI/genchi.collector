@@ -1,5 +1,27 @@
 .env*
 !.env.example
+!*.env.example
+# Deployment state, account cookies, private keys and database backups.
+.deploy/
+secrets/
+backups/
+private/
+*.env
+*.env.*
+!*.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.dump
+*.sql.gz
+*.sqlite
+*.sqlite3
+*.bundle
+*cookies*.json
+*storage-state*.json
+identity.json
+**/._*
 .venv/
 __pycache__/
 *.py[cod]

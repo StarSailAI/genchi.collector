@@ -4,7 +4,7 @@ project:
   environment: existing
   backend_stack: python-fastapi-sqlalchemy
   frontend_stack: nextjs
-  public_origin: https://genchi.news
+  public_origin: http://localhost:13000
 modules:
   core-web:
     enabled: true
