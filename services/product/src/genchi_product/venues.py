@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import urlsplit
 
 from .domain import normalize
 
@@ -31,9 +32,12 @@ def venue_key(venue: str | None, title: str = "", year: str = "") -> str:
     return key
 
 
-def nonphysical_venue(venue: str | None) -> bool:
+def nonphysical_venue(venue: str | None, url: str | None = None) -> bool:
     key = normalize(venue or "")
-    return key in {"spwn", "pialivestream", "streaming", "配信", "オンライン", "online", "zaiko"}
+    if key in {"spwn", "pialivestream", "streaming", "配信", "オンライン", "online", "zaiko"}:
+        return True
+    parsed = urlsplit(url or "")
+    return parsed.hostname == "eplus.jp" and parsed.path.rstrip("/") == "/sf/streamingplus"
 
 
 def bundle_venue(venue: str | None) -> bool:

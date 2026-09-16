@@ -81,6 +81,38 @@ def test_jpop_pilot_cannot_publish_even_when_artist_alias_matches():
     assert items[0].publication == "REVIEW"
 
 
+def test_jpop_pilot_excludes_streaming_plus_but_keeps_physical_performances():
+    resource = {
+        "source_id": "eplus-jpop-tickets", "external_id": "eplus:detail:4512340002",
+        "content_hash": "sample-hash", "url": "https://eplus.jp/sf/detail/4512340002",
+        "title": "架空歌手 LIVE", "attributes": {
+            "source_type": "eplus_ticket", "eplus_ticket": {
+                "discoveryScope": "jpop", "events": [
+                    {"id": "physical", "name": "架空歌手 LIVE", "startsAt": "2026-11-20T19:00:00+09:00",
+                     "venue": {"name": "テストホール", "prefecture": "東京都"}},
+                    {"id": "stream", "name": "架空歌手 LIVE 配信", "startsAt": "2026-11-20T19:00:00+09:00",
+                     "venue": {"name": None, "url": "https://eplus.jp/sf/streamingplus"}},
+                ],
+            },
+        },
+    }
+    items = structured(resource, [])
+    assert [item.occurrence_key for item in items] == ["eplus:event:physical"]
+    assert items[0].attendance == "OFFLINE"
+    resource["attributes"]["eplus_ticket"]["events"] = [
+        resource["attributes"]["eplus_ticket"]["events"][1]
+    ]
+    assert structured(resource, []) == []
+
+
+def test_eplus_streaming_plus_venue_link_identifies_virtual_event():
+    from genchi_product.venues import nonphysical_venue
+
+    assert nonphysical_venue(None, "https://eplus.jp/sf/streamingplus")
+    assert not nonphysical_venue(None, "https://eplus.jp/sf/venue/2200600")
+    assert not nonphysical_venue(None, "https://example.com/sf/streamingplus")
+
+
 def test_browser_retries_transient_page_failure_but_not_bad_auth(monkeypatch):
     responses = iter([
         SimpleNamespace(status_code=502),

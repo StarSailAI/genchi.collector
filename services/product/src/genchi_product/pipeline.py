@@ -122,6 +122,10 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
             )
     results = []
     for event in events:
+        venue = event.get("venue") or {}
+        virtual = nonphysical_venue(venue.get("name"), venue.get("url"))
+        if music_pilot and virtual:
+            continue
         title = event.get("name") or resource.get("title")
         if not title or not event.get("id"):
             continue
@@ -212,7 +216,6 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                     url=resource.get("url"),
                 )
             )
-        venue = event.get("venue") or {}
         role = role_for(title, "OTHER", event.get("startLabel") or
                         ("開演" if platform == "pia" and "T" in str(event.get("startsAt")) else ""))
         entry_only_performance = role == "ADMISSION" and classify(title) in {"LIVE", "FESTIVAL", "MEETUP"}
@@ -232,7 +235,7 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                 venue=venue.get("name"),
                 city=venue.get("prefecture"),
                 publication="PUBLISHED" if slugs and not music_pilot and not entry_only_performance and not bundle_venue(venue.get("name")) else "REVIEW",
-                attendance="ONLINE" if nonphysical_venue(venue.get("name")) else "OFFLINE",
+                attendance="ONLINE" if virtual else "OFFLINE",
                 evidence=ev,
                 milestones=nodes,
             )
@@ -692,15 +695,27 @@ def process_one(catalog: Catalog) -> bool:
         items = structured(resource, subjects)
         if not items:
             source_type = (resource.get("attributes") or {}).get("source_type")
+            ticket_payload = ((resource.get("attributes") or {}).get("eplus_ticket") or {})
+            virtual_music_page = (
+                ticket_payload.get("discoveryScope") == "jpop"
+                and bool(ticket_payload.get("events"))
+                and all(
+                    nonphysical_venue(
+                        (event.get("venue") or {}).get("name"),
+                        (event.get("venue") or {}).get("url"),
+                    )
+                    for event in ticket_payload["events"]
+                )
+            )
             # Booths group receptions; multi-day pass acts describe a product,
             # not another performance. Index them without inventing an event or
             # filling the failure queue. Unmatched receptions still need review.
-            container = source_type == "asobi_ticket" and (
+            container = virtual_music_page or (source_type == "asobi_ticket" and (
                 resource.get("kind") == "ticket_booth"
                 or (resource.get("kind") == "ticket_act" and any(
                     word in str(resource.get("title") or "") for word in ("通し券", "通しチケット")
                 ))
-            )
+            ))
             if source_type in {"asobi_ticket", "eplus_ticket", "pia_ticket", "lawson_ticket"} and not container:
                 raise ValueError(
                     "原生票务记录没有明确可匹配的真实场次，请人工核对；未交给模型猜测适用场次"
@@ -741,9 +756,11 @@ def process_one(catalog: Catalog) -> bool:
                 reason=reason || E'\n同版本提取规则已更新，由当前候选替代；保留此记录供追溯。',updated_at=NOW()
                 WHERE resource_id=%s AND status='PENDING' AND reviewed_by IS NULL
                 AND payload->'activity'->'evidence'->>'version_hash'=%s
-                AND payload->'activity'->'evidence'->>'method' LIKE 'llm:%%'
+                AND (payload->'activity'->'evidence'->>'method' LIKE 'llm:%%'
+                     OR (%s AND payload->'activity'->'evidence'->>'method'='structured'))
                 AND NOT (id=ANY(%s::text[]))""",
-                (resource["id"], resource["content_hash"], active_reviews),
+                (resource["id"], resource["content_hash"],
+                 resource["source_id"] == "eplus-jpop-tickets", active_reviews),
             )
             conn.execute(
                 """UPDATE catalog_reviews SET status='REJECTED',reviewed_by='system:normalizer',

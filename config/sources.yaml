@@ -426,7 +426,7 @@ sources:
   # Music discovery is a separate, bounded pilot. These records remain in
   # review until their artist identity and physical attendance are verified.
   - id: eplus-jpop-tickets
-    enabled: false
+    enabled: true
     fetcher: genchi.eplus_ticket
     sink: postgres
     schedule: {type: cron, cron: "40 14 * * *", timezone: Asia/Tokyo}
