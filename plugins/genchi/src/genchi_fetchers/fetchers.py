@@ -1564,6 +1564,7 @@ def _pia_title(html: str) -> str:
 class PiaTicketConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    discovery_scope: str = "anime"
     discovery_urls: tuple[str, ...] = PIA_DISCOVERY_URLS
     search_keywords: tuple[str, ...] = TICKET_PROJECT_QUERIES
     keywords_per_run: int = Field(default=4, ge=0, le=30)
@@ -1579,6 +1580,17 @@ class PiaTicketConfig(BaseModel):
     project_keywords: dict[str, tuple[str, ...]] = Field(
         default_factory=lambda: dict(EPLUS_PROJECT_KEYWORDS)
     )
+
+    @model_validator(mode="after")
+    def validate_music_scope(self):
+        if self.discovery_scope not in {"anime", "jpop"}:
+            raise ValueError("discovery_scope must be anime or jpop")
+        if self.discovery_scope == "jpop" and (
+            self.discovery_urls != ("https://t.pia.jp/music/hgk/",)
+            or self.search_keywords
+        ):
+            raise ValueError("jpop discovery requires the Pia 邦楽 category without keyword searches")
+        return self
 
     @field_validator("discovery_urls")
     @classmethod
@@ -1665,6 +1677,7 @@ class PiaTicketFetcher(FetcherPlugin):
         sale_pages = 0
         missing_details: list[str] = []
         missing_sales: list[str] = []
+        incomplete_details: list[str] = []
 
         def add_candidate(
             page_id: str,
@@ -1790,8 +1803,12 @@ class PiaTicketFetcher(FetcherPlugin):
             sales = _pia_sale_links(
                 detail_html,
                 detail_url,
-                limit=config.max_sales_per_detail,
+                limit=10_000 if config.discovery_scope == "jpop" else config.max_sales_per_detail,
             )
+            if config.discovery_scope == "jpop" and len(sales) > config.max_sales_per_detail:
+                incomplete_details.append(detail_url)
+                continue
+            incomplete_sale = False
             for sale_id, sale_url, sale_label, _sale_status in sales:
                 try:
                     sale_html = self._html(
@@ -1804,11 +1821,13 @@ class PiaTicketFetcher(FetcherPlugin):
                     if exc.status_code not in {404, 410}:
                         raise
                     missing_sales.append(sale_url)
+                    incomplete_sale = True
                     continue
                 except RateLimitError:
                     raise
                 except TransientError as exc:
                     errors.append(f"{sale_url}: {exc}")
+                    incomplete_sale = True
                     continue
                 sale_pages += 1
                 sale_soup = BeautifulSoup(sale_html, "lxml")
@@ -1831,6 +1850,9 @@ class PiaTicketFetcher(FetcherPlugin):
                         item["id"] != window["id"] for item in existing["ticketWindows"]
                     ):
                         existing["ticketWindows"].append(window)
+            if config.discovery_scope == "jpop" and incomplete_sale:
+                incomplete_details.append(detail_url)
+                continue
             events = list(merged_events.values())
             if not events:
                 continue
@@ -1858,6 +1880,7 @@ class PiaTicketFetcher(FetcherPlugin):
                         "ticket_page": {
                             "platform": "pia",
                             "pageId": page_id,
+                            "discoveryScope": config.discovery_scope,
                             "project": project,
                             "matchedKeywords": matched_keywords,
                             "nativeCategories": [],
@@ -1883,7 +1906,7 @@ class PiaTicketFetcher(FetcherPlugin):
             }
         )
         return FetchReport(
-            status="partial" if errors else "succeeded",
+            status="partial" if errors or incomplete_details else "succeeded",
             details={
                 "discovery_pages": discovery_pages,
                 "candidates": len(candidates),
@@ -1895,6 +1918,7 @@ class PiaTicketFetcher(FetcherPlugin):
                 "tracked": min(len(tracked_set), config.max_tracked_details),
                 "missing_details": missing_details,
                 "missing_sales": missing_sales,
+                "incomplete_details": incomplete_details,
                 "page_rate_limit_retries": browser.rate_limit_retries if browser else 0,
                 "errors": errors[:10],
             },

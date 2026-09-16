@@ -12,6 +12,7 @@ from genchi_fetchers import (
 )
 from genchi_fetchers.fetchers import (
     EplusTicketConfig,
+    PiaTicketConfig,
     _eplus_next_page,
     _eplus_ticket_phase,
     _pia_ticket_phase,
@@ -473,8 +474,11 @@ def test_pia_ticket_phase_does_not_use_resale_navigation_when_label_is_specific(
     assert _pia_ticket_phase("", "公式リセール 受付中") == "RESALE"
 
 
-def test_pia_ticket_discovers_sales_and_exact_performances(monkeypatch):
-    discovery_url = "https://t.pia.jp/pia/tag/tag.do?tagCd=0000037"
+@pytest.mark.parametrize("scope,discovery_url,trusted", [
+    ("anime", "https://t.pia.jp/pia/tag/tag.do?tagCd=0000037", True),
+    ("jpop", "https://t.pia.jp/music/hgk/", False),
+])
+def test_pia_ticket_discovers_sales_and_exact_performances(monkeypatch, scope, discovery_url, trusted):
     detail_url = "https://t.pia.jp/pia/event/event.do?eventBundleCd=b2600001"
     sale_url = "https://t.pia.jp/pia/ticketInformation.do?eventCd=2600001&rlsCd=001"
     pages = {
@@ -529,8 +533,10 @@ def test_pia_ticket_discovers_sales_and_exact_performances(monkeypatch):
             source_id="pia-anime-tickets",
             operation="fetch",
             config={
+                "discovery_scope": scope,
                 "discovery_urls": [discovery_url],
-                "search_keywords": ["アイドルマスター"],
+                "search_keywords": ["アイドルマスター"] if scope == "anime" else [],
+                "project_keywords": {} if scope == "jpop" else {"idolmaster": ["THE IDOLM@STER"]},
                 "keywords_per_run": 0,
                 "refresh_details_per_run": 0,
                 "max_detail_pages": 5,
@@ -545,13 +551,14 @@ def test_pia_ticket_discovers_sales_and_exact_performances(monkeypatch):
     assert report.details["details"] == 1
     assert report.details["sale_pages"] == 1
     assert records[0].external_id == "pia:detail:b2600001"
-    assert records[0].tags[-1] == "project:idolmaster"
+    assert records[0].tags[-1] == ("project:idolmaster" if scope == "anime" else "project:unknown")
     payload = records[0].attributes["ticket_page"]
+    assert payload["discoveryScope"] == scope
     assert payload["discovery"] == [
         {
             "kind": "platform_category",
             "sourceUrl": discovery_url,
-            "trustedCategory": True,
+            "trustedCategory": trusted,
         }
     ]
     event = payload["events"][0]
@@ -562,6 +569,49 @@ def test_pia_ticket_discovers_sales_and_exact_performances(monkeypatch):
     assert event["ticketWindows"][0]["phase"] == "GENERAL"
     assert event["ticketWindows"][0]["opensAt"] == "2026-07-23T12:00:00+09:00"
     assert event["ticketWindows"][0]["closesAt"] == "2026-08-30T23:59:00+09:00"
+
+
+def test_pia_jpop_skips_oversized_ticket_page_instead_of_dropping_rounds(monkeypatch):
+    root = "https://t.pia.jp/music/hgk/"
+    detail = "https://t.pia.jp/pia/event/event.do?eventBundleCd=b2600002"
+    cards = "".join(
+        f'<div class="ticketSalesCard-2024"><a href="/pia/ticketInformation.do?eventCd=2600002&rlsCd=00{i}">'
+        f'<p class="ticketSalesCard-2024__title">第{i}次先行</p></a></div>'
+        for i in (1, 2)
+    )
+    pages = {root: f'<a href="{detail}">公演</a>', detail: f'<meta property="og:title" content="架空の公演">{cards}'}
+
+    class Response:
+        def __init__(self, url):
+            self.url = url
+            self.content = pages[url].encode()
+
+    monkeypatch.setattr("genchi_fetchers.fetchers.SafeHttpClient.get",
+                        lambda _self, url, **_kwargs: Response(url))
+    records = []
+    report = PiaTicketFetcher().fetch(
+        context(records),
+        FetchRequest(task_id=6, source_id="pia-jpop-tickets", operation="fetch",
+                     config={"discovery_scope": "jpop", "discovery_urls": [root],
+                             "search_keywords": [], "keywords_per_run": 0,
+                             "refresh_details_per_run": 0, "max_sales_per_detail": 1,
+                             "browser_fallback": False},
+                     tags=("scope:jpop-offline",)),
+    )
+    assert report.status == "partial"
+    assert report.details["incomplete_details"] == [detail]
+    assert records == []
+
+
+def test_pia_jpop_scope_accepts_only_official_music_category():
+    assert PiaTicketConfig(discovery_scope="jpop", discovery_urls=["https://t.pia.jp/music/hgk/"],
+                           search_keywords=[]).discovery_scope == "jpop"
+    with pytest.raises(ValueError):
+        PiaTicketConfig(discovery_scope="jpop", discovery_urls=["https://t.pia.jp/music/"],
+                        search_keywords=[])
+    with pytest.raises(ValueError):
+        PiaTicketConfig(discovery_scope="jpop", discovery_urls=["https://t.pia.jp/music/hgk/"],
+                        search_keywords=["人気"])
 
 
 def test_lawson_ticket_uses_browser_and_deduplicates_same_day(monkeypatch):

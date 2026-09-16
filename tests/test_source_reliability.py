@@ -113,6 +113,32 @@ def test_eplus_streaming_plus_venue_link_identifies_virtual_event():
     assert not nonphysical_venue(None, "https://example.com/sf/streamingplus")
 
 
+def test_pia_jpop_keeps_physical_candidate_in_review_and_excludes_stream():
+    resource = {
+        "source_id": "pia-jpop-tickets", "external_id": "pia:detail:b2600002",
+        "content_hash": "sample-hash", "url": "https://t.pia.jp/pia/event/event.do?eventBundleCd=b2600002",
+        "title": "架空歌手 LIVE", "attributes": {
+            "source_type": "pia_ticket", "ticket_page": {
+                "platform": "pia", "discoveryScope": "jpop", "events": [
+                    {"id": "physical", "name": "架空歌手 LIVE", "startsAt": "2026-11-20T19:00:00+09:00",
+                     "venue": {"name": "テストホール", "prefecture": "東京都"}},
+                    {"id": "stream", "name": "架空歌手 LIVE 配信", "startsAt": "2026-11-20T19:00:00+09:00",
+                     "venue": {"name": "ＰＩＡ ＬＩＶＥ ＳＴＲＥＡＭ"}},
+                ],
+            },
+        },
+    }
+    subjects = [{"slug": "fictional-artist", "name": "架空歌手", "name_zh": None, "aliases": []}]
+    items = structured(resource, subjects)
+    assert len(items) == 1
+    assert items[0].publication == "REVIEW"
+    assert items[0].attendance == "OFFLINE"
+    resource["attributes"]["ticket_page"]["events"] = [
+        resource["attributes"]["ticket_page"]["events"][1]
+    ]
+    assert structured(resource, subjects) == []
+
+
 def test_browser_retries_transient_page_failure_but_not_bad_auth(monkeypatch):
     responses = iter([
         SimpleNamespace(status_code=502),

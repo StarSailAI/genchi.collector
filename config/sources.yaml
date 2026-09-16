@@ -486,6 +486,33 @@ sources:
       resources: {browser_api: 1, domain:t.pia.jp: 1}
     tags: [country:JP, timezone:Asia/Tokyo, source:ticket-aggregator]
 
+  # Pia 邦楽 is a separate music pilot. Oversized ticket-sale pages are skipped
+  # rather than silently truncating rounds; every extracted performance is reviewed.
+  - id: pia-jpop-tickets
+    enabled: false
+    fetcher: genchi.pia_ticket
+    sink: postgres
+    schedule: {type: cron, cron: "20 15 * * *", timezone: Asia/Tokyo}
+    config:
+      discovery_scope: jpop
+      discovery_urls: [https://t.pia.jp/music/hgk/]
+      search_keywords: []
+      project_keywords: {}
+      keywords_per_run: 0
+      refresh_details_per_run: 1
+      max_detail_pages: 3
+      max_sales_per_detail: 12
+      max_tracked_details: 300
+      rate_limit_seconds: 4
+      browser_fallback: true
+    timeout_seconds: 3600
+    retry: {max_attempts: 3, backoff: exponential, base_seconds: 600, max_seconds: 7200}
+    routing:
+      queue: browser
+      capabilities: [browser_api]
+      resources: {browser_api: 1, domain:t.pia.jp: 1}
+    tags: [scope:jpop-offline, country:JP, timezone:Asia/Tokyo, source:ticket-aggregator]
+
   - id: lawson-anime-tickets
     enabled: true
     fetcher: genchi.lawson_ticket

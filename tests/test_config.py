@@ -10,6 +10,6 @@ def test_example_config_is_valid() -> None:
     loaded = load_sources(path)
     existing = [s for s in loaded.value.sources if s.fetcher != "genchi.aggregator"]
     assert len([s for s in existing if s.enabled]) == 15
-    assert {s.id for s in existing if not s.enabled} == set()
+    assert {s.id for s in existing if not s.enabled} == {"pia-jpop-tickets"}
     assert {"collabo-cafe-news", "anime-hack-events"} <= {s.id for s in loaded.value.sources}
     assert loaded.version_hash

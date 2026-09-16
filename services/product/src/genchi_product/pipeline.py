@@ -45,10 +45,16 @@ def precise(value, end=None) -> Moment:
     return Moment(precision="TIME", starts_at=value, ends_at=None if date_only_end else end)
 
 
+def music_pilot_resource(resource: dict) -> bool:
+    attributes = resource.get("attributes") or {}
+    payload = attributes.get("ticket_page") or attributes.get("eplus_ticket") or {}
+    return payload.get("discoveryScope") == "jpop"
+
+
 def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
     attributes = resource.get("attributes") or {}
     payload = attributes.get("ticket_page") or attributes.get("eplus_ticket") or {}
-    music_pilot = payload.get("discoveryScope") == "jpop"
+    music_pilot = music_pilot_resource(resource)
     events = payload.get("events") or []
     platform = payload.get("platform") or attributes.get("source_type", "").removesuffix("_ticket")
     if platform == "lawson" and payload.get("scheduleCompleteness") != "native_detail":
@@ -695,7 +701,11 @@ def process_one(catalog: Catalog) -> bool:
         items = structured(resource, subjects)
         if not items:
             source_type = (resource.get("attributes") or {}).get("source_type")
-            ticket_payload = ((resource.get("attributes") or {}).get("eplus_ticket") or {})
+            ticket_payload = (
+                (resource.get("attributes") or {}).get("ticket_page")
+                or (resource.get("attributes") or {}).get("eplus_ticket")
+                or {}
+            )
             virtual_music_page = (
                 ticket_payload.get("discoveryScope") == "jpop"
                 and bool(ticket_payload.get("events"))
@@ -760,7 +770,7 @@ def process_one(catalog: Catalog) -> bool:
                      OR (%s AND payload->'activity'->'evidence'->>'method'='structured'))
                 AND NOT (id=ANY(%s::text[]))""",
                 (resource["id"], resource["content_hash"],
-                 resource["source_id"] == "eplus-jpop-tickets", active_reviews),
+                 music_pilot_resource(resource), active_reviews),
             )
             conn.execute(
                 """UPDATE catalog_reviews SET status='REJECTED',reviewed_by='system:normalizer',

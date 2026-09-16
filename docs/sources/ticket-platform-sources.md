@@ -8,9 +8,10 @@ Genchi 将 e+、チケットぴあ和ローチケ作为日本综合票务的第�
 | --- | --- | --- | --- |
 | `eplus-anime-tickets` | `genchi.eplus_ticket` | 动漫地区页、作品关键词页 | HTML/JSON-LD，必要时使用 Camoufox |
 | `pia-anime-tickets` | `genchi.pia_ticket` | 动漫首页、动漫/声优/游戏标签、轮换关键词 | 活动页发现销售页，销售页提取精确场次和受付时间 |
+| `pia-jpop-tickets` | `genchi.pia_ticket` | ぴあ官方「邦楽」分类页 | 小批量逐页核对销售页；缺页或超过上限的详情整页跳过并报告 |
 | `lawson-anime-tickets` | `genchi.lawson_ticket` | 动漫、声优、游戏和重点作品轮换关键词 | Camoufox 渲染搜索结果卡 |
 
-三个 Fetcher 都输出平台无关的 `ticket_page`：
+这些票务 Fetcher 输出统一的 `ticket_page`（e+ 原生载荷使用 `eplus_ticket`）：
 
 - `events` 保存公演、开场、开演和会场；
 - `ticketWindows` 保存先行、抽选、一般发售、结果发表和状态；
@@ -40,4 +41,6 @@ docker-compose exec control allfeeds-control task-submit --source pia-anime-tick
 docker-compose exec control allfeeds-control task-submit --source lawson-anime-tickets
 ```
 
-三个 Source 默认每六小时运行。Pia 对普通 HTTP 失败使用 Camoufox 回退；Lawson 始终使用 Camoufox，并通过 `browser_api` 和域名资源锁限制并发。
+来源按东京时间每日错峰运行。Pia 对普通 HTTP 失败使用 Camoufox 回退；Lawson 始终使用 Camoufox，并通过 `browser_api` 和域名资源锁限制并发。
+
+`pia-jpop-tickets` 独立于动漫关键词和分类。官方[邦楽入口](https://t.pia.jp/music/hgk/)只作为发现途径，不能证明每个详情都是符合要求的实体 J-pop 演出。每轮最多选择 3 个详情，每个详情最多允许 12 个销售入口；超过上限、销售页缺失或临时失败时，整条详情不会作为完整数据发出，任务报告列在 `incomplete_details`。艺人归属、实体场馆、场次与受付仍进入人工审核，不自动公开或发送提醒。上线前先手动执行限量任务、核对 `task_runs`、`resources`、审核候选与公开证据，再开启日调度。
