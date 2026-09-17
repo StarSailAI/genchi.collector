@@ -5,10 +5,16 @@ from unittest.mock import Mock
 
 import pytest
 from genchi_product import batch_review
+from genchi_product.cli import REVIEW_BATCH_LIMIT, review_poll_seconds
 from genchi_product.domain import ActivityInput, EvidenceInput, MilestoneInput, Moment
 from genchi_product.pipeline import extract_text, structured
 
 QUOTE = "2026年9月25日 18:00 開演。学園アイドルマスター 東京公演。"
+
+
+def test_reviewer_drains_full_batches_then_returns_to_idle_cadence():
+    assert [review_poll_seconds(selected) for selected in
+            (REVIEW_BATCH_LIMIT, REVIEW_BATCH_LIMIT, REVIEW_BATCH_LIMIT - 1, 0)] == [30, 30, 300, 300]
 
 
 def candidate_row(key="review-1"):

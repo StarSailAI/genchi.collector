@@ -17,6 +17,15 @@ from .notifications import deliver_one, plan
 from .pipeline import index_raw, process_one
 from .store import Catalog
 
+REVIEW_BATCH_LIMIT = 64
+REVIEW_IDLE_SECONDS = 300
+REVIEW_CATCHUP_SECONDS = 30
+
+
+def review_poll_seconds(selected: int) -> int:
+    """Drain a full review batch promptly; keep the quiet cadence when caught up."""
+    return REVIEW_CATCHUP_SECONDS if selected >= REVIEW_BATCH_LIMIT else REVIEW_IDLE_SECONDS
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -159,6 +168,7 @@ def main():
         last_plan = 0
         last_inbound_scan = 0
         last_review = 0
+        review_wait = REVIEW_IDLE_SECONDS
         inbound_client = Resend() if os.getenv("RESEND_API_KEY") else None
         while not stop.is_set():
             try:
@@ -166,14 +176,16 @@ def main():
                 if args.mode == "catalog":
                     busy = process_one(catalog)
                 elif args.mode == "reviews":
-                    if time.monotonic() - last_review >= 300:
+                    if time.monotonic() - last_review >= review_wait:
                         last_review = time.monotonic()
+                        review_wait = REVIEW_IDLE_SECONDS
                         from .batch_review import run
 
-                        report = run(catalog, limit=32, batch_size=16, apply=True)
+                        report = run(catalog, limit=REVIEW_BATCH_LIMIT, batch_size=16, apply=True)
                         logging.info("catalog batch review: %s",
                                      {key: value for key, value in report.items()
                                       if key != "examples"})
+                        review_wait = review_poll_seconds(report["selected"])
                         last_review = time.monotonic()
                     busy = False
                 elif args.mode == "notifications":
