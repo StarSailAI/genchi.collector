@@ -20,7 +20,7 @@ from genchi_product.assistant import (
     grounded_context,
     retrieve,
 )
-from genchi_product.home import countdown, featured, select_cards
+from genchi_product.home import countdown, featured, select_cards, select_music_cards
 from test_product import activity
 from test_product import catalog as product_catalog
 
@@ -60,6 +60,19 @@ def test_selection_is_diverse_and_deduplicates_activity():
     assert len(selected) == len({r["activity_id"] for r in selected}) == 6
     assert {r["subject_slug"] for r in selected} == {"a", "b"}
     assert selected == select_cards(list(reversed(rows)))
+
+
+def test_music_selection_balances_urgency_and_popularity():
+    rows = [
+        dict(id="far", activity_id="far", follow_count=100, source_count=5, days_remaining=37),
+        dict(id="soon", activity_id="soon", follow_count=1, source_count=1, days_remaining=3),
+        dict(id="popular", activity_id="popular", follow_count=8, source_count=4, days_remaining=12),
+        dict(id="popular-duplicate", activity_id="popular", follow_count=8, source_count=4, days_remaining=12),
+        dict(id="next", activity_id="next", follow_count=0, source_count=2, days_remaining=18),
+    ]
+    selected = select_music_cards(rows)
+    assert "far" not in {row["id"] for row in selected}
+    assert [row["activity_id"] for row in selected] == ["popular", "soon", "next"]
 
 
 def test_global_limit_commits_across_concurrent_requests_and_process_clients(catalog, model):

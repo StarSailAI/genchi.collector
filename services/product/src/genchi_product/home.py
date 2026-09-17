@@ -49,6 +49,9 @@ def candidates(conn, now):
           a.title,a.title_zh,a.kind AS activity_kind,a.updated_at,
           (SELECT s.subject_slug FROM catalog_activity_subjects s
            WHERE s.activity_id=a.id ORDER BY s.verified DESC,s.subject_slug LIMIT 1) AS subject_slug,
+          (SELECT s.subject_type FROM catalog_activity_subjects l
+           JOIN catalog_subjects s ON s.slug=l.subject_slug
+           WHERE l.activity_id=a.id ORDER BY l.verified DESC,s.slug LIMIT 1) AS subject_type,
           (SELECT count(*) FROM genchi_private.follows f
            WHERE f.target_type='ACTIVITY' AND f.target_id=a.id) AS follow_count,
           (SELECT count(DISTINCT e.url) FROM catalog_evidence e
@@ -65,6 +68,33 @@ def candidates(conn, now):
               m.starts_at,m.starts_on::timestamp AT TIME ZONE 'Asia/Tokyo'),m.id LIMIT 600
     """, (now,)).fetchall()
     return [item for row in rows if (item := countdown(row, now))]
+
+
+def select_music_cards(items):
+    """Choose timely, well-supported Japanese music activities for the homepage."""
+    # A 30-day window keeps the right rail actionable; popularity breaks ties within it.
+    candidates = [row for row in items if row["days_remaining"] <= 30]
+    ordered = sorted(
+        candidates,
+        key=lambda row: (
+            -(
+                min(row["follow_count"], 20) * 4
+                + min(row["source_count"], 5) * 3
+                + max(0, 30 - row["days_remaining"])
+            ),
+            row["days_remaining"],
+            row["id"],
+        ),
+    )
+    selected, activities = [], set()
+    for row in ordered:
+        if row["activity_id"] in activities:
+            continue
+        selected.append(row)
+        activities.add(row["activity_id"])
+        if len(selected) == 3:
+            break
+    return selected
 
 
 def select_cards(items):
@@ -116,4 +146,25 @@ def featured(catalog):
             item["milestone_title_localized"] = display_name(
                 row["milestone_title"], row["milestone_title_zh"], request_locale.get())
             items.append(item)
-        return {"items": items, "selected_at": saved["updated_at"], "as_of": now}
+        music_items = []
+        for row in select_music_cards(
+            item
+            for item in current
+            if item.get("activity_kind") in {"LIVE", "FESTIVAL"}
+            and item.get("subject_type") != "FRANCHISE"
+        ):
+            item = {
+                k: v
+                for k, v in row.items()
+                if k not in {"follow_count", "source_count", "subject_type"}
+            }
+            item["milestone_title_localized"] = display_name(
+                row["milestone_title"], row["milestone_title_zh"], request_locale.get()
+            )
+            music_items.append(item)
+        return {
+            "items": items,
+            "music_items": music_items,
+            "selected_at": saved["updated_at"],
+            "as_of": now,
+        }
