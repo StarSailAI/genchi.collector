@@ -127,14 +127,40 @@ def test_approved_jpop_ticket_is_published_by_batch_worker(monkeypatch):
         "jpop-pia", "ai:deepseek-batch-v2", True)
 
 
-def test_pia_jpop_artist_heading_cannot_auto_publish():
+def test_pia_jpop_artist_heading_needs_native_performance_details():
     row = candidate_row()
     row["attributes"] = {"source_type": "pia_ticket", "ticket_page": {
         "platform": "pia", "discoveryScope": "jpop", "events": []}}
     row["payload"]["activity"]["subject_slugs"] = []
     row["payload"]["activity"]["evidence"]["method"] = "structured"
     allowed, reason = batch_review.hard_gate(row, [])
-    assert not allowed and "正式演出名" in reason
+    assert not allowed and "艺人或演出名" in reason
+
+
+def test_pia_jpop_artist_heading_can_publish_source_verified_performance():
+    resource = {
+        "source_id": "pia-jpop-tickets", "external_id": "pia:detail:artist-tour",
+        "content_hash": "hash-artist", "title": "架空歌手",
+        "url": "https://t.pia.jp/pia/event/event.do?eventBundleCd=artist-tour",
+        "kind": "ticket_page", "tags": [],
+        "attributes": {"source_type": "pia_ticket", "ticket_page": {
+            "platform": "pia", "discoveryScope": "jpop",
+            "performerName": "架空歌手", "formalEventTitle": None,
+            "events": [{"id": "artist-tour-1", "name": "架空歌手",
+                        "startsAt": "2026-11-20T19:00:00+09:00",
+                        "venue": {"name": "テストホール", "prefecture": "東京都"},
+                        "ticketWindows": []}],
+        }},
+    }
+    candidate = structured(resource, [])[0]
+    row = {"payload": {"activity": candidate.model_dump(mode="json"), "matches": []},
+           "current_hash": resource["content_hash"],
+           "source_id": resource["source_id"], "external_id": resource["external_id"],
+           "source_title": resource["title"], "source_url": resource["url"],
+           "source_kind": resource["kind"], "tags": [], "attributes": resource["attributes"]}
+    assert batch_review.hard_gate(row, [])[0] is True
+    row["payload"]["activity"]["venue"] = "別の会場"
+    assert batch_review.hard_gate(row, [])[0] is False
 
 
 def test_editorial_and_community_need_source_backed_authority():

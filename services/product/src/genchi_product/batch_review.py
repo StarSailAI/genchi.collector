@@ -90,9 +90,13 @@ def hard_gate(row: dict, subjects: list[dict] | None = None) -> tuple[bool, str]
             formal = page.get("formalEventTitle")
             quote = page.get("titleEvidence") or ""
             performer = page.get("performerName")
-            if (not formal or formal == performer or activity.title != formal or
-                    row.get("source_title") != formal or formal not in quote):
-                return False, "票务详情只有艺人名或缺少可核验的正式演出名"
+            if formal and formal != performer:
+                if (activity.title != formal or row.get("source_title") != formal or
+                        formal not in quote):
+                    return False, "票务详情缺少可核验的正式演出名"
+            elif (not performer or page.get("discoveryScope") != "jpop" or
+                  activity.title != performer or row.get("source_title") != performer):
+                return False, "票务详情缺少可核验的艺人或演出名"
         if any(node.status == "REVIEW" for node in activity.milestones):
             return False, "原生售票状态仍需核对"
         if source_type == "lawson_ticket" and (
