@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 from genchi_product import batch_review
 from genchi_product.domain import ActivityInput, EvidenceInput, MilestoneInput, Moment
-from genchi_product.pipeline import structured
+from genchi_product.pipeline import extract_text, structured
 
 QUOTE = "2026年9月25日 18:00 開演。学園アイドルマスター 東京公演。"
 
@@ -145,6 +145,55 @@ def test_editorial_and_community_need_source_backed_authority():
     assert batch_review.hard_gate(row)[0] is False
     row["payload"]["matches"] = [{"strength": "exact_event_and_dates"}]
     assert batch_review.hard_gate(row)[0] is True
+
+
+def test_music_news_scope_allows_unlisted_artist_only_with_event_evidence():
+    row = candidate_row()
+    row["source_url"] = "https://spice.eplus.jp/articles/123"
+    row["tags"] = ["scope:anime-music-offline", "country:JP"]
+    row["attributes"] = {"source_type": "aggregator", "source_role": "editorial",
+                         "outbound_links": [{"url": "https://eplus.jp/sf/detail/123"}]}
+    row["payload"]["activity"].update(
+        title="架空歌手 東京公演", subject_slugs=[], venue="テストホール",
+        url="https://eplus.jp/sf/detail/123")
+    assert batch_review._model_item(row)["source"]["discovery_scope"] == "music"
+    assert batch_review.hard_gate(row)[0] is True
+    assert not batch_review._safe_out_of_scope(row, [])
+    row["attributes"]["outbound_links"] = []
+    assert batch_review.hard_gate(row)[0] is False
+    row["attributes"]["outbound_links"] = [{"url": "https://eplus.jp/sf/detail/123"}]
+    row["payload"]["activity"]["venue"] = None
+    assert batch_review.hard_gate(row)[0] is False
+
+
+def test_music_scope_requires_configured_japanese_source_role():
+    row = candidate_row()
+    row["payload"]["activity"]["subject_slugs"] = []
+    row["tags"] = ["scope:music-offline", "country:JP"]
+    row["attributes"] = {"source_type": "aggregator", "source_role": "editorial"}
+    assert batch_review._model_item(row)["source"]["discovery_scope"] == "music"
+    row["tags"] = ["scope:music-offline"]
+    assert batch_review._model_item(row)["source"]["discovery_scope"] == "catalog"
+    row["tags"] = ["scope:music-offline", "country:JP"]
+    row["attributes"]["source_role"] = "unknown"
+    assert batch_review._model_item(row)["source"]["discovery_scope"] == "catalog"
+
+
+def test_music_news_extraction_prompt_does_not_require_anime_subject(monkeypatch):
+    for name in ("LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL"):
+        monkeypatch.setenv(name, "https://api.deepseek.com" if name == "LLM_BASE_URL" else "test")
+    response = Mock(status_code=200)
+    response.json.return_value = {"choices": [{"finish_reason": "stop", "message": {
+        "content": '{"activities":[]}'}}]}
+    post = Mock(return_value=response)
+    monkeypatch.setattr(batch_review.requests, "post", post)
+    resource = {"id": 1, "source_id": "livefans-news", "external_id": "1",
+                "content_hash": "hash-1", "content": "架空歌手 東京公演",
+                "tags": ["scope:music-offline", "country:JP"],
+                "attributes": {"source_role": "editorial"}}
+    assert extract_text(resource, []) == []
+    prompt = post.call_args.kwargs["json"]["messages"][1]["content"]
+    assert "need not match the anime subject catalog" in prompt
 
 
 def test_judge_rejects_missing_or_duplicate_results(monkeypatch):

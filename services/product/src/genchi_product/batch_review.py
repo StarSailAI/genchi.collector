@@ -15,7 +15,7 @@ from psycopg.types.json import Jsonb
 from .domain import ActivityInput, canonical_url, fingerprint
 from .importer import subjects_for
 from .matching import event_reference
-from .pipeline import _source_excerpt, music_pilot_resource, structured
+from .pipeline import _source_excerpt, music_pilot_resource, music_scope_resource, structured
 from .store import Catalog
 from .venues import bundle_venue, nonphysical_venue
 
@@ -57,7 +57,7 @@ def hard_gate(row: dict, subjects: list[dict] | None = None) -> tuple[bool, str]
         return False, "来源证据不足以自动发布"
     if attributes.get("image_details_pending"):
         return False, "尚有未识别的来源图片"
-    if (not activity.subject_slugs and not music_pilot_resource(row)) or activity.attendance != "OFFLINE":
+    if (not activity.subject_slugs and not music_scope_resource(row)) or activity.attendance != "OFFLINE":
         return False, "系列归属或线下属性不明确"
     if not activity.venue or nonphysical_venue(activity.venue) or bundle_venue(activity.venue):
         return False, "缺少明确的线下会场"
@@ -140,7 +140,8 @@ def _model_item(row: dict) -> dict:
                    "evidence_method": activity.evidence.method,
                    "performer": ((row.get("attributes") or {}).get("ticket_page") or {}).get("performerName"),
                    "title_evidence": ((row.get("attributes") or {}).get("ticket_page") or {}).get("titleEvidence"),
-                   "discovery_scope": "jpop" if music_pilot_resource(row) else "catalog"},
+                   "discovery_scope": ("jpop" if music_pilot_resource(row) else
+                                       "music" if music_scope_resource(row) else "catalog")},
         "source_quotes": quotes,
         "candidate": {
             "title": activity.title, "url": activity.url, "kind": activity.kind,
@@ -209,12 +210,16 @@ def judge(items: list[dict], *, subjects: list[dict], key: str, base: str,
         "Japanese physical venue, performance versus admission times, every ticket round/deadline, "
         "milestone scope, series relationships, and any contradictions. Do not assume an omitted "
         "fact is true. The subject catalog below is the current anime-series scope, but is NOT "
-        "exhaustive for a source marked discovery_scope=jpop. A jpop candidate may be approved "
+        "exhaustive for a source marked discovery_scope=jpop or music. A jpop candidate may be approved "
         "without a subject_slug when its artist/event identity, physical Japanese venue, "
         "performance date/time and every ticket window are directly and unambiguously supported "
         "by the native ticket details. Never mark it OUT_OF_SCOPE only because the artist is absent "
-        "from the subject list. If any of those facts or round-to-session mappings are unclear, MANUAL. "
-        "OUT_OF_SCOPE means this event is clearly unrelated to EVERY listed subject. "
+        "from the subject list. For discovery_scope=music, a Japanese physical concert can be "
+        "in scope without a listed anime subject, but an album, song, MV, stream or overseas show "
+        "alone is not an offline Japanese event. Require a named event, evidenced Japanese venue "
+        "and performance date; editorial candidates also need an exact external event or ticket "
+        "detail link. If any of those facts or round-to-session mappings are unclear, MANUAL. "
+        "For discovery_scope=catalog, OUT_OF_SCOPE means clearly unrelated to EVERY listed subject. "
         "An unlisted artist, shared venue, publisher, or generic anime theme is not a relationship. "
         "If a related unit, cast or collaboration is plausible but cannot be proved, choose MANUAL. "
         "APPROVE only when every candidate fact and any listed subject relationship are directly supported "
@@ -307,7 +312,7 @@ def _subjects(catalog: Catalog) -> list[dict]:
 
 
 def _safe_out_of_scope(row: dict, subjects: list[dict]) -> bool:
-    if music_pilot_resource(row):
+    if music_scope_resource(row):
         return False
     data = row["payload"]["activity"]
     if data.get("subject_slugs"):
