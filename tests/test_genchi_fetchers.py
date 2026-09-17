@@ -649,6 +649,33 @@ def test_eplus_recovers_visible_performance_missing_from_jsonld():
     assert parsed["events"][1]["startsAt"] == "2026-11-15T17:00+09:00"
 
 
+def test_eplus_keeps_jsonld_subset_without_misaligning_visible_dates():
+    page_id = "3938000003"
+    def article(day, doors):
+        return (
+            '<article class="block-ticket-article">'
+            f'<span class="block-ticket-article__date">2026/09/{day}(日)</span>'
+            f'<span class="block-ticket-article__time">開演：16:30 (開場 {doors})</span>'
+            '<span class="block-ticket-article__venue">テストホール</span>'
+            '</article>'
+        )
+    html = (
+        '<script type="application/ld+json">'
+        '{"@type":"Event","name":"J-POP LIVE","startDate":"2026-09-20T16:30",'
+        f'"url":"https://eplus.jp/sf/detail/{page_id}-P0030027P021011",'
+        '"location":{"@type":"Place","name":"テストホール"}}'
+        '</script>'
+        + article("19", "15:00") + article("20", "14:00")
+    )
+    parsed = _eplus_parse_detail(
+        html, page_id=page_id, page_url=f"https://eplus.jp/sf/detail/{page_id}",
+        project_keywords={}, category_discovered=True, max_content_chars=120_000,
+    )
+    assert parsed is not None
+    assert len(parsed["events"]) == 1
+    assert parsed["events"][0]["doorsAt"] == "2026-09-20T14:00:00+09:00"
+
+
 
 def test_pia_formal_title_requires_one_consistent_named_event():
     def sale(label):

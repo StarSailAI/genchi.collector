@@ -905,31 +905,61 @@ def _eplus_parse_detail(
         return None
 
     articles = soup.select("article.block-ticket-article")
-    if len(articles) > len(jsonld_events):
-        # e+ sometimes omits a visible performance from JSON-LD. Recover only
-        # an aligned tail with a native ticket identity; never shift receptions
-        # onto the wrong date when an earlier performance is missing.
-        starts = [_eplus_article_start(article) for article in articles]
-        if (not all(starts) or any(
-            starts[index] != str(event.get("startDate") or "")[:16]
-            for index, event in enumerate(jsonld_events)
-        )):
-            raise TransientError("e+ visible performances do not align with JSON-LD")
-        for article, start in zip(articles[len(jsonld_events):], starts[len(jsonld_events):], strict=True):
-            variant = _eplus_article_variant(article, page_id)
-            venue = article.select_one(".block-ticket-article__venue")
-            region = article.select_one(".block-ticket-article__region")
-            if not variant or not venue:
-                raise TransientError("e+ visible performance lacks a native identity or venue")
-            jsonld_events.append({
-                "@type": "Event", "name": title,
-                "url": f"https://eplus.jp/sf/detail/{variant}", "startDate": start,
-                "location": {
-                    "@type": "Place", "name": venue.get_text(" ", strip=True),
-                    "address": {"addressRegion": region.get_text(" ", strip=True).strip("（）()")
-                                if region else None, "addressCountry": "日本"},
-                },
-            })
+    article_starts = [_eplus_article_start(article) for article in articles]
+    article_variants = [_eplus_article_variant(article, page_id) for article in articles]
+    event_articles: list[Any | None] = []
+    used_articles: set[int] = set()
+    known_variants = {
+        str(event.get("url") or "").rsplit("/", 1)[-1] for event in jsonld_events
+    }
+    for event in jsonld_events:
+        variant = str(event.get("url") or "").rsplit("/", 1)[-1]
+        start = str(event.get("startDate") or "")[:16]
+        location = event.get("location") if isinstance(event.get("location"), dict) else {}
+        venue_name = _eplus_display(location.get("name"))
+        matching = [
+            index for index, value in enumerate(article_variants)
+            if value == variant and index not in used_articles
+        ]
+        if len(matching) != 1:
+            matching = [
+                index for index, value in enumerate(article_starts)
+                if value == start and index not in used_articles
+                and (
+                    not venue_name
+                    or not (venue := articles[index].select_one(".block-ticket-article__venue"))
+                    or _eplus_display(venue.get_text(" ", strip=True)) == venue_name
+                )
+            ]
+        matched = matching[0] if len(matching) == 1 else None
+        if matched is None and len(jsonld_events) == len(articles) == 1:
+            # Older e+ templates put the date in free text, but a single
+            # article can still be paired unambiguously with a single Event.
+            matched = 0
+        event_articles.append(articles[matched] if matched is not None else None)
+        if matched is not None:
+            used_articles.add(matched)
+
+    # JSON-LD can contain only a subset of visible performances, and its order
+    # can differ from the page. Add extras only with a native performance ID.
+    for index, article in enumerate(articles):
+        start = article_starts[index]
+        variant = article_variants[index]
+        venue = article.select_one(".block-ticket-article__venue")
+        if index in used_articles or not start or not variant or not venue or variant in known_variants:
+            continue
+        region = article.select_one(".block-ticket-article__region")
+        jsonld_events.append({
+            "@type": "Event", "name": title,
+            "url": f"https://eplus.jp/sf/detail/{variant}", "startDate": start,
+            "location": {
+                "@type": "Place", "name": venue.get_text(" ", strip=True),
+                "address": {"addressRegion": region.get_text(" ", strip=True).strip("（）()")
+                            if region else None, "addressCountry": "日本"},
+            },
+        })
+        event_articles.append(article)
+        known_variants.add(variant)
     events: list[dict[str, Any]] = []
     for index, event in enumerate(jsonld_events):
         event_url = str(event.get("url") or page_url)
@@ -940,7 +970,7 @@ def _eplus_parse_detail(
             ).hexdigest()[:24]
         location = event.get("location") if isinstance(event.get("location"), dict) else {}
         address = location.get("address") if isinstance(location.get("address"), dict) else {}
-        article = articles[index] if index < len(articles) else None
+        article = event_articles[index]
         windows = _eplus_ticket_windows(article) if article else []
         starts_at = _eplus_jst(event.get("startDate"))
         if starts_at and len(starts_at) == 10 and article:
