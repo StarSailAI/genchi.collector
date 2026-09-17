@@ -926,6 +926,58 @@ def test_pia_browser_does_not_accept_sale_page_without_requested_details():
         PiaTicketFetcher._html(Client(), Browser(), url, selector=".Y15-regular-section")
 
 
+def test_pia_jpop_reads_current_rounds_without_historical_sales(monkeypatch):
+    root = "https://t.pia.jp/music/hgk/"
+    detail = "https://t.pia.jp/pia/event/event.do?eventBundleCd=b2600002"
+    active = "https://t.pia.jp/pia/ticketInformation.do?eventCd=2600002&rlsCd=001"
+    closed = "https://t.pia.jp/pia/ticketInformation.do?eventCd=2600002&rlsCd=002"
+    def card(url, status):
+        return (
+            f'<div class="ticketSalesCard-2024"><a href="{url}">'
+            '<p class="ticketSalesCard-2024__title">「架空歌手 ARENA TOUR」先行</p></a>'
+            f'<span class="ticketSalesCard-2024__status">{status}</span></div>'
+        )
+    pages = {
+        root: f'<a href="{detail}">公演</a>',
+        detail: '<meta property="og:title" content="架空歌手">'
+                + card(active, "抽選受付中") + card(closed, "抽選受付終了"),
+        active: '<div class="Y15-regular-section">'
+                '<dt class="Y15-event-date">2026/10/24(土)</dt>'
+                '<dd class="Y15-event-time">18:00 開演 ( 15:30 開場 )</dd>'
+                '<p class="Y15-event-site-place">会場：テストホール (大阪府)</p>'
+                '<input class="eventCd" value="2600002">'
+                '<input class="perfCd" value="001"></div>',
+    }
+
+    class Response:
+        def __init__(self, url):
+            self.url = url
+            self.content = pages[url].encode()
+
+    requested = []
+    def get(_self, url, **_kwargs):
+        requested.append(url)
+        return Response(url)
+
+    monkeypatch.setattr("genchi_fetchers.fetchers.SafeHttpClient.get", get)
+    records = []
+    report = PiaTicketFetcher().fetch(
+        context(records),
+        FetchRequest(
+            task_id=6, source_id="pia-jpop-tickets", operation="fetch",
+            config={"discovery_scope": "jpop", "discovery_urls": [root],
+                    "search_keywords": [], "keywords_per_run": 0,
+                    "refresh_details_per_run": 0, "max_sales_per_detail": 1,
+                    "current_sales_only": True, "browser_fallback": False},
+            tags=("scope:jpop-offline",),
+        ),
+    )
+    assert report.details["details"] == 1
+    assert report.details["closed_sales_skipped"] == 1
+    assert len(records[0].attributes["ticket_page"]["events"]) == 1
+    assert requested == [root, detail, active]
+
+
 def test_pia_jpop_seed_and_pending_queue_preserve_unread_details(monkeypatch):
     root = "https://t.pia.jp/music/hgk/"
     seeded = "https://t.pia.jp/pia/event/event.do?eventBundleCd=b2670846"

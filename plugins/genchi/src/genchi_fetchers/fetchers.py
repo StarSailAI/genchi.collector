@@ -1630,6 +1630,18 @@ def _pia_sale_links(html: str, page_url: str, *, limit: int) -> list[tuple[str, 
     return values[:limit]
 
 
+def _pia_current_sales(
+    sales: list[tuple[str, str, str, str]],
+) -> list[tuple[str, str, str, str]]:
+    current = [
+        sale for sale in sales
+        if _eplus_ticket_status(sale[3]) not in {"CLOSED", "CANCELED"}
+    ]
+    # Keep one sold-out round when no actionable round remains, so its
+    # performance schedule can still be indexed without reading every past sale.
+    return current or sales[:1]
+
+
 def _pia_window(
     soup: BeautifulSoup,
     *,
@@ -1791,6 +1803,7 @@ class PiaTicketConfig(BaseModel):
     max_detail_pages: int = Field(default=40, ge=1, le=200)
     bootstrap_max_detail_pages: int | None = Field(default=None, ge=1, le=200)
     max_sales_per_detail: int = Field(default=12, ge=1, le=150)
+    current_sales_only: bool = False
     max_tracked_details: int = Field(default=1500, ge=20, le=10_000)
     max_content_chars: int = Field(default=120_000, ge=1000, le=500_000)
     rate_limit_seconds: float = Field(default=2.0, ge=1.0, le=60.0)
@@ -1812,6 +1825,8 @@ class PiaTicketConfig(BaseModel):
             raise ValueError("jpop discovery requires the Pia 邦楽 category without keyword searches")
         if self.seed_detail_urls and self.discovery_scope != "jpop":
             raise ValueError("seed_detail_urls are only configured for jpop")
+        if self.current_sales_only and self.discovery_scope != "jpop":
+            raise ValueError("current_sales_only is only configured for jpop")
         return self
 
     @field_validator("seed_detail_urls")
@@ -1921,6 +1936,7 @@ class PiaTicketFetcher(FetcherPlugin):
         discovery_failed = False
         discovery_pages = 0
         sale_pages = 0
+        closed_sales_skipped = 0
         missing_details: list[str] = []
         missing_sales: list[str] = []
         incomplete_details: list[str] = []
@@ -2059,12 +2075,14 @@ class PiaTicketFetcher(FetcherPlugin):
             if not performer_name:
                 continue
             merged_events: dict[str, dict[str, Any]] = {}
-            sales = _pia_sale_links(
+            all_sales = _pia_sale_links(
                 detail_html,
                 detail_url,
                 limit=10_000 if config.discovery_scope == "jpop" else config.max_sales_per_detail,
             )
-            formal_title, title_evidence = _pia_formal_title(sales)
+            formal_title, title_evidence = _pia_formal_title(all_sales)
+            sales = _pia_current_sales(all_sales) if config.current_sales_only else all_sales
+            closed_sales_skipped += len(all_sales) - len(sales)
             title = formal_title if config.discovery_scope == "jpop" and formal_title else performer_name
             project, matched_keywords = _eplus_project(
                 f"{title}\n{BeautifulSoup(detail_html, 'lxml').get_text(' ', strip=True)}",
@@ -2203,6 +2221,7 @@ class PiaTicketFetcher(FetcherPlugin):
                 "bootstrap": bootstrap,
                 "details": emitted,
                 "sale_pages": sale_pages,
+                "closed_sales_skipped": closed_sales_skipped,
                 "events": event_count,
                 "ticket_windows": ticket_count,
                 "tracked": min(len(tracked_set), config.max_tracked_details),

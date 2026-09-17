@@ -509,6 +509,7 @@ sources:
       max_detail_pages: 6
       bootstrap_max_detail_pages: 10
       max_sales_per_detail: 120
+      current_sales_only: true
       max_tracked_details: 1000
       rate_limit_seconds: 4
       browser_fallback: true
