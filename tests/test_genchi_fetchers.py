@@ -904,6 +904,28 @@ def test_pia_detail_failure_keeps_retry_without_repeating_bootstrap(monkeypatch)
     assert ctx.checkpoint()["pending_detail_urls"] == [detail]
 
 
+def test_pia_browser_does_not_accept_sale_page_without_requested_details():
+    url = "https://t.pia.jp/pia/ticketInformation.do?lotRlsCd=28563"
+
+    class Response:
+        content = b"<html><body>temporarily unavailable</body></html>"
+
+        def __init__(self):
+            self.url = url
+
+    class Client:
+        def get(self, *_args, **_kwargs):
+            return Response()
+
+    class Browser:
+        def render(self, _url, *, selector):
+            assert _url == url and selector == ".Y15-regular-section"
+            return "<html><body>temporarily unavailable</body></html>", url
+
+    with pytest.raises(TransientError, match="lacks the requested sale details"):
+        PiaTicketFetcher._html(Client(), Browser(), url, selector=".Y15-regular-section")
+
+
 def test_pia_jpop_seed_and_pending_queue_preserve_unread_details(monkeypatch):
     root = "https://t.pia.jp/music/hgk/"
     seeded = "https://t.pia.jp/pia/event/event.do?eventBundleCd=b2670846"

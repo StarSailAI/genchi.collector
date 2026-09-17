@@ -1872,6 +1872,8 @@ class PiaTicketFetcher(FetcherPlugin):
         html, final_url = browser.render(url, selector=selector or "body")
         if urlsplit(final_url).hostname == "sorry.pia.jp":
             raise TransientError("Ticket Pia browser reached its congestion page")
+        if selector and not BeautifulSoup(html, "lxml").select_one(selector):
+            raise TransientError("Ticket Pia browser page lacks the requested sale details")
         return html
 
     def fetch(self, context: FetchContext, request: FetchRequest) -> FetchReport:

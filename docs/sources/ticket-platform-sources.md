@@ -9,7 +9,7 @@ Genchi 将 e+、チケットぴあ和ローチケ作为日本综合票务的第�
 | `eplus-anime-tickets` | `genchi.eplus_ticket` | 动漫地区页、作品关键词页 | HTML/JSON-LD，必要时使用 Camoufox |
 | `pia-anime-tickets` | `genchi.pia_ticket` | 动漫首页、动漫/声优/游戏标签、轮换关键词 | 活动页发现销售页，销售页提取精确场次和受付时间 |
 | `eplus-jpop-tickets` | `genchi.eplus_ticket` | e+ J-pop 分类分页、受控艺人搜索与经核验的活动直链 | 未读取详情留在 checkpoint，逐轮刷新已收录详情 |
-| `pia-jpop-tickets` | `genchi.pia_ticket` | ぴあ官方「邦楽」精选页与经核验的活动直链 | 未读取或暂时失败的详情留在 checkpoint；缺页或超过上限的详情整页跳过并报告 |
+| `pia-jpop-tickets` | `genchi.pia_ticket` | ぴあ官方「邦楽」精选页与经核验的活动直链 | 未读取或暂时失败的详情留在 checkpoint；售票页缺少场次结构时重试，缺页或超过上限的详情整页跳过并报告 |
 | `sekainoowari-tour-official` | `genchi.official_site` | SEKAI NO OWARI 2027 巡演官网 | 原样保存官网全文并逐场、逐轮次提取；与既有巡演一一核对 |
 | `lawson-anime-tickets` | `genchi.lawson_ticket` | 动漫、声优、游戏和重点作品轮换关键词 | Camoufox 渲染搜索结果卡 |
 
