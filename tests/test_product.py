@@ -152,6 +152,9 @@ def catalog(monkeypatch):
         runpy.run_path(
             str(Path("services/normalizer/alembic/versions/0013_home_features.py"))
         )["upgrade"]()
+        runpy.run_path(
+            str(Path("services/normalizer/alembic/versions/0014_artist_subjects.py"))
+        )["upgrade"]()
     with psycopg.connect(DSN, autocommit=True) as conn:
         conn.execute(f'CREATE SCHEMA "{schema}"')
     try:

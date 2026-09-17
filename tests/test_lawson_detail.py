@@ -177,6 +177,8 @@ def test_pia_uses_specific_sale_round_without_changing_existing_identity():
 def test_venue_aliases_are_scoped_and_virtual_platforms_are_not_halls():
     from genchi_product.venues import bundle_venue, nonphysical_venue, venue_key
 
+    assert venue_key("北海道立総合体育センター 北海きたえーる") == venue_key("北海きたえーる")
+
     title = "Aqours スクールアイドル活動展 Dive into Sparkle"
     assert venue_key("東京建物ぴあカンファレンス", title, "2026") == venue_key(
         "東京建物ぴあカンファレンス TO YAESU HALL", title, "2026"

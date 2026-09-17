@@ -10,6 +10,10 @@ from .domain import normalize
 
 def venue_key(venue: str | None, title: str = "", year: str = "") -> str:
     key = normalize(venue or "")
+    # The arena's formal name and its ticket-site shorthand identify one hall.
+    if key in {normalize("北海きたえーる"),
+               normalize("北海道立総合体育センター 北海きたえーる")}:
+        return "venue:hokkaido-kitaeru"
     # Official rename: https://www.neec.ac.jp/information/55354/
     if key in {
         normalize(x)

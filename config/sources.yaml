@@ -513,6 +513,29 @@ sources:
       resources: {browser_api: 1, domain:t.pia.jp: 1}
     tags: [scope:jpop-offline, country:JP, timezone:Asia/Tokyo, source:ticket-aggregator]
 
+  # Exact artist-owned tour site: preserve the complete native schedule and
+  # named reception rounds, and reconcile them with the existing Pia activity.
+  - id: sekainoowari-tour-official
+    enabled: true
+    fetcher: genchi.official_site
+    sink: postgres
+    schedule: {type: cron, cron: "40 15 * * *", timezone: Asia/Tokyo}
+    config:
+      start_urls: [https://www.sekainoowari-tour.jp/]
+      link_pattern: '^https://www\.sekainoowari-tour\.jp/?$'
+      title_selector: title
+      content_selector: .frame-content
+      published_selector: null
+      resource_kind: official_tour
+      tour_title: SEKAI NO OWARI ARENA TOUR 2027
+      tour_expected_occurrences: 23
+      tour_expected_rounds: 4
+      max_pages: 1
+      max_items: 1
+    retry: {max_attempts: 3, backoff: exponential, base_seconds: 600, max_seconds: 7200}
+    routing: {queue: web, resources: {domain:sekainoowari-tour.jp: 1}}
+    tags: [scope:jpop-offline, artist:sekai-no-owari, country:JP, timezone:Asia/Tokyo, source:official-operator]
+
   - id: lawson-anime-tickets
     enabled: true
     fetcher: genchi.lawson_ticket

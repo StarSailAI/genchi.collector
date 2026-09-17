@@ -701,6 +701,24 @@ def process_one(catalog: Catalog) -> bool:
     try:
         with catalog.connect() as conn:
             index_raw(conn, resource)
+        if resource["source_id"] == "sekainoowari-tour-official":
+            from .official_tour import reconcile
+
+            with catalog.connect() as conn, conn.transaction():
+                current = conn.execute(
+                    "SELECT * FROM catalog_jobs WHERE resource_id=%s FOR UPDATE",
+                    (job["resource_id"],),
+                ).fetchone()
+                if (current["lease_token"] != lease or
+                        current["content_hash"] != resource["content_hash"]):
+                    return True
+                reconcile(conn, catalog, resource)
+                conn.execute(
+                    """UPDATE catalog_jobs SET status='DONE',lease_token=NULL,locked_at=NULL,
+                    last_error=NULL,updated_at=NOW() WHERE resource_id=%s AND lease_token=%s""",
+                    (job["resource_id"], lease),
+                )
+            return True
         items = structured(resource, subjects)
         if not items:
             source_type = (resource.get("attributes") or {}).get("source_type")

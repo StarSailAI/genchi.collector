@@ -2332,6 +2332,77 @@ class LawsonTicketFetcher(FetcherPlugin):
         )
 
 
+def _official_tour_schedule(soup: BeautifulSoup, title: str) -> dict[str, Any]:
+    """Extract native venue/session and named reception blocks from an official tour page."""
+    year_match = re.search(r"20\d{2}", title)
+    if not year_match:
+        raise ConfigurationError("official tour title has no edition year")
+    year = int(year_match.group())
+    prefectures = {
+        "北海道": "北海道", "広島": "広島県", "福井": "福井県", "神奈川": "神奈川県",
+        "愛知": "愛知県", "新潟": "新潟県", "東京": "東京都", "静岡": "静岡県",
+        "福岡": "福岡県", "大阪": "大阪府",
+    }
+    events = []
+    for card in soup.select("#schedule .schedule-card"):
+        area = _text(card, ".sc-area") or ""
+        venue = _text(card, ".sc-venue") or ""
+        if not venue or area not in prefectures:
+            raise ConfigurationError("official tour venue or prefecture is missing")
+        for line in card.select(".sc-dates li"):
+            date_text = _text(line, ".d") or ""
+            clock_text = _text(line, ".t") or ""
+            date = re.search(r"(\d{1,2})月(\d{1,2})日", date_text)
+            clocks = re.search(r"OPEN\s+(\d{1,2}):(\d{2})\s*/\s*START\s+(\d{1,2}):(\d{2})", clock_text)
+            if not date or not clocks:
+                raise ConfigurationError("official tour performance date or clock is missing")
+            month, day = map(int, date.groups())
+            open_hour, open_minute, start_hour, start_minute = map(int, clocks.groups())
+            doors = datetime(year, month, day, open_hour, open_minute,
+                             tzinfo=ZoneInfo("Asia/Tokyo")).isoformat()
+            starts = datetime(year, month, day, start_hour, start_minute,
+                              tzinfo=ZoneInfo("Asia/Tokyo")).isoformat()
+            key = hashlib.sha256(f"{starts}:{_eplus_normalize(venue)}".encode()).hexdigest()[:24]
+            events.append({"id": key, "venue": venue, "city": prefectures[area],
+                           "doorsAt": doors, "startsAt": starts,
+                           "evidence": line.get_text("\n", strip=True)})
+    rounds = []
+    for card in soup.select("#ticket .entry-item"):
+        label = _text(card, ".entry-toggle .ttl") or ""
+        terms = {}
+        for dt in card.select(".entry-terms dt"):
+            dd = dt.find_next_sibling("dd")
+            if dd:
+                terms[dt.get_text(" ", strip=True)] = dd.get_text(" ", strip=True)
+        reception = terms.get("受付期間", "")
+        bounds = _ticket_timestamps(reception)
+        if not label or len(bounds) != 2:
+            raise ConfigurationError("official tour reception is missing its exact window")
+        result_text = terms.get("当落発表", "")
+        payment_text = terms.get("入金期間", "")
+        result = _ticket_timestamps(result_text)
+        payment = _ticket_timestamps(payment_text)
+        if result_text and len(result) != 1:
+            raise ConfigurationError("official tour result has an incomplete date")
+        if payment_text and len(payment) != 2:
+            raise ConfigurationError("official tour payment has an incomplete window")
+        rounds.append({
+            "id": hashlib.sha256(label.encode()).hexdigest()[:20],
+            "label": label, "opensAt": bounds[0], "closesAt": bounds[1],
+            "resultAt": result[0] if result else None,
+            "resultPlanned": "予定" in result_text,
+            "paymentOpensAt": payment[0] if payment else None,
+            "paymentClosesAt": payment[1] if payment else None,
+            "paymentStartPlanned": "予定" in payment_text,
+            "eligibility": "ファンクラブ会員" if "ファンクラブ" in label else None,
+            "evidence": {"label": label, "reception": reception,
+                         "result": result_text, "payment": payment_text},
+        })
+    if not events or not rounds or len({item["id"] for item in events}) != len(events):
+        raise ConfigurationError("official tour has missing or duplicate performances/rounds")
+    return {"title": title, "events": events, "rounds": rounds}
+
+
 class OfficialSiteConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -2354,6 +2425,9 @@ class OfficialSiteConfig(BaseModel):
     backfill_max_pages: int = Field(default=30, ge=1, le=100)
     max_items: int = Field(default=100, ge=1, le=5000)
     resource_kind: str = "official_news"
+    tour_title: str | None = None
+    tour_expected_occurrences: int | None = Field(default=None, ge=1, le=500)
+    tour_expected_rounds: int | None = Field(default=None, ge=1, le=100)
 
     @field_validator("start_urls")
     @classmethod
@@ -2480,6 +2554,16 @@ class OfficialSiteFetcher(FetcherPlugin):
             content = _text(soup, config.content_selector) or _text(soup, "main")
             if not title or not content:
                 raise ConfigurationError(f"content selector did not match {final_url}")
+            tour = None
+            if config.tour_title:
+                if title != config.tour_title or config.resource_kind != "official_tour":
+                    raise ConfigurationError("official tour title or resource kind changed")
+                tour = _official_tour_schedule(soup, config.tour_title)
+                if ((config.tour_expected_occurrences is not None and
+                     len(tour["events"]) < config.tour_expected_occurrences) or
+                    (config.tour_expected_rounds is not None and
+                     len(tour["rounds"]) < config.tour_expected_rounds)):
+                    raise TransientError("official tour schedule lost expected performances or rounds")
             date_node = soup.select_one(config.published_selector) if config.published_selector else None
             published_raw = (
                 (date_node.get("datetime") or date_node.get_text(" ", strip=True))
@@ -2537,6 +2621,7 @@ class OfficialSiteFetcher(FetcherPlugin):
                         "outbound_links": outbound_links,
                         "published_precision": "DATE" if published_on else "TIME" if published_at else "TBD",
                         "published_on": published_on,
+                        **({"official_tour": tour} if tour else {}),
                     },
                     tags=request.tags,
                 )

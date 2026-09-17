@@ -9,9 +9,9 @@ from genchi_product.emails import render_login_email, render_notification_email
 from genchi_product.notifications import grouped_changes, localized_change
 
 migrations = ScriptDirectory.from_config(_alembic_config())
-if migrations.get_heads() != ["0013_home_features"]:
-    raise SystemExit("Product image does not include the complete homepage migration chain.")
-print("Product image migration chain is readable and includes Schema 1.10.")
+if migrations.get_heads() != ["0014_artist_subjects"]:
+    raise SystemExit("Product image does not include the complete artist-subject migration chain.")
+print("Product image migration chain is readable and includes Schema 1.11.")
 
 # Route registration must not query the database. A truthy sentinel avoids
 # constructing the production Catalog or requiring DATABASE_URL.

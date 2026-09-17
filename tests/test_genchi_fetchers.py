@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from allfeeds_sdk import FetchContext, FetchRequest
+from bs4 import BeautifulSoup
 from genchi_fetchers import (
     AsobiTicketFetcher,
     EplusTicketFetcher,
@@ -15,6 +16,7 @@ from genchi_fetchers.fetchers import (
     PiaTicketConfig,
     _eplus_next_page,
     _eplus_ticket_phase,
+    _official_tour_schedule,
     _pia_formal_title,
     _pia_ticket_phase,
     _pia_title,
@@ -464,6 +466,31 @@ def test_pia_formal_title_requires_one_consistent_named_event():
     assert _pia_formal_title([sale("先行抽選")]) == (None, None)
     assert _pia_formal_title([sale("「TOUR ONE」一般発売"),
                               sale("「TOUR TWO」一般発売")]) == (None, None)
+
+
+def test_official_tour_keeps_sessions_and_named_rounds_separate():
+    html = """<section id="schedule">
+      <div class="schedule-card"><span class="sc-area">北海道</span>
+        <p class="sc-venue">北海きたえーる</p><ul class="sc-dates">
+          <li><span class="d">4月17日（土）</span><span class="t">OPEN 17:00 / START 18:00</span></li>
+          <li><span class="d">4月18日（日）</span><span class="t">OPEN 16:00 / START 17:00</span></li>
+        </ul></div></section>
+      <section id="ticket"><div class="entry-item">
+        <span class="entry-toggle"><span class="ttl">ファンクラブ全会員先行</span></span>
+        <dl class="entry-terms">
+          <dt>受付期間</dt><dd>2026/8/21(金)18:00 ～ 2026/9/6(日)23:59</dd>
+          <dt>当落発表</dt><dd>2026/9/16(水)18:00 ～(予定)</dd>
+          <dt>入金期間</dt><dd>2026/9/16(水)18:00(予定)～2026/9/20(日)23:59</dd>
+        </dl></div></section>"""
+    tour = _official_tour_schedule(
+        BeautifulSoup(html, "lxml"), "SEKAI NO OWARI ARENA TOUR 2027"
+    )
+    assert len(tour["events"]) == 2
+    assert tour["events"][0]["startsAt"] == "2027-04-17T18:00:00+09:00"
+    assert tour["events"][1]["doorsAt"] == "2027-04-18T16:00:00+09:00"
+    assert tour["rounds"][0]["label"] == "ファンクラブ全会員先行"
+    assert tour["rounds"][0]["resultPlanned"] is True
+    assert tour["rounds"][0]["paymentClosesAt"] == "2026-09-20T23:59:00+09:00"
 
 
 def test_pia_response_uses_declared_utf8_instead_of_lxml_encoding_guess():
