@@ -491,8 +491,8 @@ sources:
       resources: {browser_api: 1, domain:t.pia.jp: 1}
     tags: [country:JP, timezone:Asia/Tokyo, source:ticket-aggregator]
 
-  # Pia 邦楽 keeps a durable detail backlog. Large tours are read in full up to
-  # the explicit sale-page ceiling, rather than silently truncating rounds.
+  # Pia 邦楽 keeps a durable detail backlog. Current and upcoming sale rounds
+  # are read within an explicit ceiling; past closed rounds are skipped.
   - id: pia-jpop-tickets
     enabled: true
     fetcher: genchi.pia_ticket
