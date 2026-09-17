@@ -72,16 +72,22 @@ def candidates(conn, now):
 
 def select_music_cards(items):
     """Choose timely, well-supported Japanese music activities for the homepage."""
-    # A 30-day window keeps the right rail actionable; popularity breaks ties within it.
+    # A 30-day window keeps the right rail actionable. Require a minimum signal
+    # before ranking so an obscure event that happens to be tomorrow cannot win
+    # solely on urgency. The fallback keeps the rail populated when the catalogue
+    # has fewer than three sufficiently supported candidates.
     candidates = [row for row in items if row["days_remaining"] <= 30]
+    supported = [
+        row
+        for row in candidates
+        if row["follow_count"] > 0 or row["source_count"] >= 2
+    ]
+    if len(supported) >= 3:
+        candidates = supported
     ordered = sorted(
         candidates,
         key=lambda row: (
-            -(
-                min(row["follow_count"], 20) * 4
-                + min(row["source_count"], 5) * 3
-                + max(0, 30 - row["days_remaining"])
-            ),
+            -(min(row["follow_count"], 20) * 5 + min(row["source_count"], 5) * 2),
             row["days_remaining"],
             row["id"],
         ),

@@ -75,6 +75,20 @@ def test_music_selection_balances_urgency_and_popularity():
     assert [row["activity_id"] for row in selected] == ["popular", "soon", "next"]
 
 
+def test_music_selection_filters_unsupported_urgent_events():
+    rows = [
+        dict(id="urgent", activity_id="urgent", follow_count=0, source_count=1, days_remaining=1),
+        dict(id="supported", activity_id="supported", follow_count=0, source_count=2, days_remaining=12),
+        dict(id="followed", activity_id="followed", follow_count=1, source_count=1, days_remaining=20),
+        dict(id="third", activity_id="third", follow_count=0, source_count=2, days_remaining=25),
+    ]
+
+    selected = select_music_cards(rows)
+
+    assert "urgent" not in {row["activity_id"] for row in selected}
+    assert [row["activity_id"] for row in selected] == ["followed", "supported", "third"]
+
+
 def test_global_limit_commits_across_concurrent_requests_and_process_clients(catalog, model):
     def ask(_):
         try:
