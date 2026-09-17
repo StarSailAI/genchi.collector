@@ -157,6 +157,8 @@ def test_music_news_scope_allows_unlisted_artist_only_with_event_evidence():
         title="架空歌手 東京公演", subject_slugs=[], venue="テストホール",
         url="https://eplus.jp/sf/detail/123")
     assert batch_review._model_item(row)["source"]["discovery_scope"] == "music"
+    assert batch_review._model_item(row)["source_links"] == [
+        {"url": "https://eplus.jp/sf/detail/123", "label": ""}]
     assert batch_review.hard_gate(row)[0] is True
     assert not batch_review._safe_out_of_scope(row, [])
     row["attributes"]["outbound_links"] = []
@@ -164,6 +166,17 @@ def test_music_news_scope_allows_unlisted_artist_only_with_event_evidence():
     row["attributes"]["outbound_links"] = [{"url": "https://eplus.jp/sf/detail/123"}]
     row["payload"]["activity"]["venue"] = None
     assert batch_review.hard_gate(row)[0] is False
+
+
+def test_model_receives_only_candidate_relevant_source_links():
+    row = candidate_row()
+    row["payload"]["activity"]["url"] = "https://eplus.jp/unveil-kokona"
+    row["attributes"]["outbound_links"] = [
+        {"url": "https://eplus.jp/unveil-kokona/", "label": "観覧申込はこちらから"},
+        {"url": "https://example.test/unrelated", "label": "関連ニュース"},
+    ]
+    assert batch_review._model_item(row)["source_links"] == [
+        {"url": "https://eplus.jp/unveil-kokona/", "label": "観覧申込はこちらから"}]
 
 
 def test_music_scope_requires_configured_japanese_source_role():
