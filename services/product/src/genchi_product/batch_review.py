@@ -85,6 +85,14 @@ def hard_gate(row: dict, subjects: list[dict] | None = None) -> tuple[bool, str]
             return False, "入场时刻不能代替演出时刻"
         if music_pilot_resource(row) and activity.time.precision != "TIME":
             return False, "音乐演出缺少明确的开演时间"
+        if source_type == "pia_ticket" and music_pilot_resource(row):
+            page = attributes.get("ticket_page") or {}
+            formal = page.get("formalEventTitle")
+            quote = page.get("titleEvidence") or ""
+            performer = page.get("performerName")
+            if (not formal or formal == performer or activity.title != formal or
+                    row.get("source_title") != formal or formal not in quote):
+                return False, "票务详情只有艺人名或缺少可核验的正式演出名"
         if any(node.status == "REVIEW" for node in activity.milestones):
             return False, "原生售票状态仍需核对"
         if source_type == "lawson_ticket" and (
@@ -130,6 +138,8 @@ def _model_item(row: dict) -> dict:
                    "role": (row.get("attributes") or {}).get("source_role"),
                    "type": (row.get("attributes") or {}).get("source_type"),
                    "evidence_method": activity.evidence.method,
+                   "performer": ((row.get("attributes") or {}).get("ticket_page") or {}).get("performerName"),
+                   "title_evidence": ((row.get("attributes") or {}).get("ticket_page") or {}).get("titleEvidence"),
                    "discovery_scope": "jpop" if music_pilot_resource(row) else "catalog"},
         "source_quotes": quotes,
         "candidate": {

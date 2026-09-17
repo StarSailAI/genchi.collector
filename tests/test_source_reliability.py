@@ -150,6 +150,7 @@ def test_pia_jpop_keeps_physical_candidate_in_review_and_excludes_stream():
     assert len(items) == 1
     assert items[0].publication == "REVIEW"
     assert items[0].attendance == "OFFLINE"
+    assert items[0].kind == "LIVE"
     resource["attributes"]["ticket_page"]["events"] = [
         resource["attributes"]["ticket_page"]["events"][1]
     ]

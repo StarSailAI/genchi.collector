@@ -88,7 +88,9 @@ def test_approved_jpop_ticket_is_published_by_batch_worker(monkeypatch):
         "url": "https://t.pia.jp/pia/event/event.do?eventBundleCd=123",
         "kind": "ticket_page", "tags": [],
         "attributes": {"source_type": "pia_ticket", "ticket_page": {
-            "platform": "pia", "discoveryScope": "jpop", "events": [{
+            "platform": "pia", "discoveryScope": "jpop",
+            "performerName": "架空歌手", "formalEventTitle": "架空歌手 LIVE",
+            "titleEvidence": "「架空歌手 LIVE」一般発売", "events": [{
                 "id": "123-P1", "name": "架空歌手 LIVE",
                 "startsAt": "2026-11-20T19:00:00+09:00",
                 "venue": {"name": "テストホール", "prefecture": "東京都"},
@@ -117,6 +119,16 @@ def test_approved_jpop_ticket_is_published_by_batch_worker(monkeypatch):
     assert result["published"] == 1 and result["manual"] == 0
     assert catalog.approve_review.call_args.args[:3] == (
         "jpop-pia", "ai:deepseek-batch-v2", True)
+
+
+def test_pia_jpop_artist_heading_cannot_auto_publish():
+    row = candidate_row()
+    row["attributes"] = {"source_type": "pia_ticket", "ticket_page": {
+        "platform": "pia", "discoveryScope": "jpop", "events": []}}
+    row["payload"]["activity"]["subject_slugs"] = []
+    row["payload"]["activity"]["evidence"]["method"] = "structured"
+    allowed, reason = batch_review.hard_gate(row, [])
+    assert not allowed and "正式演出名" in reason
 
 
 def test_editorial_and_community_need_source_backed_authority():

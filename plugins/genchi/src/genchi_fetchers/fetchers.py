@@ -1438,7 +1438,12 @@ def _pia_window(
     fallback_label: str,
 ) -> dict[str, Any] | None:
     label_node = soup.select_one(".textLabel--title")
-    label = (label_node.get_text(" ", strip=True) if label_node else fallback_label).strip()
+    generic_label = (label_node.get_text(" ", strip=True) if label_node else fallback_label).strip()
+    # Ticket pages often say only "先行抽選" while the detail card identifies the
+    # actual round (for example "「TOUR NAME」オフィシャル先行"). Keep the old
+    # identity calculation so a corrected label updates the existing round.
+    card_round = re.sub(r"^[「『][^」』]+[」』]\s*", "", fallback_label).strip()
+    label = card_round if card_round and card_round != fallback_label else generic_label
     page_text = soup.get_text(" ", strip=True)
     period = _definition_value(soup, "受付期間")
     values = _ticket_timestamps(period)
@@ -1464,7 +1469,7 @@ def _pia_window(
     result_values = _ticket_timestamps(_definition_value(soup, "結果発表開始日時"))
     window_id = hashlib.sha256(
         (
-            f"{_eplus_normalize(label or fallback_label)}:{opens_at}:"
+            f"{_eplus_normalize(generic_label or fallback_label)}:{opens_at}:"
             f"{closes_at or ''}:{result_values[0] if result_values else ''}"
         ).encode()
     ).hexdigest()[:20]
@@ -1559,6 +1564,19 @@ def _pia_title(html: str) -> str:
         node = soup.select_one("h1")
         title = node.get_text(" ", strip=True) if node else ""
     return re.split(r"\s*[|｜]\s*チケットぴあ", _eplus_display(title))[0].strip()
+
+
+def _pia_formal_title(sales: list[tuple[str, str, str, str]]) -> tuple[str | None, str | None]:
+    """Accept a title only when all named sale cards agree on one event identity."""
+    titles: dict[str, str] = {}
+    for _sale_id, _url, label, _status in sales:
+        match = re.search(r"[「『]([^」』]{4,200})[」』]", label)
+        if match:
+            title = _eplus_display(match.group(1)).strip()
+            titles.setdefault(title, label)
+    if len(titles) != 1:
+        return None, None
+    return next(iter(titles.items()))
 
 
 class PiaTicketConfig(BaseModel):
@@ -1792,18 +1810,20 @@ class PiaTicketFetcher(FetcherPlugin):
             except TransientError as exc:
                 errors.append(f"{detail_url}: {exc}")
                 continue
-            title = _pia_title(detail_html)
-            if not title:
+            performer_name = _pia_title(detail_html)
+            if not performer_name:
                 continue
-            project, matched_keywords = _eplus_project(
-                f"{title}\n{BeautifulSoup(detail_html, 'lxml').get_text(' ', strip=True)}",
-                config.project_keywords,
-            )
             merged_events: dict[str, dict[str, Any]] = {}
             sales = _pia_sale_links(
                 detail_html,
                 detail_url,
                 limit=10_000 if config.discovery_scope == "jpop" else config.max_sales_per_detail,
+            )
+            formal_title, title_evidence = _pia_formal_title(sales)
+            title = formal_title if config.discovery_scope == "jpop" and formal_title else performer_name
+            project, matched_keywords = _eplus_project(
+                f"{title}\n{BeautifulSoup(detail_html, 'lxml').get_text(' ', strip=True)}",
+                config.project_keywords,
             )
             if config.discovery_scope == "jpop" and len(sales) > config.max_sales_per_detail:
                 incomplete_details.append(detail_url)
@@ -1881,6 +1901,9 @@ class PiaTicketFetcher(FetcherPlugin):
                             "platform": "pia",
                             "pageId": page_id,
                             "discoveryScope": config.discovery_scope,
+                            "performerName": performer_name if config.discovery_scope == "jpop" else None,
+                            "formalEventTitle": formal_title if config.discovery_scope == "jpop" else None,
+                            "titleEvidence": title_evidence if config.discovery_scope == "jpop" else None,
                             "project": project,
                             "matchedKeywords": matched_keywords,
                             "nativeCategories": [],

@@ -15,6 +15,7 @@ from genchi_fetchers.fetchers import (
     PiaTicketConfig,
     _eplus_next_page,
     _eplus_ticket_phase,
+    _pia_formal_title,
     _pia_ticket_phase,
     _pia_title,
     _response_html,
@@ -452,6 +453,19 @@ def test_eplus_jpop_scope_rejects_anime_or_arbitrary_roots():
         EplusTicketConfig(discovery_scope="anime", category_urls=["https://eplus.jp/sf/live/j-pop"])
 
 
+def test_pia_formal_title_requires_one_consistent_named_event():
+    def sale(label):
+        return ("id", "https://t.pia.jp/", label, "販売中")
+    assert _pia_formal_title([
+        sale("「SEKAI NO OWARI ARENA TOUR 2027」オフィシャル先行"),
+        sale("「SEKAI NO OWARI ARENA TOUR 2027」一般発売"),
+    ]) == ("SEKAI NO OWARI ARENA TOUR 2027",
+           "「SEKAI NO OWARI ARENA TOUR 2027」オフィシャル先行")
+    assert _pia_formal_title([sale("先行抽選")]) == (None, None)
+    assert _pia_formal_title([sale("「TOUR ONE」一般発売"),
+                              sale("「TOUR TWO」一般発売")]) == (None, None)
+
+
 def test_pia_response_uses_declared_utf8_instead_of_lxml_encoding_guess():
     class Response:
         encoding = "UTF-8"
@@ -481,16 +495,18 @@ def test_pia_ticket_phase_does_not_use_resale_navigation_when_label_is_specific(
 def test_pia_ticket_discovers_sales_and_exact_performances(monkeypatch, scope, discovery_url, trusted):
     detail_url = "https://t.pia.jp/pia/event/event.do?eventBundleCd=b2600001"
     sale_url = "https://t.pia.jp/pia/ticketInformation.do?eventCd=2600001&rlsCd=001"
+    heading = "架空歌手" if scope == "jpop" else "THE IDOLM@STER TEST LIVE"
+    card_title = "「架空歌手 ARENA TOUR 2027」一般発売" if scope == "jpop" else "一般発売"
     pages = {
         discovery_url: f'<a href="{detail_url}">アイドルマスター</a>',
         detail_url: f"""
             <html><head>
-              <meta property="og:title" content="THE IDOLM@STER TEST LIVE">
+              <meta property="og:title" content="{heading}">
               <meta property="og:image" content="https://image.pia.jp/test.jpg">
             </head><body>
               <div class="ticketSalesCard-2024">
                 <a href="{sale_url}">
-                  <p class="ticketSalesCard-2024__title">一般発売</p>
+                  <p class="ticketSalesCard-2024__title">{card_title}</p>
                   <p class="ticketSalesCard-2024__status">販売期間中</p>
                 </a>
               </div>
@@ -554,6 +570,13 @@ def test_pia_ticket_discovers_sales_and_exact_performances(monkeypatch, scope, d
     assert records[0].tags[-1] == ("project:idolmaster" if scope == "anime" else "project:unknown")
     payload = records[0].attributes["ticket_page"]
     assert payload["discoveryScope"] == scope
+    if scope == "jpop":
+        assert records[0].title == "架空歌手 ARENA TOUR 2027"
+        assert payload["performerName"] == "架空歌手"
+        assert payload["formalEventTitle"] == records[0].title
+        assert payload["titleEvidence"] == card_title
+    else:
+        assert records[0].title == heading
     assert payload["discovery"] == [
         {
             "kind": "platform_category",
@@ -562,6 +585,7 @@ def test_pia_ticket_discovers_sales_and_exact_performances(monkeypatch, scope, d
         }
     ]
     event = payload["events"][0]
+    assert event["name"] == records[0].title
     assert event["id"] == "2600001-001"
     assert event["startsAt"] == "2026-09-01T17:00:00+09:00"
     assert event["doorsAt"] == "2026-09-01T16:00:00+09:00"

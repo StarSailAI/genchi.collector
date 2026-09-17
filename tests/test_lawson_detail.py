@@ -159,6 +159,21 @@ def test_pia_cancellation_disclaimer_is_not_cancellation():
     assert window and window["status"] != "CANCELED"
 
 
+def test_pia_uses_specific_sale_round_without_changing_existing_identity():
+    soup = BeautifulSoup(
+        '<span class="textLabel--title">先行抽選</span><dl class="dataList">'
+        '<dt>受付期間</dt><dd>2026/9/1(火) 18:00 ～ 2026/9/17(木) 23:59</dd></dl>',
+        "lxml",
+    )
+    ordinary = _pia_window(soup, sale_id="a", sale_url="https://t.pia.jp/a",
+                           fallback_label="先行抽選")
+    specific = _pia_window(soup, sale_id="a", sale_url="https://t.pia.jp/a",
+                           fallback_label="「SEKAI NO OWARI ARENA TOUR 2027」オフィシャル先行")
+    assert ordinary and specific
+    assert specific["label"] == "オフィシャル先行"
+    assert specific["id"] == ordinary["id"]
+
+
 def test_venue_aliases_are_scoped_and_virtual_platforms_are_not_halls():
     from genchi_product.venues import bundle_venue, nonphysical_venue, venue_key
 

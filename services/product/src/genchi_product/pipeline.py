@@ -221,7 +221,12 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                     url=resource.get("url"),
                 )
             )
-        role = role_for(title, "OTHER", event.get("startLabel") or
+        event_kind = (
+            "LIVE" if platform == "pia" and music_pilot and
+            re.search(r"(?i)(?<![a-z])(?:tour|live|concert)(?![a-z])|ツアー|ライブ|コンサート", title)
+            else "OTHER"
+        )
+        role = role_for(title, event_kind, event.get("startLabel") or
                         ("開演" if platform == "pia" and "T" in str(event.get("startsAt")) else ""))
         results.append(
             ActivityInput(
@@ -230,7 +235,7 @@ def structured(resource: dict, subjects: list[dict]) -> list[ActivityInput]:
                 title=title,
                 url=event.get("url") or resource.get("url"),
                 subject_slugs=slugs,
-                kind="OTHER",
+                kind=event_kind,
                 occurrence_key=native_key,
                 occurrence_role=role,
                 occurrence_label=(occurrence_label(precise(event.get("startsAt"), event.get("endsAt")), venue.get("name")) + " · " + event["nativeTitle"])[:500]
