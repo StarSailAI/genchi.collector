@@ -73,7 +73,8 @@ python3 genchi.collector/deploy/manage.py compose backend exec -T postgres psql 
 `eplus-jpop-tickets` 使用公开的 `/sf/live/j-pop` 分类页、受控浏览器读取的艺人搜索页，以及经核验的票务详情直链，独立于七个动漫地域入口。直接 HTTP 仍检查 robots.txt；搜索页由现有浏览器服务读取，每轮仅搜索配置的一个关键词。
 首次扩量扫描最多读取八页列表、64 个详情；日常最多读取两页列表、48 个详情，
 已知详情轮转复查四个。本轮未读取的详情保存在 checkpoint 队列，下轮继续，
-不因分页游标前进而丢失。仅内容变化会产生新的 Resource Version 和下游审核任务。
+不因分页游标前进而丢失。详情解析暂时失败也留在队列重试，不会触发整次首轮扫描重做。
+仅内容变化会产生新的 Resource Version 和下游审核任务。
 分类结果仍可能包含纯配信或混合
 活动，所以分类页只用于发现，不被当作已经核实的线下演出证据。Streaming+ 纯配信
 场次在产品层按场馆链接排除；同一详情页中仍保留实体场次。直接 HTTP 可能返回

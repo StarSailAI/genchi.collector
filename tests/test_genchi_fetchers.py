@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from allfeeds_sdk import FetchContext, FetchRequest
+from allfeeds_sdk import FetchContext, FetchRequest, TransientError
 from allfeeds_worker.sink import _content_hash
 from bs4 import BeautifulSoup
 from genchi_fetchers import (
@@ -505,6 +505,35 @@ def test_eplus_jpop_search_uses_browser_and_discovers_detail(monkeypatch):
     assert requested == [root, detail]
 
 
+def test_eplus_detail_failure_keeps_retry_without_repeating_bootstrap(monkeypatch):
+    root = "https://eplus.jp/sf/live/j-pop"
+    detail = "https://eplus.jp/sf/detail/3369690001"
+
+    class Response:
+        text = f'<a href="{detail}">YOASOBI</a>'
+
+    def get(_self, url, **_kwargs):
+        if url == root:
+            return Response()
+        raise TransientError("temporary detail failure")
+
+    monkeypatch.setattr("genchi_fetchers.fetchers.SafeHttpClient.get", get)
+    ctx = context([])
+    report = EplusTicketFetcher().fetch(
+        ctx,
+        FetchRequest(
+            task_id=5, source_id="eplus-jpop-tickets", operation="fetch",
+            config={"discovery_scope": "jpop", "category_urls": [root],
+                    "project_keywords": {}, "pages_per_root": 1,
+                    "browser_fallback": False},
+            tags=("scope:jpop-offline",),
+        ),
+    )
+    assert report.status == "partial"
+    assert ctx.checkpoint()["bootstrap_complete"] is True
+    assert ctx.checkpoint()["pending_detail_urls"] == [detail]
+
+
 def test_eplus_jpop_seed_and_pending_queue_do_not_lose_unread_details(monkeypatch):
     root = "https://eplus.jp/sf/live/j-pop"
     ids = ("3369690001", "4512340002", "4512340003")
@@ -816,6 +845,36 @@ def test_pia_jpop_skips_oversized_ticket_page_instead_of_dropping_rounds(monkeyp
     assert report.status == "partial"
     assert report.details["incomplete_details"] == [detail]
     assert records == []
+
+
+def test_pia_detail_failure_keeps_retry_without_repeating_bootstrap(monkeypatch):
+    root = "https://t.pia.jp/music/hgk/"
+    detail = "https://t.pia.jp/pia/event/event.do?eventBundleCd=b2600002"
+
+    class Response:
+        url = root
+        content = f'<a href="{detail}">公演</a>'.encode()
+
+    def get(_self, url, **_kwargs):
+        if url == root:
+            return Response()
+        raise TransientError("temporary detail failure")
+
+    monkeypatch.setattr("genchi_fetchers.fetchers.SafeHttpClient.get", get)
+    ctx = context([])
+    report = PiaTicketFetcher().fetch(
+        ctx,
+        FetchRequest(
+            task_id=6, source_id="pia-jpop-tickets", operation="fetch",
+            config={"discovery_scope": "jpop", "discovery_urls": [root],
+                    "search_keywords": [], "keywords_per_run": 0,
+                    "refresh_details_per_run": 0, "browser_fallback": False},
+            tags=("scope:jpop-offline",),
+        ),
+    )
+    assert report.status == "partial"
+    assert ctx.checkpoint()["bootstrap_complete"] is True
+    assert ctx.checkpoint()["pending_detail_urls"] == [detail]
 
 
 def test_pia_jpop_seed_and_pending_queue_preserve_unread_details(monkeypatch):

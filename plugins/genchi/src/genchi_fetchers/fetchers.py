@@ -1185,6 +1185,7 @@ class EplusTicketFetcher(FetcherPlugin):
                         "kind": "pending", "sourceUrl": parsed[1], "trustedCategory": False,
                     }]
         errors: list[str] = []
+        category_failed = False
         list_pages = 0
         seed_pages = 0
         search_pages = 0
@@ -1288,6 +1289,7 @@ class EplusTicketFetcher(FetcherPlugin):
                     raise
                 except TransientError as exc:
                     errors.append(f"{page_url}: {exc}")
+                    category_failed = True
                     break
                 list_pages += 1
                 for page_id, detail_url in _eplus_discover_details(html, page_url):
@@ -1436,7 +1438,9 @@ class EplusTicketFetcher(FetcherPlugin):
                 "detail_cursor": detail_cursor,
                 "keyword_cursor": keyword_cursor,
                 "pending_detail_urls": pending_urls,
-                "bootstrap_complete": not bootstrap or not errors,
+                # Detail failures stay in pending_detail_urls. They must not
+                # force a second bulk category scan on the next daily run.
+                "bootstrap_complete": not bootstrap or not category_failed,
             }
         )
         return FetchReport(
@@ -1882,6 +1886,7 @@ class PiaTicketFetcher(FetcherPlugin):
                         "kind": "pending", "sourceUrl": parsed[1], "trustedCategory": False,
                     }]
         errors: list[str] = []
+        discovery_failed = False
         discovery_pages = 0
         sale_pages = 0
         missing_details: list[str] = []
@@ -1957,6 +1962,7 @@ class PiaTicketFetcher(FetcherPlugin):
                 raise
             except TransientError as exc:
                 errors.append(f"{url}: {exc}")
+                discovery_failed = True
                 continue
             discovery_pages += 1
             for page_id, detail_url in _pia_discover_details(html, url):
@@ -2150,7 +2156,9 @@ class PiaTicketFetcher(FetcherPlugin):
                 "tracked_detail_urls": list(tracked_set)[-config.max_tracked_details :],
                 "refresh_cursor": refresh_cursor,
                 "pending_detail_urls": pending_urls,
-                "bootstrap_complete": not bootstrap or not errors,
+                # Failed details and sales remain pending for incremental
+                # retries; only a failed discovery page repeats bootstrap.
+                "bootstrap_complete": not bootstrap or not discovery_failed,
             }
         )
         return FetchReport(
