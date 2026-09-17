@@ -848,6 +848,33 @@ def _eplus_doors_at(article: Any, starts_at: str | None) -> str | None:
     return f"{starts_at[:10]}T{int(match.group(1)):02d}:{match.group(2)}:00+09:00"
 
 
+def _eplus_article_start(article: Any) -> str | None:
+    date_node = article.select_one(".block-ticket-article__date")
+    time_node = article.select_one(".block-ticket-article__time")
+    if not date_node or not time_node:
+        return None
+    date = re.search(r"(20\d{2})/(\d{1,2})/(\d{1,2})", date_node.get_text(" ", strip=True))
+    clock = re.search(r"開演\s*[：:]?\s*(\d{1,2}):(\d{2})", time_node.get_text(" ", strip=True))
+    if not date or not clock:
+        return None
+    return (f"{date.group(1)}-{int(date.group(2)):02d}-{int(date.group(3)):02d}"
+            f"T{int(clock.group(1)):02d}:{clock.group(2)}")
+
+
+def _eplus_article_variant(article: Any, page_id: str) -> str | None:
+    variants: set[str] = set()
+    for button in article.select('button[onclick*="selectTicket"]'):
+        command = str(button.get("onclick") or "")
+        parts = {key: re.search(rf"(?:^|[:=])P{key}=(\d+)", command)
+                 for key in (1, 3, 21)}
+        if all(parts.values()):
+            variants.add(
+                f"{page_id}-P{int(parts[1].group(1)):03d}"
+                f"{int(parts[3].group(1)):04d}P021{int(parts[21].group(1)):03d}"
+            )
+    return next(iter(variants)) if len(variants) == 1 else None
+
+
 def _eplus_parse_detail(
     html: str,
     *,
@@ -878,6 +905,31 @@ def _eplus_parse_detail(
         return None
 
     articles = soup.select("article.block-ticket-article")
+    if len(articles) > len(jsonld_events):
+        # e+ sometimes omits a visible performance from JSON-LD. Recover only
+        # an aligned tail with a native ticket identity; never shift receptions
+        # onto the wrong date when an earlier performance is missing.
+        starts = [_eplus_article_start(article) for article in articles]
+        if (not all(starts) or any(
+            starts[index] != str(event.get("startDate") or "")[:16]
+            for index, event in enumerate(jsonld_events)
+        )):
+            raise TransientError("e+ visible performances do not align with JSON-LD")
+        for article, start in zip(articles[len(jsonld_events):], starts[len(jsonld_events):], strict=True):
+            variant = _eplus_article_variant(article, page_id)
+            venue = article.select_one(".block-ticket-article__venue")
+            region = article.select_one(".block-ticket-article__region")
+            if not variant or not venue:
+                raise TransientError("e+ visible performance lacks a native identity or venue")
+            jsonld_events.append({
+                "@type": "Event", "name": title,
+                "url": f"https://eplus.jp/sf/detail/{variant}", "startDate": start,
+                "location": {
+                    "@type": "Place", "name": venue.get_text(" ", strip=True),
+                    "address": {"addressRegion": region.get_text(" ", strip=True).strip("（）()")
+                                if region else None, "addressCountry": "日本"},
+                },
+            })
     events: list[dict[str, Any]] = []
     for index, event in enumerate(jsonld_events):
         event_url = str(event.get("url") or page_url)
@@ -970,10 +1022,14 @@ class EplusTicketConfig(BaseModel):
     category_urls: tuple[str, ...] = EPLUS_CATEGORY_URLS
     discovery_scope: str = "anime"
     seed_urls: tuple[str, ...] = ()
+    search_keywords: tuple[str, ...] = ()
+    queries_per_run: int = Field(default=0, ge=0, le=20)
     roots_per_run: int = Field(default=2, ge=1, le=7)
     pages_per_root: int = Field(default=2, ge=1, le=10)
+    bootstrap_pages_per_root: int | None = Field(default=None, ge=1, le=10)
     refresh_details_per_run: int = Field(default=20, ge=0, le=200)
     max_detail_pages: int = Field(default=80, ge=1, le=500)
+    bootstrap_max_detail_pages: int | None = Field(default=None, ge=1, le=500)
     max_tracked_details: int = Field(default=2000, ge=50, le=10_000)
     max_content_chars: int = Field(default=120_000, ge=1000, le=500_000)
     rate_limit_seconds: float = Field(default=2.5, ge=1.0, le=60.0)
@@ -1000,7 +1056,19 @@ class EplusTicketConfig(BaseModel):
                 raise ValueError("category_urls must match the configured public e+ discovery scope")
         if self.discovery_scope == "jpop" and self.seed_urls:
             raise ValueError("jpop discovery does not accept unrelated word-page seeds")
+        if self.queries_per_run > len(self.search_keywords):
+            raise ValueError("queries_per_run exceeds configured search_keywords")
+        if self.search_keywords and self.discovery_scope != "jpop":
+            raise ValueError("ticket artist searches are only configured for jpop")
         return self
+
+    @field_validator("search_keywords")
+    @classmethod
+    def validate_search_keywords(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        cleaned = tuple(keyword.strip() for keyword in value)
+        if any(not keyword or len(keyword) > 100 for keyword in cleaned):
+            raise ValueError("search keywords must be 1-100 characters")
+        return cleaned
 
     @field_validator("seed_urls")
     @classmethod
@@ -1034,6 +1102,7 @@ class EplusTicketFetcher(FetcherPlugin):
         url: str,
         *,
         require_events: bool = False,
+        require_details: bool = False,
     ) -> str:
         direct_html: str | None = None
         try:
@@ -1041,7 +1110,8 @@ class EplusTicketFetcher(FetcherPlugin):
             direct_html = response.text
             if "混雑のお知らせ" in direct_html:
                 raise TransientError("e+ returned its congestion page")
-            if not require_events or _eplus_jsonld_events(BeautifulSoup(direct_html, "lxml")):
+            if ((not require_events or _eplus_jsonld_events(BeautifulSoup(direct_html, "lxml")))
+                    and (not require_details or _eplus_discover_details(direct_html, url))):
                 return direct_html
         except RateLimitError:
             raise
@@ -1058,6 +1128,9 @@ class EplusTicketFetcher(FetcherPlugin):
     def fetch(self, context: FetchContext, request: FetchRequest) -> FetchReport:
         config = EplusTicketConfig.model_validate(request.config)
         checkpoint = context.checkpoint()
+        bootstrap = config.discovery_scope == "jpop" and not checkpoint.get("bootstrap_complete")
+        page_budget = (config.bootstrap_pages_per_root if bootstrap else None) or config.pages_per_root
+        detail_budget = (config.bootstrap_max_detail_pages if bootstrap else None) or config.max_detail_pages
         client = SafeHttpClient(
             user_agent="GenchiCollector/0.1 (+https://genchi.news)",
             timeout_seconds=60,
@@ -1089,9 +1162,20 @@ class EplusTicketFetcher(FetcherPlugin):
         refresh_cursor = int(checkpoint.get("refresh_cursor") or 0)
         candidates: dict[str, str] = {}
         discoveries: dict[str, list[dict[str, Any]]] = {}
+        pending: dict[str, str] = {}
+        if config.discovery_scope == "jpop":
+            for value in checkpoint.get("pending_detail_urls") or []:
+                parsed = _eplus_detail_url("https://eplus.jp", str(value))
+                if parsed and parsed[1] not in tracked:
+                    pending.setdefault(*parsed)
+                    candidates.setdefault(*parsed)
+                    discoveries[parsed[0]] = [{
+                        "kind": "pending", "sourceUrl": parsed[1], "trustedCategory": False,
+                    }]
         errors: list[str] = []
         list_pages = 0
         seed_pages = 0
+        search_pages = 0
         missing_details: list[str] = []
 
         def add_candidate(
@@ -1130,6 +1214,29 @@ class EplusTicketFetcher(FetcherPlugin):
                     trusted_category=False,
                 )
 
+        keyword_cursor = int(checkpoint.get("keyword_cursor") or 0)
+        if config.search_keywords and config.queries_per_run:
+            count = min(config.queries_per_run, len(config.search_keywords))
+            for offset in range(count):
+                keyword = config.search_keywords[
+                    (keyword_cursor + offset) % len(config.search_keywords)
+                ]
+                search_url = f"https://eplus.jp/sf/search?{urlencode({'keyword': keyword})}"
+                try:
+                    html = self._html(client, browser, search_url, require_details=True)
+                except RateLimitError:
+                    raise
+                except TransientError as exc:
+                    errors.append(f"{search_url}: {exc}")
+                    continue
+                search_pages += 1
+                for page_id, detail_url in _eplus_discover_details(html, search_url):
+                    add_candidate(
+                        page_id, detail_url, kind="search", source_url=search_url,
+                        trusted_category=False,
+                    )
+            keyword_cursor = (keyword_cursor + count) % len(config.search_keywords)
+
         selected_roots = [
             config.category_urls[(root_cursor + offset) % len(config.category_urls)]
             for offset in range(min(config.roots_per_run, len(config.category_urls)))
@@ -1137,7 +1244,7 @@ class EplusTicketFetcher(FetcherPlugin):
         for root in selected_roots:
             page_url = root
             discovered_next: str | None = None
-            for page_index in range(config.pages_per_root):
+            for page_index in range(page_budget):
                 if page_index == 1:
                     page_url = page_cursors.get(root, f"{root}/p2")
                 elif page_index > 1:
@@ -1145,7 +1252,7 @@ class EplusTicketFetcher(FetcherPlugin):
                         break
                     page_url = discovered_next
                 try:
-                    html = self._html(client, browser, page_url)
+                    html = self._html(client, browser, page_url, require_details=True)
                 except UpstreamHTTPError as exc:
                     if exc.status_code in {404, 410} and page_index > 0:
                         # Inventory shrinks as ticket pages expire. A stale saved
@@ -1188,6 +1295,14 @@ class EplusTicketFetcher(FetcherPlugin):
                     )
             refresh_cursor = (refresh_cursor + count) % len(tracked)
 
+        if config.discovery_scope == "jpop":
+            for page_id, detail_url in list(candidates.items()):
+                if detail_url in tracked and not any(
+                    item["kind"] == "refresh" for item in discoveries[page_id]
+                ):
+                    candidates.pop(page_id)
+                    discoveries.pop(page_id)
+
         if not candidates and errors:
             raise TransientError(f"all e+ discovery pages failed: {errors[0]}")
 
@@ -1197,9 +1312,10 @@ class EplusTicketFetcher(FetcherPlugin):
         ticket_count = 0
         tracked_set = dict.fromkeys(tracked)
         selected_details, detail_cursor = _select_ticket_details(
-            candidates, discoveries, config.max_detail_pages,
-            int(checkpoint.get("detail_cursor") or 0),
+            candidates, discoveries, detail_budget,
+            0 if config.discovery_scope == "jpop" else int(checkpoint.get("detail_cursor") or 0),
         )
+        completed: set[str] = set()
         for page_id, detail_url in selected_details:
             discovery = discoveries.get(page_id, [])
             category_discovered = any(item.get("kind") == "platform_category" for item in discovery)
@@ -1210,7 +1326,7 @@ class EplusTicketFetcher(FetcherPlugin):
                     page_id=page_id,
                     page_url=detail_url,
                     project_keywords=config.project_keywords,
-                    category_discovered=category_discovered,
+                    category_discovered=category_discovered or config.discovery_scope == "jpop",
                     max_content_chars=config.max_content_chars,
                 )
             except UpstreamHTTPError as exc:
@@ -1218,6 +1334,7 @@ class EplusTicketFetcher(FetcherPlugin):
                     raise
                 missing_details.append(detail_url)
                 tracked_set.pop(detail_url, None)
+                completed.add(detail_url)
                 continue
             except RateLimitError:
                 raise
@@ -1226,6 +1343,7 @@ class EplusTicketFetcher(FetcherPlugin):
                 continue
             if not parsed:
                 rejected += 1
+                completed.add(detail_url)
                 continue
             project = str(parsed["project"])
             tags = tuple(tag for tag in request.tags if not str(tag).startswith("project:")) + (
@@ -1251,7 +1369,10 @@ class EplusTicketFetcher(FetcherPlugin):
                             "matchedKeywords": parsed["matchedKeywords"],
                             "relatedGenres": parsed["relatedGenres"],
                             "nativeCategories": parsed["relatedGenres"],
-                            "discovery": discovery,
+                            "discovery": discovery if config.discovery_scope == "anime" else [{
+                                "kind": "platform_detail", "sourceUrl": detail_url,
+                                "trustedCategory": False,
+                            }],
                             "events": events,
                         },
                         "media": parsed["media"],
@@ -1260,11 +1381,26 @@ class EplusTicketFetcher(FetcherPlugin):
                 )
             )
             tracked_set[detail_url] = None
+            completed.add(detail_url)
             emitted += 1
             event_count += len(events)
             ticket_count += sum(len(event["ticketWindows"]) for event in events)
 
         tracked = list(tracked_set)[-config.max_tracked_details :]
+        if config.discovery_scope == "jpop":
+            # A category page can expose more details than this run can read.
+            # Carry every unprocessed URL forward before advancing pagination.
+            for page_id, detail_url in candidates.items():
+                if detail_url not in tracked_set and detail_url not in completed:
+                    pending.setdefault(page_id, detail_url)
+            attempted = {url for _, url in selected_details}
+            pending_urls = [
+                url for url in pending.values()
+                if url not in tracked_set and url not in completed
+            ]
+            pending_urls.sort(key=lambda url: url in attempted)
+        else:
+            pending_urls = []
         context.set_checkpoint(
             {
                 "last_success_at": datetime.now(UTC).isoformat(),
@@ -1274,6 +1410,9 @@ class EplusTicketFetcher(FetcherPlugin):
                 "tracked_detail_urls": tracked,
                 "refresh_cursor": refresh_cursor,
                 "detail_cursor": detail_cursor,
+                "keyword_cursor": keyword_cursor,
+                "pending_detail_urls": pending_urls,
+                "bootstrap_complete": not bootstrap or not errors,
             }
         )
         return FetchReport(
@@ -1281,6 +1420,9 @@ class EplusTicketFetcher(FetcherPlugin):
             details={
                 "list_pages": list_pages,
                 "seed_pages": seed_pages,
+                "search_pages": search_pages,
+                "pending_details": len(pending_urls),
+                "bootstrap": bootstrap,
                 "candidates": len(candidates),
                 "selected_details": len(selected_details),
                 "details": emitted,
@@ -1585,10 +1727,12 @@ class PiaTicketConfig(BaseModel):
     discovery_scope: str = "anime"
     discovery_urls: tuple[str, ...] = PIA_DISCOVERY_URLS
     search_keywords: tuple[str, ...] = TICKET_PROJECT_QUERIES
+    seed_detail_urls: tuple[str, ...] = ()
     keywords_per_run: int = Field(default=4, ge=0, le=30)
     refresh_details_per_run: int = Field(default=10, ge=0, le=100)
     max_detail_pages: int = Field(default=40, ge=1, le=200)
-    max_sales_per_detail: int = Field(default=12, ge=1, le=50)
+    bootstrap_max_detail_pages: int | None = Field(default=None, ge=1, le=200)
+    max_sales_per_detail: int = Field(default=12, ge=1, le=150)
     max_tracked_details: int = Field(default=1500, ge=20, le=10_000)
     max_content_chars: int = Field(default=120_000, ge=1000, le=500_000)
     rate_limit_seconds: float = Field(default=2.0, ge=1.0, le=60.0)
@@ -1608,7 +1752,18 @@ class PiaTicketConfig(BaseModel):
             or self.search_keywords
         ):
             raise ValueError("jpop discovery requires the Pia 邦楽 category without keyword searches")
+        if self.seed_detail_urls and self.discovery_scope != "jpop":
+            raise ValueError("seed_detail_urls are only configured for jpop")
         return self
+
+    @field_validator("seed_detail_urls")
+    @classmethod
+    def validate_seed_detail_urls(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for url in value:
+            parsed = _pia_detail_url("https://t.pia.jp", url)
+            if not parsed or parsed[1] != url:
+                raise ValueError("seed_detail_urls must be canonical public Pia event URLs")
+        return value
 
     @field_validator("discovery_urls")
     @classmethod
@@ -1664,6 +1819,8 @@ class PiaTicketFetcher(FetcherPlugin):
     def fetch(self, context: FetchContext, request: FetchRequest) -> FetchReport:
         config = PiaTicketConfig.model_validate(request.config)
         checkpoint = context.checkpoint()
+        bootstrap = config.discovery_scope == "jpop" and not checkpoint.get("bootstrap_complete")
+        detail_budget = (config.bootstrap_max_detail_pages if bootstrap else None) or config.max_detail_pages
         client = SafeHttpClient(
             user_agent="GenchiCollector/0.1 (+https://genchi.news)",
             timeout_seconds=60,
@@ -1690,6 +1847,16 @@ class PiaTicketFetcher(FetcherPlugin):
         refresh_cursor = int(checkpoint.get("refresh_cursor") or 0)
         candidates: dict[str, str] = {}
         discoveries: dict[str, list[dict[str, Any]]] = {}
+        pending: dict[str, str] = {}
+        if config.discovery_scope == "jpop":
+            for value in checkpoint.get("pending_detail_urls") or []:
+                parsed = _pia_detail_url("https://t.pia.jp", str(value))
+                if parsed and parsed[1] not in tracked:
+                    pending.setdefault(*parsed)
+                    candidates.setdefault(*parsed)
+                    discoveries[parsed[0]] = [{
+                        "kind": "pending", "sourceUrl": parsed[1], "trustedCategory": False,
+                    }]
         errors: list[str] = []
         discovery_pages = 0
         sale_pages = 0
@@ -1717,6 +1884,13 @@ class PiaTicketFetcher(FetcherPlugin):
             known = discoveries.setdefault(page_id, [])
             if discovery not in known:
                 known.append(discovery)
+
+        for url in config.seed_detail_urls:
+            parsed = _pia_detail_url("https://t.pia.jp", url)
+            if parsed:
+                add_candidate(
+                    parsed[0], parsed[1], kind="platform_seed", source_url=url,
+                )
 
         trusted_discovery_urls = {
             url
@@ -1785,6 +1959,13 @@ class PiaTicketFetcher(FetcherPlugin):
                         source_url=tracked[(refresh_cursor + offset) % len(tracked)],
                     )
             refresh_cursor = (refresh_cursor + count) % len(tracked)
+        if config.discovery_scope == "jpop":
+            for page_id, detail_url in list(candidates.items()):
+                if detail_url in tracked and not any(
+                    item["kind"] == "refresh" for item in discoveries[page_id]
+                ):
+                    candidates.pop(page_id)
+                    discoveries.pop(page_id)
         if not candidates and errors:
             raise TransientError(f"all Ticket Pia discovery pages failed: {errors[0]}")
 
@@ -1793,9 +1974,10 @@ class PiaTicketFetcher(FetcherPlugin):
         ticket_count = 0
         tracked_set = dict.fromkeys(tracked)
         selected_details, detail_cursor = _select_ticket_details(
-            candidates, discoveries, config.max_detail_pages,
-            int(checkpoint.get("detail_cursor") or 0),
+            candidates, discoveries, detail_budget,
+            0 if config.discovery_scope == "jpop" else int(checkpoint.get("detail_cursor") or 0),
         )
+        completed: set[str] = set()
         for page_id, detail_url in selected_details:
             try:
                 detail_html = self._html(client, browser, detail_url)
@@ -1804,6 +1986,7 @@ class PiaTicketFetcher(FetcherPlugin):
                     raise
                 missing_details.append(detail_url)
                 tracked_set.pop(detail_url, None)
+                completed.add(detail_url)
                 continue
             except RateLimitError:
                 raise
@@ -1907,7 +2090,10 @@ class PiaTicketFetcher(FetcherPlugin):
                             "project": project,
                             "matchedKeywords": matched_keywords,
                             "nativeCategories": [],
-                            "discovery": discoveries.get(page_id, []),
+                            "discovery": discoveries.get(page_id, []) if config.discovery_scope == "anime" else [{
+                                "kind": "platform_detail", "sourceUrl": detail_url,
+                                "trustedCategory": False,
+                            }],
                             "events": events,
                         },
                         "media": [{"type": "image", "url": image}] if image else [],
@@ -1916,9 +2102,22 @@ class PiaTicketFetcher(FetcherPlugin):
                 )
             )
             tracked_set[detail_url] = None
+            completed.add(detail_url)
             emitted += 1
             event_count += len(events)
             ticket_count += sum(len(event["ticketWindows"]) for event in events)
+        if config.discovery_scope == "jpop":
+            for page_id, detail_url in candidates.items():
+                if detail_url not in tracked_set and detail_url not in completed:
+                    pending.setdefault(page_id, detail_url)
+            attempted = {url for _, url in selected_details}
+            pending_urls = [
+                url for url in pending.values()
+                if url not in tracked_set and url not in completed
+            ]
+            pending_urls.sort(key=lambda url: url in attempted)
+        else:
+            pending_urls = []
         context.set_checkpoint(
             {
                 "last_success_at": datetime.now(UTC).isoformat(),
@@ -1926,6 +2125,8 @@ class PiaTicketFetcher(FetcherPlugin):
                 "detail_cursor": detail_cursor,
                 "tracked_detail_urls": list(tracked_set)[-config.max_tracked_details :],
                 "refresh_cursor": refresh_cursor,
+                "pending_detail_urls": pending_urls,
+                "bootstrap_complete": not bootstrap or not errors,
             }
         )
         return FetchReport(
@@ -1934,6 +2135,8 @@ class PiaTicketFetcher(FetcherPlugin):
                 "discovery_pages": discovery_pages,
                 "candidates": len(candidates),
                 "selected_details": len(selected_details),
+                "pending_details": len(pending_urls),
+                "bootstrap": bootstrap,
                 "details": emitted,
                 "sale_pages": sale_pages,
                 "events": event_count,

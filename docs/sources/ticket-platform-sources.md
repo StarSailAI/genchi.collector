@@ -8,7 +8,8 @@ Genchi 将 e+、チケットぴあ和ローチケ作为日本综合票务的第�
 | --- | --- | --- | --- |
 | `eplus-anime-tickets` | `genchi.eplus_ticket` | 动漫地区页、作品关键词页 | HTML/JSON-LD，必要时使用 Camoufox |
 | `pia-anime-tickets` | `genchi.pia_ticket` | 动漫首页、动漫/声优/游戏标签、轮换关键词 | 活动页发现销售页，销售页提取精确场次和受付时间 |
-| `pia-jpop-tickets` | `genchi.pia_ticket` | ぴあ官方「邦楽」分类页 | 小批量逐页核对销售页；缺页或超过上限的详情整页跳过并报告 |
+| `eplus-jpop-tickets` | `genchi.eplus_ticket` | e+ J-pop 分类分页与公开艺人搜索 | 未读取详情留在 checkpoint，逐轮刷新已收录详情 |
+| `pia-jpop-tickets` | `genchi.pia_ticket` | ぴあ官方「邦楽」精选页与经核验的活动直链 | 未读取详情留在 checkpoint；缺页或超过上限的详情整页跳过并报告 |
 | `sekainoowari-tour-official` | `genchi.official_site` | SEKAI NO OWARI 2027 巡演官网 | 原样保存官网全文并逐场、逐轮次提取；与既有巡演一一核对 |
 | `lawson-anime-tickets` | `genchi.lawson_ticket` | 动漫、声优、游戏和重点作品轮换关键词 | Camoufox 渲染搜索结果卡 |
 
@@ -44,7 +45,7 @@ docker-compose exec control allfeeds-control task-submit --source lawson-anime-t
 
 来源按东京时间每日错峰运行。Pia 对普通 HTTP 失败使用 Camoufox 回退；Lawson 始终使用 Camoufox，并通过 `browser_api` 和域名资源锁限制并发。
 
-`pia-jpop-tickets` 独立于动漫关键词和分类。官方[邦楽入口](https://t.pia.jp/music/hgk/)只作为发现途径，不能证明每个详情都是符合要求的实体 J-pop 演出。每轮最多选择 3 个详情，每个详情最多允许 12 个销售入口；超过上限、销售页缺失或临时失败时，整条详情不会作为完整数据发出，任务报告列在 `incomplete_details`。艺人归属、实体场馆、场次与受付进入独立批量 AI 二审，通过原生数据一致性校验后自动公开；证据不足的仍保留待核。2026-09-16 线上手动验收选择 3 个详情：ORANGE RANGE 的 77 个销售入口超过上限，被跳过；另 2 个详情提取 26 个实体场次、35 个售票窗口，当时均进入审核；新流程通过二审后可自动显示。日调度因此以同样上限开启，后续扩大覆盖前需解决大型巡演详情的完整采集及跨平台合并。
+`pia-jpop-tickets` 独立于动漫关键词和分类。官方[邦楽入口](https://t.pia.jp/music/hgk/)只展示精选活动，不是完整在售清单，也不能证明每个详情都是符合要求的实体 J-pop 演出。经核验的 [YOASOBI 巡演票务页](https://t.pia.jp/pia/event/event.do?eventBundleCd=b2670846)作为直链补足这类未进入精选页的活动；后续应继续扩展可验证的公开发现入口。首次扩量扫描最多选择 10 个详情，日常每轮最多选择 6 个详情，每个详情最多读取 120 个销售入口；本轮未读取详情保存在 checkpoint 队列。超过上限、销售页缺失或临时失败时，整条详情不会作为完整数据发出，任务报告列在 `incomplete_details`。艺人归属、实体场馆、场次与受付进入独立批量 AI 二审，通过原生数据一致性校验后自动公开；证据不足的仍保留待核。2026-09-16 线上手动验收选择 3 个详情：ORANGE RANGE 的 77 个销售入口在当时的 12 页上限下被跳过；另 2 个详情提取 26 个实体场次、35 个售票窗口。新上限需线上重新验收，跨平台合并仍需逐案核对。
 
 ぴあ的详情页 `og:title` 有时只有艺人名。J-pop 采集保留它为 `performerName`，只有销售卡片一致给出带引号的正式活动名时，才把它写入 `formalEventTitle` 和活动标题，并保留卡片原文 `titleEvidence`。卡片仅显示艺人名、多个不同活动名或没有正式名时，不允许自动发布。销售卡片中的具体轮次名优先于销售页的泛称，但轮次身份键沿用既有算法，避免改名产生重复节点。票务页的场次和轮次不等于巡演官网的全部公告；官网中的粉丝俱乐部先行、结果和入金时间应作为独立来源核验，再合并到同一巡演与适用场次。
 

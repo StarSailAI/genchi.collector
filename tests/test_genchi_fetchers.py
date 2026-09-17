@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from allfeeds_sdk import FetchContext, FetchRequest
+from allfeeds_worker.sink import _content_hash
 from bs4 import BeautifulSoup
 from genchi_fetchers import (
     AsobiTicketFetcher,
@@ -15,6 +16,7 @@ from genchi_fetchers.fetchers import (
     EplusTicketConfig,
     PiaTicketConfig,
     _eplus_next_page,
+    _eplus_parse_detail,
     _eplus_ticket_phase,
     _official_tour_schedule,
     _pia_formal_title,
@@ -455,6 +457,124 @@ def test_eplus_jpop_scope_rejects_anime_or_arbitrary_roots():
         EplusTicketConfig(discovery_scope="anime", category_urls=["https://eplus.jp/sf/live/j-pop"])
 
 
+def test_eplus_jpop_search_and_pending_queue_do_not_lose_unread_details(monkeypatch):
+    root = "https://eplus.jp/sf/live/j-pop"
+    search = "https://eplus.jp/sf/search?keyword=YOASOBI"
+    ids = ("3369690001", "4512340002", "4512340003")
+    pages = {
+        root: "".join(f'<a href="/sf/detail/{page_id}">公演</a>' for page_id in ids[1:]),
+        search: f'<a href="/sf/detail/{ids[0]}">YOASOBI</a>',
+    }
+    for page_id in ids:
+        pages[f"https://eplus.jp/sf/detail/{page_id}"] = (
+            '<script type="application/ld+json">'
+            '{"@type":"Event","name":"J-POP LIVE",'
+            f'"url":"https://eplus.jp/sf/detail/{page_id}-P0030001P021001",'
+            '"startDate":"2026-11-20T19:00",'
+            '"location":{"@type":"Place","name":"テストホール",'
+            '"address":{"addressRegion":"東京都","addressCountry":"日本"}}}'
+            '</script><article class="block-ticket-article"></article>'
+        )
+
+    class Response:
+        def __init__(self, url):
+            self.text = pages[url]
+
+    monkeypatch.setattr("genchi_fetchers.fetchers.SafeHttpClient.get",
+                        lambda _self, url, **_kwargs: Response(url))
+    checkpoint = {}
+    seen = []
+    first_record = None
+    for expected_pending in (2, 1, 0):
+        records = []
+        ctx = context(records, checkpoint)
+        report = EplusTicketFetcher().fetch(
+            ctx,
+            FetchRequest(
+                task_id=5, source_id="eplus-jpop-tickets", operation="fetch",
+                config={"discovery_scope": "jpop", "category_urls": [root],
+                        "search_keywords": ["YOASOBI"], "queries_per_run": 1,
+                        "project_keywords": {}, "pages_per_root": 1,
+                        "max_detail_pages": 1, "refresh_details_per_run": 0,
+                        "browser_fallback": False},
+                tags=("scope:jpop-offline",),
+            ),
+        )
+        assert report.details["pending_details"] == expected_pending
+        assert len(records) == 1
+        seen.append(records[0].external_id)
+        if first_record is None:
+            first_record = records[0]
+        checkpoint = ctx.checkpoint()
+    assert seen == [f"eplus:detail:{page_id}" for page_id in ids]
+    refreshed = []
+    EplusTicketFetcher().fetch(
+        context(refreshed, checkpoint),
+        FetchRequest(
+            task_id=5, source_id="eplus-jpop-tickets", operation="fetch",
+            config={"discovery_scope": "jpop", "category_urls": [root],
+                    "search_keywords": ["YOASOBI"], "queries_per_run": 1,
+                    "project_keywords": {}, "pages_per_root": 1,
+                    "max_detail_pages": 1, "refresh_details_per_run": 1,
+                    "browser_fallback": False},
+            tags=("scope:jpop-offline",),
+        ),
+    )
+    assert _content_hash(first_record) == _content_hash(refreshed[0])
+
+
+def test_eplus_search_falls_back_when_direct_html_has_no_ticket_links(monkeypatch):
+    url = "https://eplus.jp/sf/search?keyword=YOASOBI"
+
+    class Response:
+        text = "<html><body>検索中</body></html>"
+
+    class Client:
+        def get(self, *_args, **_kwargs):
+            return Response()
+
+    class Browser:
+        def render(self, _url, *, selector):
+            assert _url == url and selector == "body"
+            return '<a href="/sf/detail/3369690001">YOASOBI</a>', url
+
+    assert "3369690001" in EplusTicketFetcher._html(
+        Client(), Browser(), url, require_details=True,
+    )
+
+
+def test_eplus_recovers_visible_performance_missing_from_jsonld():
+    page_id = "3369690001"
+    def article(day, performance):
+        return (
+            '<article class="block-ticket-article">'
+            f'<span class="block-ticket-article__date">2026/11/{day}(日)</span>'
+            '<span class="block-ticket-article__time">開演：17:00 (開場 14:30)</span>'
+            '<a class="block-ticket-article__place" href="/sf/venue/0620030">'
+            '<span class="block-ticket-article__venue">札幌ドーム</span>'
+            '<small class="block-ticket-article__region">（北海道）</small></a>'
+            f'<button onclick="selectTicket(this, \'https://atom.eplus.jp/?prm=P1=0003:P3=0010:P21={performance}\');"></button>'
+            '</article>'
+        )
+    html = (
+        '<script type="application/ld+json">'
+        '{"@type":"Event","name":"YOASOBI","startDate":"2026-11-14T17:00",'
+        f'"url":"https://eplus.jp/sf/detail/{page_id}-P0030010P021002",'
+        '"location":{"@type":"Place","name":"札幌ドーム"}}'
+        '</script>'
+        + article("14", "002") + article("15", "001")
+    )
+    parsed = _eplus_parse_detail(
+        html, page_id=page_id, page_url=f"https://eplus.jp/sf/detail/{page_id}",
+        project_keywords={}, category_discovered=True, max_content_chars=120_000,
+    )
+    assert parsed is not None
+    assert len(parsed["events"]) == 2
+    assert parsed["events"][1]["id"] == f"{page_id}-P0030010P021001"
+    assert parsed["events"][1]["startsAt"] == "2026-11-15T17:00+09:00"
+
+
+
 def test_pia_formal_title_requires_one_consistent_named_event():
     def sale(label):
         return ("id", "https://t.pia.jp/", label, "販売中")
@@ -605,11 +725,9 @@ def test_pia_ticket_discovers_sales_and_exact_performances(monkeypatch, scope, d
     else:
         assert records[0].title == heading
     assert payload["discovery"] == [
-        {
-            "kind": "platform_category",
-            "sourceUrl": discovery_url,
-            "trustedCategory": trusted,
-        }
+        ({"kind": "platform_category", "sourceUrl": discovery_url, "trustedCategory": True}
+         if scope == "anime" else
+         {"kind": "platform_detail", "sourceUrl": detail_url, "trustedCategory": False})
     ]
     event = payload["events"][0]
     assert event["name"] == records[0].title
@@ -654,6 +772,49 @@ def test_pia_jpop_skips_oversized_ticket_page_instead_of_dropping_rounds(monkeyp
     assert records == []
 
 
+def test_pia_jpop_seed_and_pending_queue_preserve_unread_details(monkeypatch):
+    root = "https://t.pia.jp/music/hgk/"
+    seeded = "https://t.pia.jp/pia/event/event.do?eventBundleCd=b2670846"
+    category = "https://t.pia.jp/pia/event/event.do?eventBundleCd=b2670001"
+    sale = "https://t.pia.jp/pia/ticketInformation.do?eventCd=2670846&rlsCd=001"
+    pages = {
+        root: f'<a href="{category}">公演</a>',
+        seeded: '<meta property="og:title" content="YOASOBI">'
+                f'<div class="ticketSalesCard-2024"><a href="{sale}">'
+                '<p class="ticketSalesCard-2024__title">「超惑星」先行</p></a></div>',
+        category: '<meta property="og:title" content="別の歌手">',
+        sale: '<div class="Y15-regular-section">'
+              '<dt class="Y15-event-date">2026/10/24(土)</dt>'
+              '<dd class="Y15-event-time">18:00 開演 ( 15:30 開場 )</dd>'
+              '<p class="Y15-event-site-place">会場：京セラドーム大阪 (大阪府)</p>'
+              '<input class="eventCd" value="2670846">'
+              '<input class="perfCd" value="001"></div>',
+    }
+
+    class Response:
+        def __init__(self, url):
+            self.url = url
+            self.content = pages[url].encode()
+
+    monkeypatch.setattr("genchi_fetchers.fetchers.SafeHttpClient.get",
+                        lambda _self, url, **_kwargs: Response(url))
+    records = []
+    ctx = context(records)
+    report = PiaTicketFetcher().fetch(
+        ctx,
+        FetchRequest(task_id=6, source_id="pia-jpop-tickets", operation="fetch",
+                     config={"discovery_scope": "jpop", "discovery_urls": [root],
+                             "search_keywords": [], "keywords_per_run": 0,
+                             "seed_detail_urls": [seeded], "project_keywords": {},
+                             "max_detail_pages": 1, "refresh_details_per_run": 0,
+                             "browser_fallback": False},
+                     tags=("scope:jpop-offline",)),
+    )
+    assert report.details["details"] == 1
+    assert records[0].external_id == "pia:detail:b2670846"
+    assert ctx.checkpoint()["pending_detail_urls"] == [category]
+
+
 def test_pia_jpop_scope_accepts_only_official_music_category():
     assert PiaTicketConfig(discovery_scope="jpop", discovery_urls=["https://t.pia.jp/music/hgk/"],
                            search_keywords=[]).discovery_scope == "jpop"
@@ -663,6 +824,9 @@ def test_pia_jpop_scope_accepts_only_official_music_category():
     with pytest.raises(ValueError):
         PiaTicketConfig(discovery_scope="jpop", discovery_urls=["https://t.pia.jp/music/hgk/"],
                         search_keywords=["人気"])
+    with pytest.raises(ValueError):
+        PiaTicketConfig(discovery_scope="jpop", discovery_urls=["https://t.pia.jp/music/hgk/"],
+                        search_keywords=[], seed_detail_urls=["https://evil.example/event"])
 
 
 def test_lawson_ticket_uses_browser_and_deduplicates_same_day(monkeypatch):

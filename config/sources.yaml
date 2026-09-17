@@ -433,12 +433,16 @@ sources:
     config:
       discovery_scope: jpop
       category_urls: [https://eplus.jp/sf/live/j-pop]
+      search_keywords: [YOASOBI]
+      queries_per_run: 1
       project_keywords: {}
       roots_per_run: 1
       pages_per_root: 2
-      refresh_details_per_run: 2
-      max_detail_pages: 6
-      max_tracked_details: 300
+      bootstrap_pages_per_root: 8
+      refresh_details_per_run: 4
+      max_detail_pages: 48
+      bootstrap_max_detail_pages: 64
+      max_tracked_details: 3000
       rate_limit_seconds: 3
       browser_fallback: true
     timeout_seconds: 1800
@@ -486,8 +490,8 @@ sources:
       resources: {browser_api: 1, domain:t.pia.jp: 1}
     tags: [country:JP, timezone:Asia/Tokyo, source:ticket-aggregator]
 
-  # Pia 邦楽 is a separate music pilot. Oversized ticket-sale pages are skipped
-  # rather than silently truncating rounds; every extracted performance is reviewed.
+  # Pia 邦楽 keeps a durable detail backlog. Large tours are read in full up to
+  # the explicit sale-page ceiling, rather than silently truncating rounds.
   - id: pia-jpop-tickets
     enabled: true
     fetcher: genchi.pia_ticket
@@ -497,12 +501,14 @@ sources:
       discovery_scope: jpop
       discovery_urls: [https://t.pia.jp/music/hgk/]
       search_keywords: []
+      seed_detail_urls: ['https://t.pia.jp/pia/event/event.do?eventBundleCd=b2670846']
       project_keywords: {}
       keywords_per_run: 0
       refresh_details_per_run: 1
-      max_detail_pages: 3
-      max_sales_per_detail: 12
-      max_tracked_details: 300
+      max_detail_pages: 6
+      bootstrap_max_detail_pages: 10
+      max_sales_per_detail: 120
+      max_tracked_details: 1000
       rate_limit_seconds: 4
       browser_fallback: true
     timeout_seconds: 3600
