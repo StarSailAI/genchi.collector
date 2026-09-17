@@ -223,7 +223,9 @@ def test_judge_rejects_missing_or_duplicate_results(monkeypatch):
     result = batch_review.judge(items, subjects=[], key="test",
                                 base="https://api.deepseek.com", model="test-model")
     assert result["one"]["decision"] == "APPROVE"
-    assert len(post.call_args.kwargs["json"]["messages"][1]["content"]) > 100
+    prompt = post.call_args.kwargs["json"]["messages"][1]["content"]
+    assert "anime-series membership is NOT an approval criterion" in prompt
+    assert "an unannounced closing time is not a contradiction" in prompt
     assert post.call_args.kwargs["json"]["thinking"] == {"type": "disabled"}
     response.json.return_value["choices"][0]["message"]["content"] = json.dumps({
         "reviews": [{"id": "one", "decision": "APPROVE", "reason": "证据完整"}]})
