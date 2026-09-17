@@ -457,13 +457,59 @@ def test_eplus_jpop_scope_rejects_anime_or_arbitrary_roots():
         EplusTicketConfig(discovery_scope="anime", category_urls=["https://eplus.jp/sf/live/j-pop"])
 
 
-def test_eplus_jpop_search_and_pending_queue_do_not_lose_unread_details(monkeypatch):
+def test_eplus_jpop_search_uses_browser_and_discovers_detail(monkeypatch):
     root = "https://eplus.jp/sf/live/j-pop"
     search = "https://eplus.jp/sf/search?keyword=YOASOBI"
+    detail = "https://eplus.jp/sf/detail/3369690001"
+    requested = []
+
+    class Response:
+        def __init__(self, text):
+            self.text = text
+
+    def get(_self, url, **_kwargs):
+        requested.append(url)
+        assert url != search
+        if url == root:
+            return Response('<a href="/sf/detail/3369690001">YOASOBI</a>')
+        assert url == detail
+        return Response(
+            '<script type="application/ld+json">'
+            '{"@type":"Event","name":"YOASOBI",'
+            '"url":"https://eplus.jp/sf/detail/3369690001-P0030001P021001",'
+            '"startDate":"2026-11-20T19:00",'
+            '"location":{"@type":"Place","name":"テストホール"}}'
+            '</script>'
+        )
+
+    def render(_self, url, *, selector):
+        assert url == search and selector == "body"
+        return '<a href="/sf/detail/3369690001">YOASOBI</a>', url
+
+    monkeypatch.setattr("genchi_fetchers.fetchers.SafeHttpClient.get", get)
+    monkeypatch.setattr("genchi_fetchers.fetchers.BrowserClient.render", render)
+    records = []
+    report = EplusTicketFetcher().fetch(
+        context(records),
+        FetchRequest(
+            task_id=5, source_id="eplus-jpop-tickets", operation="fetch",
+            config={"discovery_scope": "jpop", "category_urls": [root],
+                    "search_keywords": ["YOASOBI"], "queries_per_run": 1,
+                    "project_keywords": {}, "pages_per_root": 1,
+                    "refresh_details_per_run": 0},
+            tags=("scope:jpop-offline",),
+        ),
+    )
+    assert report.details["search_pages"] == 1
+    assert [record.external_id for record in records] == ["eplus:detail:3369690001"]
+    assert requested == [root, detail]
+
+
+def test_eplus_jpop_seed_and_pending_queue_do_not_lose_unread_details(monkeypatch):
+    root = "https://eplus.jp/sf/live/j-pop"
     ids = ("3369690001", "4512340002", "4512340003")
     pages = {
         root: "".join(f'<a href="/sf/detail/{page_id}">公演</a>' for page_id in ids[1:]),
-        search: f'<a href="/sf/detail/{ids[0]}">YOASOBI</a>',
     }
     for page_id in ids:
         pages[f"https://eplus.jp/sf/detail/{page_id}"] = (
@@ -493,7 +539,7 @@ def test_eplus_jpop_search_and_pending_queue_do_not_lose_unread_details(monkeypa
             FetchRequest(
                 task_id=5, source_id="eplus-jpop-tickets", operation="fetch",
                 config={"discovery_scope": "jpop", "category_urls": [root],
-                        "search_keywords": ["YOASOBI"], "queries_per_run": 1,
+                        "seed_detail_urls": [f"https://eplus.jp/sf/detail/{ids[0]}"],
                         "project_keywords": {}, "pages_per_root": 1,
                         "max_detail_pages": 1, "refresh_details_per_run": 0,
                         "browser_fallback": False},
@@ -513,7 +559,7 @@ def test_eplus_jpop_search_and_pending_queue_do_not_lose_unread_details(monkeypa
         FetchRequest(
             task_id=5, source_id="eplus-jpop-tickets", operation="fetch",
             config={"discovery_scope": "jpop", "category_urls": [root],
-                    "search_keywords": ["YOASOBI"], "queries_per_run": 1,
+                    "seed_detail_urls": [f"https://eplus.jp/sf/detail/{ids[0]}"],
                     "project_keywords": {}, "pages_per_root": 1,
                     "max_detail_pages": 1, "refresh_details_per_run": 1,
                     "browser_fallback": False},
@@ -523,8 +569,8 @@ def test_eplus_jpop_search_and_pending_queue_do_not_lose_unread_details(monkeypa
     assert _content_hash(first_record) == _content_hash(refreshed[0])
 
 
-def test_eplus_search_falls_back_when_direct_html_has_no_ticket_links(monkeypatch):
-    url = "https://eplus.jp/sf/search?keyword=YOASOBI"
+def test_eplus_category_falls_back_when_direct_html_has_no_ticket_links():
+    url = "https://eplus.jp/sf/live/j-pop"
 
     class Response:
         text = "<html><body>検索中</body></html>"
@@ -536,7 +582,7 @@ def test_eplus_search_falls_back_when_direct_html_has_no_ticket_links(monkeypatc
     class Browser:
         def render(self, _url, *, selector):
             assert _url == url and selector == "body"
-            return '<a href="/sf/detail/3369690001">YOASOBI</a>', url
+            return '<a href="/sf/detail/3369690001">公演</a>', url
 
     assert "3369690001" in EplusTicketFetcher._html(
         Client(), Browser(), url, require_details=True,

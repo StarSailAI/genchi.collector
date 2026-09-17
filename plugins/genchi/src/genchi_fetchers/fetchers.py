@@ -1022,6 +1022,7 @@ class EplusTicketConfig(BaseModel):
     category_urls: tuple[str, ...] = EPLUS_CATEGORY_URLS
     discovery_scope: str = "anime"
     seed_urls: tuple[str, ...] = ()
+    seed_detail_urls: tuple[str, ...] = ()
     search_keywords: tuple[str, ...] = ()
     queries_per_run: int = Field(default=0, ge=0, le=20)
     roots_per_run: int = Field(default=2, ge=1, le=7)
@@ -1056,6 +1057,8 @@ class EplusTicketConfig(BaseModel):
                 raise ValueError("category_urls must match the configured public e+ discovery scope")
         if self.discovery_scope == "jpop" and self.seed_urls:
             raise ValueError("jpop discovery does not accept unrelated word-page seeds")
+        if self.seed_detail_urls and self.discovery_scope != "jpop":
+            raise ValueError("seed_detail_urls are only configured for jpop")
         if self.queries_per_run > len(self.search_keywords):
             raise ValueError("queries_per_run exceeds configured search_keywords")
         if self.search_keywords and self.discovery_scope != "jpop":
@@ -1069,6 +1072,15 @@ class EplusTicketConfig(BaseModel):
         if any(not keyword or len(keyword) > 100 for keyword in cleaned):
             raise ValueError("search keywords must be 1-100 characters")
         return cleaned
+
+    @field_validator("seed_detail_urls")
+    @classmethod
+    def validate_seed_detail_urls(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for url in value:
+            parsed = _eplus_detail_url("https://eplus.jp", url)
+            if not parsed or parsed[1] != url:
+                raise ValueError("seed_detail_urls must be canonical public e+ detail URLs")
+        return value
 
     @field_validator("seed_urls")
     @classmethod
@@ -1214,8 +1226,18 @@ class EplusTicketFetcher(FetcherPlugin):
                     trusted_category=False,
                 )
 
+        for url in config.seed_detail_urls:
+            parsed = _eplus_detail_url("https://eplus.jp", url)
+            if parsed:
+                add_candidate(
+                    parsed[0], parsed[1], kind="platform_seed", source_url=url,
+                    trusted_category=False,
+                )
+
         keyword_cursor = int(checkpoint.get("keyword_cursor") or 0)
         if config.search_keywords and config.queries_per_run:
+            if not browser:
+                raise ConfigurationError("e+ artist search requires the configured browser")
             count = min(config.queries_per_run, len(config.search_keywords))
             for offset in range(count):
                 keyword = config.search_keywords[
@@ -1223,7 +1245,9 @@ class EplusTicketFetcher(FetcherPlugin):
                 ]
                 search_url = f"https://eplus.jp/sf/search?{urlencode({'keyword': keyword})}"
                 try:
-                    html = self._html(client, browser, search_url, require_details=True)
+                    # The public search page is browser-rendered. Direct HTTP
+                    # remains robots-aware for category and detail pages.
+                    html, _ = browser.render(search_url, selector="body")
                 except RateLimitError:
                     raise
                 except TransientError as exc:

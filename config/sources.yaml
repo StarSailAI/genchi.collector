@@ -433,6 +433,7 @@ sources:
     config:
       discovery_scope: jpop
       category_urls: [https://eplus.jp/sf/live/j-pop]
+      seed_detail_urls: [https://eplus.jp/sf/detail/3369690001]
       search_keywords: [YOASOBI]
       queries_per_run: 1
       project_keywords: {}
