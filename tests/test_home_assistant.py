@@ -29,8 +29,8 @@ catalog = product_catalog
 NOW = datetime(2030, 6, 1, 3, tzinfo=UTC)
 
 
-def test_home_candidate_pool_has_25_projects_and_25_artists():
-    assert candidate_count() == 50
+def test_home_candidate_pool_has_25_projects_and_50_artists():
+    assert candidate_count() == 75
     assert candidate_type({"title": "学園アイドルマスター LIVE TOUR"}) == "anime"
     assert candidate_type({"title": "YOASOBI ARENA TOUR"}) == "music"
     assert candidate_type({"title": "fhana 15th Anniversary Tour"}) is None

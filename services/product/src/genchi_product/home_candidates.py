@@ -13,7 +13,7 @@ import unicodedata
 
 # Keep aliases in the same file as the policy so a new source can be added
 # without changing SQL or the presentation layer.  The names mirror the
-# initial 25 anime projects and 25 Japanese music artists selected for Genchi.
+# initial 25 anime projects and 50 Japanese music artists selected for Genchi.
 HOME_CANDIDATES: dict[str, dict[str, tuple[str, ...]]] = {
     "anime": {
         "love-live": ("ラブライブ", "love live"),
@@ -69,6 +69,34 @@ HOME_CANDIDATES: dict[str, dict[str, tuple[str, ...]]] = {
         "zutomayo": ("ずっと真夜中でいいのに", "zutomayo"),
         "creepy-nuts": ("creepy nuts",),
         "utada-hikaru": ("宇多田ヒカル", "utada hikaru"),
+        # Expansion pool: artists with strong current activity, touring density
+        # or a reliable Japanese ticket/event footprint.  These names broaden
+        # discovery without changing the homepage's popularity ranking.
+        "aimer": ("aimer",),
+        "milet": ("milet",),
+        "natori": ("natori", "なとり"),
+        "saucy-dog": ("saucy dog",),
+        "yuri": ("優里", "yuri"),
+        "macaroni-enpitsu": ("マカロニえんぴつ", "macaroni enpitsu"),
+        "novelbright": ("novelbright",),
+        "one-ok-rock": ("one ok rock",),
+        "bump-of-chicken": ("bump of chicken",),
+        "mr-children": ("mr.children", "mr children"),
+        "spitz": ("スピッツ", "spitz"),
+        "uverworld": ("uverworld",),
+        "jo1": ("jo1",),
+        "be-first": ("be:first", "be first"),
+        "number-i": ("number_i", "number i"),
+        "king-prince": ("king & prince", "king and prince"),
+        "nizi-u": ("niziu", "nizi u"),
+        "akb48": ("akb48",),
+        "nogizaka46": ("乃木坂46", "nogizaka46"),
+        "hinatazaka46": ("日向坂46", "hinatazaka46"),
+        "sakurazaka46": ("櫻坂46", "sakurazaka46"),
+        "fruits-zipper": ("fruits zipper",),
+        "candy-tune": ("candy tune",),
+        "cho-tokkyu": ("超特急", "cho tokkyu"),
+        "ini": ("ini",),
     },
 }
 
