@@ -98,6 +98,19 @@ def test_music_selection_filters_unsupported_urgent_events():
     assert [row["activity_id"] for row in selected] == ["followed", "supported", "third"]
 
 
+def test_music_support_threshold_counts_activities_not_milestones():
+    rows = [
+        dict(id="fujii-ticket", activity_id="fujii", follow_count=0, source_count=2, days_remaining=5),
+        dict(id="fujii-start", activity_id="fujii", follow_count=0, source_count=2, days_remaining=5),
+        dict(id="yoasobi-ticket", activity_id="yoasobi", follow_count=0, source_count=2, days_remaining=9),
+        dict(id="natori", activity_id="natori", follow_count=0, source_count=1, days_remaining=1),
+    ]
+
+    selected = select_music_cards(rows)
+
+    assert [row["activity_id"] for row in selected] == ["fujii", "yoasobi", "natori"]
+
+
 def test_global_limit_commits_across_concurrent_requests_and_process_clients(catalog, model):
     def ask(_):
         try:

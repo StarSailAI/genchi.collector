@@ -66,7 +66,7 @@ def candidates(conn, now):
           AND COALESCE(m.ends_at,(m.ends_on+1)::timestamp AT TIME ZONE 'Asia/Tokyo',
               m.starts_at,(m.starts_on+1)::timestamp AT TIME ZONE 'Asia/Tokyo')>%s
         ORDER BY COALESCE(m.ends_at,m.ends_on::timestamp AT TIME ZONE 'Asia/Tokyo',
-              m.starts_at,m.starts_on::timestamp AT TIME ZONE 'Asia/Tokyo'),m.id LIMIT 600
+              m.starts_at,m.starts_on::timestamp AT TIME ZONE 'Asia/Tokyo'),m.id LIMIT 5000
     """, (now,)).fetchall()
     result = []
     for row in rows:
@@ -89,7 +89,10 @@ def select_music_cards(items):
         for row in candidates
         if row["follow_count"] > 0 or row["source_count"] >= 2
     ]
-    if len(supported) >= 3:
+    # Multiple ticket rounds belong to one activity.  Count supported
+    # activities, otherwise one well-documented tour can incorrectly consume
+    # the entire three-card allowance.
+    if len({row["activity_id"] for row in supported}) >= 3:
         candidates = supported
     ordered = sorted(
         candidates,
