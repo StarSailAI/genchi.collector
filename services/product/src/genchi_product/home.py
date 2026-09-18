@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from psycopg.types.json import Jsonb
 
+from .home_candidates import candidate_type
 from .localization import display_name, request_locale
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -67,7 +68,13 @@ def candidates(conn, now):
         ORDER BY COALESCE(m.ends_at,m.ends_on::timestamp AT TIME ZONE 'Asia/Tokyo',
               m.starts_at,m.starts_on::timestamp AT TIME ZONE 'Asia/Tokyo'),m.id LIMIT 600
     """, (now,)).fetchall()
-    return [item for row in rows if (item := countdown(row, now))]
+    result = []
+    for row in rows:
+        item = countdown(row, now)
+        if item:
+            item["candidate_type"] = candidate_type(item)
+            result.append(item)
+    return result
 
 
 def select_music_cards(items):
@@ -136,9 +143,31 @@ def featured(catalog):
         current = candidates(conn, now)
         by_id = {row["id"]: row for row in current}
         selected = [by_id[key] for key in (saved["milestone_ids"] if saved else []) if key in by_id]
-        available_activities = len({row["activity_id"] for row in current})
-        if not saved or saved["selection_date"] != today or len(selected) < min(6, available_activities):
-            selected = select_cards(current)
+        candidate_rows = [row for row in current if row.get("candidate_type")]
+        # During the transition from the old catalogue, keep the local/test
+        # fallback only when there is no candidate data at all.  Once even one
+        # candidate is available, unsupported long-tail activities must not
+        # leak onto the homepage rails.
+        selection_pool = candidate_rows or current
+        anime_rows = [row for row in selection_pool if row.get("candidate_type") == "anime"]
+        target_selection_count = (
+            min(3, len({row["activity_id"] for row in anime_rows}))
+            if candidate_rows
+            else min(6, len({row["activity_id"] for row in current}))
+        )
+        selected_is_valid = (
+            not candidate_rows
+            or all(row.get("candidate_type") == "anime" for row in selected)
+        )
+        if (
+            not saved
+            or saved["selection_date"] != today
+            or not selected_is_valid
+            or len(selected) < target_selection_count
+        ):
+            selected = select_cards(anime_rows if candidate_rows else selection_pool)
+            if candidate_rows:
+                selected = selected[:3]
             saved = conn.execute("""
                 INSERT INTO genchi_private.home_features(id,selection_date,milestone_ids)
                 VALUES(TRUE,%s,%s) ON CONFLICT(id) DO UPDATE SET
@@ -148,22 +177,30 @@ def featured(catalog):
         # Read live facts each time so cancellations, corrections and expiry are never cached for a day.
         items = []
         for row in selected:
-            item = {k: v for k, v in row.items() if k not in {"follow_count", "source_count"}}
+            item = {
+                k: v for k, v in row.items()
+                if k not in {"follow_count", "source_count", "candidate_type"}
+            }
             item["milestone_title_localized"] = display_name(
                 row["milestone_title"], row["milestone_title_zh"], request_locale.get())
             items.append(item)
-        music_rows = select_music_cards(
-            item
-            for item in current
-            if item.get("activity_kind") in {"LIVE", "FESTIVAL"}
-            and item.get("subject_type") != "FRANCHISE"
+        music_pool = (
+            [row for row in selection_pool if row.get("candidate_type") == "music"]
+            if candidate_rows
+            else [
+                item
+                for item in current
+                if item.get("activity_kind") in {"LIVE", "FESTIVAL"}
+                and item.get("subject_type") != "FRANCHISE"
+            ]
         )
+        music_rows = select_music_cards(music_pool)
         # Some confirmed concerts are still classified as OTHER by the
         # catalogue normalizer. Use the already selected, evidence-backed
         # non-franchise rows as a bounded fallback so an expired ticket node
         # cannot leave the music rail with fewer than three cards.
         music_activities = {row["activity_id"] for row in music_rows}
-        if len(music_rows) < 3:
+        if not candidate_rows and len(music_rows) < 3:
             for row in selected:
                 if (
                     row.get("activity_kind") == "OTHER"
@@ -179,7 +216,7 @@ def featured(catalog):
             item = {
                 k: v
                 for k, v in row.items()
-                if k not in {"follow_count", "source_count", "subject_type"}
+                if k not in {"follow_count", "source_count", "subject_type", "candidate_type"}
             }
             item["milestone_title_localized"] = display_name(
                 row["milestone_title"], row["milestone_title_zh"], request_locale.get()

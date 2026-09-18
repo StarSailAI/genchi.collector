@@ -21,11 +21,20 @@ from genchi_product.assistant import (
     retrieve,
 )
 from genchi_product.home import countdown, featured, select_cards, select_music_cards
+from genchi_product.home_candidates import candidate_count, candidate_type
 from test_product import activity
 from test_product import catalog as product_catalog
 
 catalog = product_catalog
 NOW = datetime(2030, 6, 1, 3, tzinfo=UTC)
+
+
+def test_home_candidate_pool_has_25_projects_and_25_artists():
+    assert candidate_count() == 50
+    assert candidate_type({"title": "学園アイドルマスター LIVE TOUR"}) == "anime"
+    assert candidate_type({"title": "YOASOBI ARENA TOUR"}) == "music"
+    assert candidate_type({"title": "fhana 15th Anniversary Tour"}) is None
+    assert candidate_type({"title": "FEVER WAVE 2026"}) is None
 
 
 @pytest.fixture
