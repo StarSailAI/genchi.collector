@@ -152,13 +152,30 @@ def featured(catalog):
             item["milestone_title_localized"] = display_name(
                 row["milestone_title"], row["milestone_title_zh"], request_locale.get())
             items.append(item)
-        music_items = []
-        for row in select_music_cards(
+        music_rows = select_music_cards(
             item
             for item in current
             if item.get("activity_kind") in {"LIVE", "FESTIVAL"}
             and item.get("subject_type") != "FRANCHISE"
-        ):
+        )
+        # Some confirmed concerts are still classified as OTHER by the
+        # catalogue normalizer. Use the already selected, evidence-backed
+        # non-franchise rows as a bounded fallback so an expired ticket node
+        # cannot leave the music rail with fewer than three cards.
+        music_activities = {row["activity_id"] for row in music_rows}
+        if len(music_rows) < 3:
+            for row in selected:
+                if (
+                    row.get("activity_kind") == "OTHER"
+                    and row.get("subject_type") != "FRANCHISE"
+                    and row["activity_id"] not in music_activities
+                ):
+                    music_rows.append(row)
+                    music_activities.add(row["activity_id"])
+                    if len(music_rows) == 3:
+                        break
+        music_items = []
+        for row in music_rows:
             item = {
                 k: v
                 for k, v in row.items()
