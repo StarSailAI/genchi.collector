@@ -1,0 +1,82 @@
+name: genchi-collector-oss
+
+x-database: &database
+  DATABASE_URL: postgresql://collector:${POSTGRES_PASSWORD:?Run python3 scripts/init-local-env.py}@postgres:5432/collector
+  ALLFEEDS_DB_SCHEMA: allfeeds
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: collector
+      POSTGRES_USER: collector
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run python3 scripts/init-local-env.py}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U collector -d collector"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  control:
+    build:
+      context: .
+      dockerfile: services/controller/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - >-
+        allfeeds-control migrate &&
+        allfeeds-control enrollment-bootstrap --token "$${ENROLLMENT_TOKEN}" --max-uses 100000 &&
+        exec allfeeds-control serve --host 0.0.0.0 --port 8060
+    environment:
+      <<: *database
+      ALLFEEDS_SOURCES: /app/config/sources.yaml
+      CONTROL_API_TOKEN: ${CONTROL_API_TOKEN:?Run python3 scripts/init-local-env.py}
+      ENROLLMENT_TOKEN: ${ENROLLMENT_TOKEN:?Run python3 scripts/init-local-env.py}
+      DB_POOL_MIN: 1
+      DB_POOL_MAX: 8
+    volumes:
+      - ./config:/app/config:ro
+    ports:
+      - "127.0.0.1:${CONTROL_PORT:-8060}:8060"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8060/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  worker:
+    build:
+      context: .
+      dockerfile: services/worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      control:
+        condition: service_healthy
+    environment:
+      <<: *database
+      CONTROL_URL: http://control:8060
+      CONTROL_TLS_VERIFY: "0"
+      ENROLLMENT_TOKEN: ${ENROLLMENT_TOKEN:?Run python3 scripts/init-local-env.py}
+      ALLFEEDS_NODE_ID: local-worker
+      ALLFEEDS_WORKER_CONCURRENCY: ${ALLFEEDS_WORKER_CONCURRENCY:-2}
+      WORKER_STATE_PATH: /var/lib/allfeeds-worker/identity.json
+      ASSET_STORE_PATH: /data/assets
+    volumes:
+      - worker-state:/var/lib/allfeeds-worker
+      - asset-data:/data/assets
+
+volumes:
+  postgres-data:
+  worker-state:
+  asset-data:

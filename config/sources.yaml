@@ -1,0 +1,29 @@
+version: 1
+sources:
+  # Deliberately disabled: enabling a Source starts scheduled collection.
+  # Replace the URL with a feed you are authorized to collect and review its terms.
+  - id: example-rss
+    enabled: false
+    fetcher: builtin.rss
+    sink: postgres
+    schedule: {type: interval, seconds: 3600}
+    config:
+      url: https://www.python.org/blogs/rss/
+      max_items: 30
+      kind: announcement
+    routing: {queue: web, resources: {domain:www.python.org: 1}}
+    tags: [example]
+
+  # A public event-page shape; replace the selectors for your own official site.
+  - id: example-official-page
+    enabled: false
+    fetcher: builtin.web_page
+    sink: postgres
+    schedule: {type: interval, seconds: 86400}
+    config:
+      url: https://example.com/
+      title_selector: title
+      content_selector: body
+      kind: official_announcement
+    routing: {queue: web, resources: {domain:example.com: 1}}
+    tags: [example, source:official]
