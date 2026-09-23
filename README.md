@@ -1,8 +1,45 @@
-# Genchi Collector · 开源采集核心
+<p align="center">
+  <a href="https://genchi.news">
+    <img src="assets/genchi-mascot.webp" width="192" height="192" alt="GENCHI 看板娘" />
+  </a>
+</p>
 
-这是从 Genchi Collector 中单独整理出来的**采集层**。它负责定时抓取公开来源、保留原始记录和版本，并通过插件接入 RSS、网页、列表页、JSON API 与 Sitemap。Controller 负责调度，Worker 负责执行，PostgreSQL 保存任务和采集结果。
+<p align="center">
+  <img src="assets/genchi-title.svg" width="360" height="48" alt="Genchi Collector" />
+</p>
 
-这个仓库是可独立运行的开源版，不包含 [genchi.news](https://genchi.news) 的活动归一化、账号、订阅、通知、Agent API、私有浏览器会话或生产部署配置。采集到的网页**不会自动变成已经核验的活动**；如果要构建面向用户的活动目录，需要另行实现提取、去重和审核。
+<p align="center"><strong>把日本二次元活动的公告、票务和官推，整理成可追溯的活动时间线。</strong></p>
+
+<p align="center">
+  <a href="https://genchi.news">项目网站</a> · <a href="docs/getting-started.md">开始使用</a> · <a href="docs/architecture.md">架构说明</a> · <a href=".github/CONTRIBUTING.md">贡献指南</a>
+</p>
+
+<hr />
+
+Genchi Collector 是 [genchi.news](https://genchi.news) 背后的资讯采集与活动整理项目，基于 AllFeeds 分布式采集框架开发。完整项目从官网、官方 X、票务平台和经过审核的聚合来源保存原始证据，再提炼活动、场次与票务时间节点，供网站和 Agent 使用。
+
+```text
+官网 / 官推 / 票务 / 聚合来源
+             ↓
+     调度 → 采集 → 原始版本       ← 本开源版
+             ↓
+  结构校验 / 模型候选 / 人工审核
+             ↓
+   活动 → 场次 → 受付、结果、开演等节点
+             ↓
+    产品 API / Agent API / 邮件提醒
+```
+
+这个仓库从 Genchi Collector 中单独整理出**可独立运行的采集层**：定时抓取公开来源，保留原始记录和版本，并通过插件接入 RSS、网页、列表页、JSON API 与 Sitemap。Controller 负责调度，Worker 负责执行，PostgreSQL 保存任务和采集结果。
+
+开源版不包含完整项目的活动归一化、账号、订阅、通知、Agent API、私有浏览器会话或生产部署配置。采集到的网页**不会自动变成已经核验的活动**；如果要构建面向用户的活动目录，需要另行实现提取、去重和审核。
+
+## 能做什么
+
+- **保留来源与版本**：公告更新可追溯，重复采集不重复写入。
+- **分布式采集**：Controller 调度，Worker 执行；支持租约、重试、限流和历史回填。
+- **扩展公开来源**：内置 RSS、网页、JSON API 和 Sitemap Fetcher，也可以编写自己的插件。
+- **保持数据边界**：原始证据与任务历史存于 PostgreSQL，后续活动解析与审核由使用者自行接入。
 
 ## 快速开始
 
