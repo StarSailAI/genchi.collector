@@ -54,6 +54,7 @@ sources:
     fetcher: builtin.web_page
     sink: postgres
     schedule: {type: interval, seconds: 3600}
+    backfill_enabled: true
     config: {url: 'https://example.com/'}
     routing: {queue: web, resources: {domain:example.com: 2}}
 """)
